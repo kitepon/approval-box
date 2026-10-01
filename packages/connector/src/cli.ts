@@ -131,7 +131,7 @@ async function setup() {
   out(`  「${INSTRUCTION_TEXT}」`);
   for (const target of targets) {
     const file = instructionsFileOf(target);
-    out(`  ${LABEL[target]}: ${file ?? "ファイルからは読まないため、登録後に貼る場所を案内します"}`);
+    out(`  ${LABEL[target]}: ${file ?? "会話の始まりのhook（hooks.json の sessionStart）で渡します"}`);
   }
   const instructions = !flag("no-instructions") && (flag("yes") || !/^n(o)?$/i.test(await ask("足しますか？ [Y/n] ")));
 
@@ -168,9 +168,6 @@ async function registerTargets() {
     const extra = result.steer ? `（${STEER_LABEL[result.steer.split(":")[0] ?? ""] ?? `作業中の割り込み: ${result.steer}`}）` : "";
     out(`  ${LABEL[target]}: ${result.status === "registered" ? "登録しました" : `失敗 — ${result.detail}`}${extra}`);
     if (result.status === "failed") failed = true;
-  }
-  if (flag("instructions") && targets.includes("cursor")) {
-    out(`\nCursor は全体の指示をファイルから読みません。Cursor の Settings → Rules → User Rules に、次の一文を貼ってください。\n  ${INSTRUCTION_TEXT}`);
   }
   ensureDaemon();
   out("\n登録したAIは、開いている会話を閉じて開き直すとApproval Boxを使えます。");
@@ -256,9 +253,16 @@ function help() {
   npx approval-box uninstall  登録を全部外し、この端末の接続を解除する`);
 }
 
+/** Cursorの sessionStart hook。全体の指示の一節を会話へ渡す。 */
+async function cursorContext() {
+  for await (const _ of process.stdin) { /* 入力は使わない */ }
+  out(JSON.stringify({ additional_context: `## Approval Box\n\n${INSTRUCTION_TEXT}` }));
+}
+
 const commands: Record<string, () => Promise<void> | void> = {
   setup, test, status, doctor, uninstall, help,
   register: registerTargets,
+  "cursor-context": cursorContext,
   mcp: runMcp,
   daemon: runDaemon,
   version: () => { out(VERSION); },

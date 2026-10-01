@@ -11,7 +11,7 @@ npx -y approval-box@latest setup
 ```
 
 1. `setup` が、PCにあるAIを見つけてApproval Boxを登録します。書き換えるファイルを先に見せ、控えを残してから書き換えます。
-   AIが毎回読む全体の指示に「判断・承認・操作が要る時は request_decision でも申請する」という一節を足すかも聞きます（Cursor は User Rules に貼る一文を案内）。
+   AIが毎回読む全体の指示に「判断・承認・操作が要る時は request_decision でも申請する」という一節を足すかも聞きます（Cursor は会話の始まりのhookで渡す）。
 2. 画面に出るQRコードかコードを、アプリかWeb版の「端末を追加」で読み取ります。
 3. AIに「Approval Boxのsetup_testを実行して」と言います。テストの申請に答え、その答えがAIまで届けば準備完了です。
 

@@ -1,6 +1,6 @@
 import * as steer from "aiterm-steer-delivery";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { writeJsonFile } from "./config.ts";
@@ -27,7 +27,7 @@ export function filesOf(target: Target): string[] {
   return [join(grokDir(), "config.toml")];
 }
 
-/** AIが毎回読む全体の指示ファイル。Cursor（CLI）は全体の指示をファイルから読まないので、設定画面のUser Rulesへ貼ってもらう。 */
+/** AIが毎回読む全体の指示ファイル。Cursorはファイルから読まないので、sessionStart hook で渡す（setCursorContext）。 */
 export function instructionsFileOf(target: Target): string | null {
   if (target === "claude") return join(claudeDir(), "CLAUDE.md");
   if (target === "codex") return join(codexHome(), "AGENTS.md");
@@ -73,6 +73,26 @@ function setCursorPermissions(enable: boolean) {
   writeJsonFile(file, { ...current, permissions: { ...permissions, allow, deny: permissions.deny ?? [] } });
 }
 
+/**
+ * Cursorは全体の指示をファイルから読まない。会話の始まり（sessionStart hook）で、同じ一節を additional_context として渡す（CLIでも効くことを実測）。
+ * 印は「cli.mjs … cursor-context」。他の製品のsessionStartには触れない。
+ */
+const CURSOR_CONTEXT = "cursor-context";
+function setCursorContext(enable: boolean) {
+  const file = join(cursorDir(), "hooks.json");
+  if (!existsSync(file) && !enable) return;
+  const target = existsSync(file) ? realpathSync(file) : file;
+  backupOnce(target);
+  const current = existsSync(target) ? readJson(target) : { version: 1 };
+  const hooks = { ...((current.hooks as Record<string, unknown[]> | undefined) ?? {}) };
+  const ours = (entry: unknown) => typeof (entry as { command?: unknown })?.command === "string" && (entry as { command: string }).command.includes(MCP_SERVER) && (entry as { command: string }).command.endsWith(` ${CURSOR_CONTEXT}`);
+  const rest = (hooks.sessionStart ?? []).filter((entry) => !ours(entry));
+  if (enable) rest.push({ command: `${steer.cursorParentHookCommand({ command: stableNode(), script: runtimeEntry("cli") })} ${CURSOR_CONTEXT}`, timeout: 10 });
+  if (rest.length) hooks.sessionStart = rest; else delete hooks.sessionStart;
+  writeJsonFile(target, { version: 1, ...current, hooks });
+}
+export const cursorContextRegistered = () => JSON.stringify(readJson(join(cursorDir(), "hooks.json")).hooks ?? {}).includes(` ${CURSOR_CONTEXT}"`);
+
 const registration = () => ({ command: stableNode(), args: [runtimeEntry("cli"), "mcp"] });
 
 function readJson(file: string): Record<string, unknown> {
@@ -116,6 +136,7 @@ export async function register(target: Target, options: { instructions?: boolean
       setMcpJson(join(cursorDir(), "mcp.json"), registration());
       steer.mergeCursorParentHooks(PROFILE, join(cursorDir(), "hooks.json"), hook("cursor"));
       setCursorPermissions(true);
+      setCursorContext(!!options.instructions);
       return { target, status: "registered" };
     }
     if (target === "codex") {
@@ -157,6 +178,7 @@ export async function unregister(target: Target): Promise<RegisterResult> {
       if (existsSync(join(cursorDir(), "mcp.json"))) setMcpJson(join(cursorDir(), "mcp.json"), null);
       steer.removeCursorParentHooks(PROFILE, join(cursorDir(), "hooks.json"));
       setCursorPermissions(false);
+      setCursorContext(false);
     } else if (target === "codex") {
       if (existsSync(join(codexHome(), "config.toml"))) {
         await withCodexConfig(async (request) => {
@@ -177,7 +199,7 @@ export async function unregister(target: Target): Promise<RegisterResult> {
 /** 登録が今も効いているか（doctor用）。 */
 export function registered(target: Target): { mcp: boolean; hooks: boolean | null; instructions: boolean | null; entry?: string } {
   const file = instructionsFileOf(target);
-  return { ...registeredTools(target), instructions: file ? hasInstructions(file) : null };
+  return { ...registeredTools(target), instructions: file ? hasInstructions(file) : target === "cursor" ? cursorContextRegistered() : null };
 }
 
 function registeredTools(target: Target): { mcp: boolean; hooks: boolean | null; entry?: string } {
