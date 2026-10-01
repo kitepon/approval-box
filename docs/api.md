@@ -1,4 +1,4 @@
-# Approval Box API（アプリ・Web版向け） v0.18
+# Approval Box API（アプリ・Web版向け） v0.19
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 
@@ -103,7 +103,7 @@ Decision {
   - payload: `{ type: "decision.created" | "decision.updated", change?: "amended" | "cancelled" | "answered" | "delivery", decision_id, version }`。開いたら `/decisions/{id}` を取る。
   - 鳴らすのは created（件名）と amended（「修正: 件名」）だけ。cancelled・answered・delivery は音なしの更新（バッジと一覧の更新だけ）。
   - 表示文はサーバーが組み立てて渡す（`title`。created は件名、amended は「修正: 件名」）。音なしの更新には `title` を入れない。
-  - APNs: 鳴らす時は `aps.alert.title` と `aps.sound`、`aps.badge`。音なしは `aps.content-available: 1` と `aps.badge` だけ。独自のキー（type・change・decision_id・version）は aps の外に置く。
+  - APNs: 鳴らす時は `aps.alert.title` と `aps.sound`、`aps.badge`。音なしは `aps.content-available: 1` と `aps.badge` だけ。どちらも `apns-push-type: alert`・priority 10 で送る（background にするとiOSが後回しにし、答えた後もバッジが残る）。独自のキー（type・change・decision_id・version）は aps の外に置く。
   - FCM: 全部データメッセージ（`notification` ブロックは使わない）。`data` の値は全部文字列で `{ type, change?, decision_id, version, badge, title? }`。`title` がある時だけアプリが通知を出す。鳴らす時は priority=high、音なしは normal。Androidの通知チャンネルは「新しい申請」「修正」の2つ。
   - アプリのバッジ: pending の件数。payload の `badge` に入れる。Androidのランチャーバッジは表示中の通知に結び付くため、音なしの更新だけでは数を変えられない（OSの制約。アプリ内の件数と、既存の通知の件数・削除は更新する）。
 - 前面にいる時: 前面へ戻った時に一覧を取り直す。即時に反映したい場合は `/events` を張ってよい。
@@ -242,6 +242,7 @@ message は利用者にそのまま見せてよい日本語の文。
 ## 変更履歴
 
 - v0.18 2026-10-01 クオの裁定: サンドボックス（審査・TestFlight・Xcode）とPlayの試験用購入は、セットアップ確認を待たずに購入できる。本物の購入は今までどおり。
+- v0.19 2026-10-01 音なしの更新（答えた・取り下げた等）も `apns-push-type: alert`・priority 10 で送る。backgroundではiOSが後回しにして、バッジが残った（クオの実機）。アプリも、一覧を読んだ時と答えた時に、自分で pending の件数をバッジに入れる。
 - v0.17 2026-10-01 クオの裁定: ログイン用のURL・コードを廃止。ログインはAppleかGoogleだけ。結ぶ・外す操作を廃止（v0.16 の `logins`・`DELETE /me/logins` は取り消し、`login` のまま）。`/auth/link` はAndroidのAppleログインから戻る一度きりのコード専用（`code_verifier` 必須）。`/me/personal-link` 廃止。
 - v0.16 2026-10-01 クオの指摘「結べるようにしたらいい」: 設定からAppleとGoogleを1つずつ結べ、外せる（`DELETE /me/logins/{provider}`、締め出しになる時は409）。`/me.logins` を追加（`login` は互換）。
 - v0.15 2026-10-01 ベルの依頼で、AndroidのAppleログイン（Custom Tabs）の開始・復帰の取り決めを追加。`POST /auth/apple/web/start`、`/auth/apple/callback`、`approvalbox://auth/apple`、`/auth/link` の `code_verifier`（PKCE S256）。

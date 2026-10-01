@@ -33,7 +33,7 @@ test("申請が来たら件名で鳴らし、取り下げは音なし。無効�
   decisions.cancel({ id: conn.id, user_id: userId, label: "pc", os: "linux" }, created.id, "やめた");
   await new Promise((r) => setTimeout(r, 20));
   assert.deepEqual(sent[0]!.payload.aps, { "content-available": 1, badge: 0 });
-  assert.equal(sent[0]!.headers["apns-push-type"], "background");
+  assert.equal(sent[0]!.headers["apns-push-type"], "alert");
   assert.equal(sent[0]!.payload.change, "cancelled");
 });
 

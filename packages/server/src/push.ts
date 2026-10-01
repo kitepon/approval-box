@@ -86,9 +86,8 @@ export class Notifier {
     const payload = title
       ? { aps: { alert: { title }, sound: "default", badge }, ...custom }
       : { aps: { "content-available": 1, badge }, ...custom };
-    const headers = title
-      ? { "apns-push-type": "alert", "apns-priority": "10" }
-      : { "apns-push-type": "background", "apns-priority": "5" };
+    // 音なしでもバッジは変えるので alert として送る。background はiOSが後回しや間引きをし、バッジが古いまま残る
+    const headers = { "apns-push-type": "alert", "apns-priority": "10" };
     await Promise.all(devices.map(async (device) => {
       const env = device.apns_env === "sandbox" ? "sandbox" : "production";
       const result = await this.send(env, device.apns_token, headers, payload);
