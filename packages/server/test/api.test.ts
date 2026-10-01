@@ -200,8 +200,8 @@ test("固定のログインURLは何度でも使え、作り直すと前のURL�
 
 test("Sign in with Apple: 確かめたtokenで入り、同じApple IDは同じアカウント、ログイン済みなら結ぶ", async () => {
   const { generateKeyPairSync, sign } = await import("node:crypto");
-  const { resetAppleKeyCache } = await import("../src/apple.ts");
-  resetAppleKeyCache();
+  const { resetKeyCache } = await import("../src/oidc.ts");
+  resetKeyCache();
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const jwk = { ...publicKey.export({ format: "jwk" }), kid: "k1", alg: "RS256", use: "sig" };
   const tokenFor = (claims: Record<string, unknown>) => {
@@ -213,7 +213,7 @@ test("Sign in with Apple: 確かめたtokenで入り、同じApple IDは同じ�
   const { EventHub } = await import("../src/events.ts");
   const events = new EventHub(db);
   const accounts = new Accounts(db, events, "off");
-  const app = createApp({ db, accounts, decisions: new Decisions(db, events), events, publicUrl: "https://kb.test", appleAudiences: ["dev.kitepon.approvalbox"], appleKeys: async () => [jwk as never] });
+  const app = createApp({ db, accounts, decisions: new Decisions(db, events), events, publicUrl: "https://kb.test", appleAudiences: ["dev.kitepon.approvalbox"], googleAudiences: ["g-client"], idKeys: async () => [jwk as never] });
   const post = async (identity_token: string, extra: Record<string, unknown> = {}, session?: string) => {
     const res = await app.request("/v1/auth/apple", { method: "POST", headers: { "content-type": "application/json", ...(session ? { authorization: `Bearer ${session}` } : {}) }, body: JSON.stringify({ identity_token, ...extra }) });
     return { status: res.status, json: await res.json() as Record<string, any> };
@@ -228,11 +228,26 @@ test("Sign in with Apple: 確かめたtokenで入り、同じApple IDは同じ�
   assert.equal((await post(tokenFor({ sub: "apple-1", nonce: "n1" }), { nonce: "n1" })).status, 200);
   const tampered = tokenFor({ sub: "apple-1" }).replace(/\.[^.]+\./, (m) => m.slice(0, -2) + "x.");
   assert.equal((await post(tampered)).status, 401);
-  // 既存アカウント（コードで入った人）にApple IDを結ぶ
+  // IDの無い既存アカウント（コードで入った人）には、最初の1回だけ結べる
   const owner = accounts.createUser();
   const { session } = accounts.issueSession(owner, "code");
   const linked = await post(tokenFor({ sub: "apple-2" }), {}, session);
   assert.equal(linked.json.user.id, owner);
   assert.equal((await post(tokenFor({ sub: "apple-2" }))).json.user.id, owner);
-  assert.equal((await post(tokenFor({ sub: "apple-1" }), {}, session)).status, 409);
+  assert.equal((await post(tokenFor({ sub: "apple-1" }), {}, session)).status, 409); // 別アカウントのApple ID
+  assert.equal((await post(tokenFor({ sub: "apple-3" }), {}, session)).status, 409); // 既にIDがある
+  const me = await app.request("/v1/me", { headers: { authorization: `Bearer ${session}` } });
+  assert.equal(((await me.json()) as { login: string }).login, "apple");
+  // Google: 別のIDなので別のアカウントになる
+  const gToken = (claims: Record<string, unknown>) => {
+    const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
+    const head = `${enc({ alg: "RS256", kid: "k1" })}.${enc({ iss: "https://accounts.google.com", aud: "g-client", exp: Math.floor(Date.now() / 1000) + 600, ...claims })}`;
+    return `${head}.${sign("RSA-SHA256", Buffer.from(head), privateKey).toString("base64url")}`;
+  };
+  const g = await app.request("/v1/auth/google", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id_token: gToken({ sub: "g-1" }) }) });
+  const gj = (await g.json()) as { user: { id: string } };
+  assert.equal(g.status, 200);
+  assert.notEqual(gj.user.id, first.json.user.id);
+  const gBad = await app.request("/v1/auth/google", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id_token: tokenFor({ sub: "g-1" }) }) });
+  assert.equal(gBad.status, 401); // Appleの発行者のtokenはGoogleでは通らない
 });

@@ -64,7 +64,9 @@ function staticHandler(c: Context) {
 
 // Sign in with Apple を受けるアプリの Bundle ID（Webの Services ID も足せる）。空なら /auth/apple は使えない。
 const appleAudiences = (env.APPLE_AUDIENCES ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-const app = createApp({ db, accounts, decisions, events, publicUrl, appleAudiences }, { staticHandler });
+// Googleのログインを受けるOAuthクライアントID（Web・iOS・Android）。空なら /auth/google は使えない。
+const googleAudiences = (env.GOOGLE_CLIENT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const app = createApp({ db, accounts, decisions, events, publicUrl, appleAudiences, googleAudiences }, { staticHandler });
 
 setInterval(() => {
   decisions.purgeExpired();

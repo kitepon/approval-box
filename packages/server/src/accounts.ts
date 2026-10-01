@@ -64,8 +64,13 @@ export class Accounts {
   signInWithIdentity(provider: "apple" | "google", subject: string, email: string | undefined, currentUserId: string | undefined) {
     return tx(this.db, () => {
       const linked = get<{ user_id: string }>(this.db, "select user_id from identities where provider = ? and subject = ?", provider, subject);
+      const name = provider === "apple" ? "Apple ID" : "Googleアカウント";
       if (linked && currentUserId && linked.user_id !== currentUserId) {
-        throw new ApiError("conflict", `この${provider === "apple" ? "Apple ID" : "Googleアカウント"}は、別のApproval Boxのアカウントに結ばれています。`);
+        throw new ApiError("conflict", `この${name}は、別のApproval Boxのアカウントで使われています。`);
+      }
+      // 1つのアカウントはGoogleかAppleのどちらか1つのIDに結ぶ（クオの裁定）。結べるのは、まだIDの無いアカウントだけ。
+      if (!linked && currentUserId && get(this.db, "select 1 from identities where user_id = ?", currentUserId)) {
+        throw new ApiError("conflict", "このアカウントは既に別のIDでログインしています。1つのアカウントに結べるIDは1つだけです。");
       }
       const userId = linked?.user_id ?? currentUserId ?? this.createUser();
       if (!linked) run(this.db, "insert into identities (provider, subject, user_id, email, created_at) values (?, ?, ?, ?, ?)", provider, subject, userId, email ?? null, now());
@@ -135,8 +140,10 @@ export class Accounts {
     }
     // セルフホスト（課金なし）は全員を契約中として扱う。
     const plan = this.billing === "off" ? "active" : user.plan;
+    const login = get<{ provider: string }>(this.db, "select provider from identities where user_id = ?", userId);
     return {
       user_id: user.id,
+      login: login?.provider ?? null,
       setup: { verified: !!user.setup_verified_at, ...(user.setup_verified_at ? { verified_at: user.setup_verified_at } : {}), checks },
       plan,
       ...(user.plan_expires_at && this.billing !== "off" ? { expires_at: user.plan_expires_at } : {}),

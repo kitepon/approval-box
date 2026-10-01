@@ -1,4 +1,4 @@
-# Approval Box API（アプリ・Web版向け） v0.13
+# Approval Box API（アプリ・Web版向け） v0.14
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 
@@ -16,9 +16,13 @@ v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ�
   - iOS・Web: `POST /auth/apple` `{ identity_token }`
   - Android・Web: `POST /auth/google` `{ id_token }`（Sign in with Google）
   - 応答 `{ session, expires_at, user: { id } }`。
-  - `POST /auth/apple` `{ identity_token, nonce? }`: identity token はAppleの公開鍵で確かめる（aud はアプリの Bundle ID `dev.kitepon.approvalbox`）。nonce は送った時だけ照合する（生の値・SHA-256のどちらでもよい）。初めてのApple IDなら新しいアカウントを作る。
-  - **ログイン済みのsession（Bearer）付きで** `POST /auth/apple` を呼ぶと、そのアカウントにApple IDを結ぶ（設定の「Appleでログインを追加」）。そのApple IDが別のアカウントに結ばれていれば 409 `conflict`。
-  - サーバーが Apple の受け先を設定していなければ 400 `validation_failed`（自分で立てたサーバー）。
+  - ログインは「Googleでログイン」と「Appleでログイン」の2本（クオの裁定）。Web版・iPhone・Androidのどれにも並べる。1つのアカウントは、GoogleかAppleのどちらか1つのIDに結ぶ。両方を使えば別のアカウントになる。IDの追加・統合は無い。
+  - `POST /auth/apple` `{ identity_token, nonce? }`: Appleの公開鍵で確かめる（aud はアプリの Bundle ID `dev.kitepon.approvalbox`、Web版は Services ID）。
+  - `POST /auth/google` `{ id_token, nonce? }`: Googleの公開鍵で確かめる（aud は Web・iOS・Android の OAuthクライアントID）。
+  - nonce は送った時だけ照合する（生の値・SHA-256のどちらでもよい）。初めてのIDなら新しいアカウントを作る。
+  - **IDに結ばれていない既存アカウント**（ログイン用のURL・コードで作ったもの）だけは、ログイン済みのsession（Bearer）付きで `/auth/apple`・`/auth/google` を呼ぶと、最初の1回に限りそのIDを結べる。既にIDがあるアカウントなら 409 `conflict`。そのIDが別のアカウントで使われていても 409 `conflict`。
+  - `/me` の `login` は `"apple" | "google" | null`。null のアカウントにだけ「GoogleかAppleを結ぶ」を出す。
+  - サーバーが受け先を設定していなければ 400 `validation_failed`（自分で立てたサーバー）。
 - 検証期間は、ラプラスが発行する開発用sessionをそのまま使ってよい（ログイン画面は後から差し込める作りにする）。
 - 401 `unauthorized` を受けたらsessionを捨ててログインへ戻す。
 - `POST /auth/logout`（Bearer必須）→ `{ ok: true }`。そのsessionを失効させる。端末の通知を止めるなら、先に `DELETE /devices/{id}`。
@@ -170,7 +174,7 @@ setup: {
 
 | メソッド | パス | 内容 |
 |---|---|---|
-| GET | `/me` | `{ user_id (UUID、小文字), setup, plan: "trial" \| "active" \| "expired", expires_at?, store?: "app_store" \| "google_play" \| "web" }` |
+| GET | `/me` | `{ user_id (UUID、小文字), login: "apple" \| "google" \| null, setup, plan: "trial" \| "active" \| "expired", expires_at?, store?: "app_store" \| "google_play" \| "web" }` |
 | DELETE | `/me` | アカウントと全データの削除（App Store・Google Playの審査で必須） |
 | DELETE | `/decisions?status=answered,cancelled` | 設定の「データ削除」。既決（answered・cancelled）だけを消す → `{ deleted: int }`。pending・heldは消さない（AIが答えを待っているため）。アカウント・接続・端末は残る |
 | GET | `/me/settings` | `{ retention_days: 7 \| 30 \| 90 \| 365 }`（既定30。既決をこの日数で自動削除） |
@@ -231,6 +235,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.14 2026-10-01 クオの裁定: ログインはGoogleとAppleの2本、1アカウント1ID、両方使えば別アカウント。`POST /auth/google` を実装。Bearer付きで結べるのはIDの無い既存アカウントだけ（最初の1回）。`/me` に `login`。
 - v0.13 2026-10-01 ベルの依頼で、コードでのログイン（`kll_`・`kpl_`）、URL/コードの入力欄の扱い、`/me/personal-link` を明記（実装は既にある）。
 - v0.12 2026-10-01 `POST /auth/apple` を実装。Bearer付きで呼ぶと既存アカウントへ結ぶ（409 `conflict` は別アカウントに結ばれている時）。`/auth/google` はまだ。
 - v0.11 2026-10-01 ベルの指摘で `GET /onboarding`・`POST/GET/DELETE /tokens`・`POST/DELETE /devices` を実装（契約は変えていない）。`/v1/` と `/connector/v1/` の知らないpathはWeb版のHTMLでなくJSONの404 `not_found` を返す。`POST /auth/logout`・`POST /auth/link` を明記。tokensの `setup_command` は `npx -y approval-box@latest setup --server <URL> --token <token>`。`/devices` は登録・解除だけで、通知の送信はまだ。
