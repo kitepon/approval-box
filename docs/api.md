@@ -1,4 +1,4 @@
-# Approval Box API（アプリ・Web版向け） v0.12
+# Approval Box API（アプリ・Web版向け） v0.13
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 
@@ -22,7 +22,12 @@ v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ�
 - 検証期間は、ラプラスが発行する開発用sessionをそのまま使ってよい（ログイン画面は後から差し込める作りにする）。
 - 401 `unauthorized` を受けたらsessionを捨ててログインへ戻す。
 - `POST /auth/logout`（Bearer必須）→ `{ ok: true }`。そのsessionを失効させる。端末の通知を止めるなら、先に `DELETE /devices/{id}`。
-- `POST /auth/link` `{ code }`（Bearer不要）→ `{ session, expires_at }`。管理者が出す一度きりのログインのリンク（`/login#code=…`、15分）をsessionに替える。Apple・Googleのログインができるまでの入口で、アプリは使わなくてよい。
+- `POST /auth/link` `{ code }`（Bearer不要）→ `{ session, expires_at }`。コードでのログイン。codeは2種類:
+  - `kll_…` 一度だけ使えるログインのコード。15分で切れる。サーバーの管理者が `admin login-link <user_id|new>` で出す。
+  - `kpl_…` 利用者ごとに固定のログインのコード。何度でも使える。Web版の「設定 → ログイン用のURL」（`POST /me/personal-link`）か `admin personal-link <user_id>` で出す。作り直すと前のコードは 401。
+  - どちらも `https://<host>/login#code=<code>` のURLの形で渡されることが多い。アプリの入力欄は、URLを丸ごと貼っても、コードだけでも受ける（`#code=` の後ろを取り出す。前後の空白は捨てる）。401 `unauthorized` は「使えないコード」として出す。
+  - App Reviewのデモアカウントには `kpl_` のコードを使う。
+- 利用者ごとに固定のログインURL（Bearer必須）: `GET /me/personal-link` → `{ exists, created_at?, last_used_at? }`（URLは返さない）、`POST /me/personal-link` → `{ url, created_at }`（URLは作った時に一度だけ返す。前のURLは使えなくなる）、`DELETE /me/personal-link` → `{ ok: true }`。
 
 ## 決裁
 
@@ -226,6 +231,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.13 2026-10-01 ベルの依頼で、コードでのログイン（`kll_`・`kpl_`）、URL/コードの入力欄の扱い、`/me/personal-link` を明記（実装は既にある）。
 - v0.12 2026-10-01 `POST /auth/apple` を実装。Bearer付きで呼ぶと既存アカウントへ結ぶ（409 `conflict` は別アカウントに結ばれている時）。`/auth/google` はまだ。
 - v0.11 2026-10-01 ベルの指摘で `GET /onboarding`・`POST/GET/DELETE /tokens`・`POST/DELETE /devices` を実装（契約は変えていない）。`/v1/` と `/connector/v1/` の知らないpathはWeb版のHTMLでなくJSONの404 `not_found` を返す。`POST /auth/logout`・`POST /auth/link` を明記。tokensの `setup_command` は `npx -y approval-box@latest setup --server <URL> --token <token>`。`/devices` は登録・解除だけで、通知の送信はまだ。
 - v0.1 2026-10-01 起案。
