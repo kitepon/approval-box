@@ -6,6 +6,7 @@ import type { Connection } from "./decisions.ts";
 
 const SESSION_DAYS = 90;
 const PAIRING_MINUTES = 10;
+const LOGIN_LINK_MINUTES = 15;
 
 type UserRow = { id: string; created_at: string; setup_verified_at: string | null; retention_days: number; plan: string; plan_expires_at: string | null; store: string | null };
 type ConnectionRow = { id: string; user_id: string; kind: string; label: string; os: string | null; clients: string; created_at: string; last_seen_at: string | null; revoked_at: string | null };
@@ -45,6 +46,24 @@ export class Accounts {
     const row = get<{ user_id: string; expires_at: string }>(this.db, "select user_id, expires_at from sessions where token_hash = ?", hash(session));
     if (!row || row.expires_at < now()) throw new ApiError("unauthorized", "ログインの期限が切れました。もう一度ログインしてください。");
     return row.user_id;
+  }
+
+  /** 一度だけ使えるログインのリンク。Apple・Googleのログインが無いサーバーで、管理者が利用者へ渡す。コードはURLの#の後ろに置き、サーバーのログに残さない。 */
+  createLoginLink(userId: string, label: string, publicUrl: string): { url: string; expires_at: string } {
+    if (!get(this.db, "select 1 from users where id = ?", userId)) throw new ApiError("not_found", "その利用者はいません。");
+    const code = secret("kll");
+    const expires = new Date(Date.now() + LOGIN_LINK_MINUTES * 60_000).toISOString();
+    run(this.db, "insert into login_links (code_hash, user_id, label, created_at, expires_at) values (?, ?, ?, ?, ?)", hash(code), userId, label, now(), expires);
+    return { url: `${publicUrl}/login#code=${code}`, expires_at: expires };
+  }
+
+  redeemLoginLink(code: string): { session: string; expires_at: string } {
+    return tx(this.db, () => {
+      const row = get<{ user_id: string; label: string | null; expires_at: string; used_at: string | null }>(this.db, "select user_id, label, expires_at, used_at from login_links where code_hash = ?", hash(code));
+      if (!row || row.used_at || row.expires_at < now()) throw new ApiError("unauthorized", "このログインのリンクは使えません。期限切れか、もう使われています。");
+      run(this.db, "update login_links set used_at = ? where code_hash = ?", now(), hash(code));
+      return this.issueSession(row.user_id, row.label ?? "login-link");
+    });
   }
 
   revokeSession(session: string) {
@@ -197,5 +216,6 @@ export class Accounts {
 
   prunePairings() {
     run(this.db, "delete from pairings where expires_at < ?", new Date(Date.now() - 86400_000).toISOString());
+    run(this.db, "delete from login_links where expires_at < ?", new Date(Date.now() - 86400_000).toISOString());
   }
 }

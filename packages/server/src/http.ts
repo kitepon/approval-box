@@ -73,6 +73,12 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   app.get("/healthz", (c) => c.json({ ok: true }));
 
   // ================= アプリ・Web版 =================
+  // ログインのリンクを session に替える（session 不要。v1 の認証より前に置く）。
+  app.post("/v1/auth/link", async (c) => {
+    const input = await body(c, z.object({ code: z.string().min(10).max(200) }));
+    return c.json(accounts.redeemLoginLink(input.code));
+  });
+
   const v1 = new Hono<{ Variables: { userId: string } }>();
   v1.use("*", async (c, next) => {
     c.set("userId", accounts.userBySession(bearer(c)));

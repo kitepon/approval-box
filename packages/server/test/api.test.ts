@@ -134,3 +134,18 @@ test("既決の削除は未決を残す", async () => {
   const open = await ctx.call("GET", "/v1/decisions", { token: ctx.session });
   assert.equal(open.json.items.length, 1);
 });
+
+test("ログインのリンクは一度だけsessionに替えられる", async () => {
+  const ctx = setup();
+  const link = ctx.accounts.createLoginLink(ctx.userId, "owner", "https://kb.test");
+  assert.match(link.url, /^https:\/\/kb\.test\/login#code=kll_/);
+  const code = link.url.split("#code=")[1];
+  const first = await ctx.call("POST", "/v1/auth/link", { body: { code } });
+  assert.equal(first.status, 200);
+  const me = await ctx.call("GET", "/v1/me", { token: first.json.session });
+  assert.equal(me.json.user_id, ctx.userId);
+  const again = await ctx.call("POST", "/v1/auth/link", { body: { code } });
+  assert.equal(again.status, 401);
+  const wrong = await ctx.call("POST", "/v1/auth/link", { body: { code: "kll_wrong-code-value" } });
+  assert.equal(wrong.status, 401);
+});

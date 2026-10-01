@@ -1,6 +1,6 @@
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { getSession, setSession, setUnauthorizedHandler, subscribeEvents } from "./api";
+import { api, ApiError, getSession, setSession, setUnauthorizedHandler, subscribeEvents } from "./api";
 import { linkProps, navigate, useLocation } from "./router";
 import { bump, loadOpen, useResource } from "./store";
 import { Connections, Pair } from "./pages/Connections";
@@ -24,6 +24,23 @@ function Login({ onLogin }: { onLogin: () => void }) {
         <button class="primary" type="submit">ログイン</button>
         <p class="muted">Apple・Googleでのログインは準備中です。自分で立てたサーバーでは <code>approval-box-server admin create-user</code> でキーを発行します。</p>
       </form>
+    </section>
+  );
+}
+
+/** /login#code=… のリンクで開いた時。コードを session に替えて受信へ進む。コードは一度だけ使える。 */
+function LinkLogin({ code, onLogin }: { code: string; onLogin: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    history.replaceState(null, "", "/login");
+    api<{ session: string }>("POST", "/auth/link", { code }, { idempotent: false })
+      .then((r) => { setSession(r.session); navigate("/"); onLogin(); })
+      .catch((e) => setError(e instanceof ApiError ? e.message : "ログインできませんでした。"));
+  }, [code]);
+  return (
+    <section class="login">
+      <h1>Approval Box</h1>
+      <p>{error ?? "ログインしています…"}</p>
     </section>
   );
 }
@@ -59,6 +76,8 @@ function App() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
+  const linkCode = path === "/login" ? new URLSearchParams(location.hash.slice(1)).get("code") : null;
+  if (linkCode) return <main class="shell"><LinkLogin code={linkCode} onLogin={() => setSessionState(getSession())} /></main>;
   if (!session) return <main class="shell"><Login onLogin={() => setSessionState(getSession())} /></main>;
 
   let page;

@@ -19,6 +19,14 @@ create table if not exists sessions (
   created_at text not null,
   expires_at text not null
 );
+create table if not exists login_links (
+  code_hash text primary key,
+  user_id text not null references users(id) on delete cascade,
+  label text,
+  created_at text not null,
+  expires_at text not null,
+  used_at text
+);
 create table if not exists connections (
   id text primary key,
   user_id text not null references users(id) on delete cascade,
