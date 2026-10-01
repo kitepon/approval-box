@@ -197,3 +197,42 @@ test("固定のログインURLは何度でも使え、作り直すと前のURL�
   await ctx.call("DELETE", "/v1/me/personal-link", { token: ctx.session });
   assert.equal((await ctx.call("GET", "/v1/me/personal-link", { token: ctx.session })).json.exists, false);
 });
+
+test("Sign in with Apple: 確かめたtokenで入り、同じApple IDは同じアカウント、ログイン済みなら結ぶ", async () => {
+  const { generateKeyPairSync, sign } = await import("node:crypto");
+  const { resetAppleKeyCache } = await import("../src/apple.ts");
+  resetAppleKeyCache();
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const jwk = { ...publicKey.export({ format: "jwk" }), kid: "k1", alg: "RS256", use: "sig" };
+  const tokenFor = (claims: Record<string, unknown>) => {
+    const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
+    const head = `${enc({ alg: "RS256", kid: "k1" })}.${enc({ iss: "https://appleid.apple.com", aud: "dev.kitepon.approvalbox", exp: Math.floor(Date.now() / 1000) + 600, ...claims })}`;
+    return `${head}.${sign("RSA-SHA256", Buffer.from(head), privateKey).toString("base64url")}`;
+  };
+  const db = (await import("../src/db.ts")).openDb(":memory:");
+  const { EventHub } = await import("../src/events.ts");
+  const events = new EventHub(db);
+  const accounts = new Accounts(db, events, "off");
+  const app = createApp({ db, accounts, decisions: new Decisions(db, events), events, publicUrl: "https://kb.test", appleAudiences: ["dev.kitepon.approvalbox"], appleKeys: async () => [jwk as never] });
+  const post = async (identity_token: string, extra: Record<string, unknown> = {}, session?: string) => {
+    const res = await app.request("/v1/auth/apple", { method: "POST", headers: { "content-type": "application/json", ...(session ? { authorization: `Bearer ${session}` } : {}) }, body: JSON.stringify({ identity_token, ...extra }) });
+    return { status: res.status, json: await res.json() as Record<string, any> };
+  };
+  const first = await post(tokenFor({ sub: "apple-1" }));
+  assert.equal(first.status, 200);
+  const second = await post(tokenFor({ sub: "apple-1" }));
+  assert.equal(second.json.user.id, first.json.user.id);
+  assert.equal((await post(tokenFor({ sub: "apple-1", aud: "other.app" }))).status, 401);
+  assert.equal((await post(tokenFor({ sub: "apple-1", exp: 1 }))).status, 401);
+  assert.equal((await post(tokenFor({ sub: "apple-1", nonce: "n1" }), { nonce: "n2" })).status, 401);
+  assert.equal((await post(tokenFor({ sub: "apple-1", nonce: "n1" }), { nonce: "n1" })).status, 200);
+  const tampered = tokenFor({ sub: "apple-1" }).replace(/\.[^.]+\./, (m) => m.slice(0, -2) + "x.");
+  assert.equal((await post(tampered)).status, 401);
+  // 既存アカウント（コードで入った人）にApple IDを結ぶ
+  const owner = accounts.createUser();
+  const { session } = accounts.issueSession(owner, "code");
+  const linked = await post(tokenFor({ sub: "apple-2" }), {}, session);
+  assert.equal(linked.json.user.id, owner);
+  assert.equal((await post(tokenFor({ sub: "apple-2" }))).json.user.id, owner);
+  assert.equal((await post(tokenFor({ sub: "apple-1" }), {}, session)).status, 409);
+});

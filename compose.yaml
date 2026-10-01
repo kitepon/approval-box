@@ -8,6 +8,7 @@ services:
     environment:
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8787}
       BILLING: ${BILLING:-off}
+      APPLE_AUDIENCES: ${APPLE_AUDIENCES:-}
     ports:
       - "${BIND:-127.0.0.1}:${HOST_PORT:-8787}:8787"
     volumes:

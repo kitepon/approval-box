@@ -1,4 +1,4 @@
-# Approval Box API（アプリ・Web版向け） v0.11
+# Approval Box API（アプリ・Web版向け） v0.12
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 
@@ -16,6 +16,9 @@ v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ�
   - iOS・Web: `POST /auth/apple` `{ identity_token }`
   - Android・Web: `POST /auth/google` `{ id_token }`（Sign in with Google）
   - 応答 `{ session, expires_at, user: { id } }`。
+  - `POST /auth/apple` `{ identity_token, nonce? }`: identity token はAppleの公開鍵で確かめる（aud はアプリの Bundle ID `dev.kitepon.approvalbox`）。nonce は送った時だけ照合する（生の値・SHA-256のどちらでもよい）。初めてのApple IDなら新しいアカウントを作る。
+  - **ログイン済みのsession（Bearer）付きで** `POST /auth/apple` を呼ぶと、そのアカウントにApple IDを結ぶ（設定の「Appleでログインを追加」）。そのApple IDが別のアカウントに結ばれていれば 409 `conflict`。
+  - サーバーが Apple の受け先を設定していなければ 400 `validation_failed`（自分で立てたサーバー）。
 - 検証期間は、ラプラスが発行する開発用sessionをそのまま使ってよい（ログイン画面は後から差し込める作りにする）。
 - 401 `unauthorized` を受けたらsessionを捨ててログインへ戻す。
 - `POST /auth/logout`（Bearer必須）→ `{ ok: true }`。そのsessionを失効させる。端末の通知を止めるなら、先に `DELETE /devices/{id}`。
@@ -223,6 +226,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.12 2026-10-01 `POST /auth/apple` を実装。Bearer付きで呼ぶと既存アカウントへ結ぶ（409 `conflict` は別アカウントに結ばれている時）。`/auth/google` はまだ。
 - v0.11 2026-10-01 ベルの指摘で `GET /onboarding`・`POST/GET/DELETE /tokens`・`POST/DELETE /devices` を実装（契約は変えていない）。`/v1/` と `/connector/v1/` の知らないpathはWeb版のHTMLでなくJSONの404 `not_found` を返す。`POST /auth/logout`・`POST /auth/link` を明記。tokensの `setup_command` は `npx -y approval-box@latest setup --server <URL> --token <token>`。`/devices` は登録・解除だけで、通知の送信はまだ。
 - v0.1 2026-10-01 起案。
 - v0.9 2026-10-01 クオの裁定: 接続テストを課金後もいつでも使えるようにした。check に tested_at、verified は一度trueになれば戻らない。

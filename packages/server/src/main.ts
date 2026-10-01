@@ -62,7 +62,9 @@ function staticHandler(c: Context) {
   return c.body(readFileSync(target), 200, headers);
 }
 
-const app = createApp({ db, accounts, decisions, events, publicUrl }, { staticHandler });
+// Sign in with Apple を受けるアプリの Bundle ID（Webの Services ID も足せる）。空なら /auth/apple は使えない。
+const appleAudiences = (env.APPLE_AUDIENCES ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const app = createApp({ db, accounts, decisions, events, publicUrl, appleAudiences }, { staticHandler });
 
 setInterval(() => {
   decisions.purgeExpired();

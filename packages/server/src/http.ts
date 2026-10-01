@@ -1,3 +1,4 @@
+import { type AppleKeys, verifyAppleIdentityToken } from "./apple.ts";
 import { onboarding } from "./onboarding.ts";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -9,7 +10,7 @@ import type { EventHub, UserEvent } from "./events.ts";
 import { Decisions, amendSchema, answerSchema, createSchema } from "./decisions.ts";
 import { now } from "./ids.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; appleAudiences?: string[]; appleKeys?: AppleKeys };
 
 const STATUSES = ["pending", "held", "answered", "cancelled"] as const;
 const HEARTBEAT_MS = 25_000;
@@ -74,6 +75,16 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   app.get("/healthz", (c) => c.json({ ok: true }));
 
   // ================= アプリ・Web版 =================
+  // Sign in with Apple。Bearer（ログイン済みのsession）付きなら、そのアカウントにApple IDを結ぶ。
+  app.post("/v1/auth/apple", async (c) => {
+    const audiences = services.appleAudiences ?? [];
+    if (!audiences.length) throw new ApiError("validation_failed", "このサーバーではAppleのログインを使えません。");
+    const input = await body(c, z.object({ identity_token: z.string().min(10).max(10000), nonce: z.string().min(1).max(500).optional() }));
+    const current = bearer(c) ? accounts.userBySession(bearer(c)) : undefined;
+    const apple = await verifyAppleIdentityToken(input.identity_token, { audiences, ...(input.nonce ? { nonce: input.nonce } : {}), ...(services.appleKeys ? { keys: services.appleKeys } : {}) });
+    return c.json(accounts.signInWithIdentity("apple", apple.sub, apple.email, current));
+  });
+
   // ログインのリンクを session に替える（session 不要。v1 の認証より前に置く）。
   app.post("/v1/auth/link", async (c) => {
     const input = await body(c, z.object({ code: z.string().min(10).max(200) }));

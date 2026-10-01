@@ -20,6 +20,14 @@ create table if not exists sessions (
   created_at text not null,
   expires_at text not null
 );
+create table if not exists identities (
+  provider text not null,
+  subject text not null,
+  user_id text not null references users(id) on delete cascade,
+  email text,
+  created_at text not null,
+  primary key (provider, subject)
+);
 create table if not exists personal_links (
   user_id text primary key references users(id) on delete cascade,
   key_hash text not null unique,

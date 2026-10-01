@@ -58,6 +58,22 @@ export class Accounts {
   }
 
   /**
+   * 外部のログイン（Apple・Google）で入る。結ばれたアカウントがあればそこへ、無ければ作る。
+   * ログイン済み（currentUserId あり）で呼ばれたら、そのアカウントにこのIDを結ぶ（既存アカウントへ「Appleでログインを追加」）。
+   */
+  signInWithIdentity(provider: "apple" | "google", subject: string, email: string | undefined, currentUserId: string | undefined) {
+    return tx(this.db, () => {
+      const linked = get<{ user_id: string }>(this.db, "select user_id from identities where provider = ? and subject = ?", provider, subject);
+      if (linked && currentUserId && linked.user_id !== currentUserId) {
+        throw new ApiError("conflict", `この${provider === "apple" ? "Apple ID" : "Googleアカウント"}は、別のApproval Boxのアカウントに結ばれています。`);
+      }
+      const userId = linked?.user_id ?? currentUserId ?? this.createUser();
+      if (!linked) run(this.db, "insert into identities (provider, subject, user_id, email, created_at) values (?, ?, ?, ?, ?)", provider, subject, userId, email ?? null, now());
+      return { ...this.issueSession(userId, provider), user: { id: userId } };
+    });
+  }
+
+  /**
    * 利用者ごとに固定のログインURL（何度でも使える。ブックマーク用）。作り直すと前のURLは使えなくなる。
    * URLを知っていれば誰でもログインできるので、本人だけが持つ。値は保存しない（作った時に一度だけ返す）。
    */
