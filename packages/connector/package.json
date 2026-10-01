@@ -1,0 +1,26 @@
+{
+  "name": "kessaibako",
+  "version": "0.1.0",
+  "description": "Kessaibako connector: lets Claude Code, Codex, Cursor and Grok ask you for a decision, and steers your answer back into the same session.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "kessaibako": "dist/cli.mjs" },
+  "files": ["dist", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test 'test/**/*.test.ts'"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "@types/node": "^25.9.1",
+    "aiterm-steer-delivery": "^0.1.9",
+    "esbuild": "^0.28.2",
+    "qrcode": "^1.5.4",
+    "@types/qrcode": "^1.5.5",
+    "typescript": "^6.0.3",
+    "zod": "^4.4.3"
+  },
+  "engines": { "node": ">=20" }
+}

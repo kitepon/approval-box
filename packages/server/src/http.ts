@@ -170,6 +170,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   const routeChannel = (c: Context) => c.req.query("channel_id") || undefined;
 
   conn.get("/connection", (c) => c.json(accounts.connectionInfo(c.get("conn"))));
+  conn.delete("/connection", (c) => { const me = c.get("conn"); accounts.revokeConnection(me.user_id, me.id); return c.json({ ok: true }); });
   conn.put("/connection/clients", async (c) => {
     const input = await body(c, z.object({ clients: z.array(z.string().max(40)).max(10), os: z.string().max(20).optional() }));
     accounts.updateConnectionClients(c.get("conn"), input.clients, input.os);
