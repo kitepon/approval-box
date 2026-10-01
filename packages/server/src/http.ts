@@ -1,3 +1,4 @@
+import { onboarding } from "./onboarding.ts";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z, ZodError } from "zod";
@@ -132,6 +133,26 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   v1.get("/connections", (c) => c.json(accounts.connections(c.get("userId"))));
   v1.delete("/connections/:id", (c) => idempotent(c, services, c.get("userId"), () => { accounts.revokeConnection(c.get("userId"), c.req.param("id")); return { ok: true }; }));
 
+  v1.post("/tokens", async (c) => {
+    const input = await body(c, z.object({ label: z.string().trim().min(1).max(100) }));
+    // tokenは1回だけ返す。冪等の記録（返事の本文をDBに残す）には通さない。
+    return c.json(accounts.issueToken(c.get("userId"), input.label, services.publicUrl));
+  });
+  v1.get("/tokens", (c) => c.json(accounts.tokens(c.get("userId"))));
+  v1.delete("/tokens/:id", (c) => idempotent(c, services, c.get("userId"), () => { accounts.revokeToken(c.get("userId"), c.req.param("id")); return { ok: true }; }));
+  v1.post("/devices", async (c) => {
+    const input = await body(c, z.object({
+      platform: z.enum(["ios", "android", "web"]),
+      apns_token: z.string().min(1).max(400).optional(),
+      apns_env: z.enum(["sandbox", "production"]).optional(),
+      fcm_token: z.string().min(1).max(4096).optional(),
+      web_push_subscription: z.object({ endpoint: z.url(), keys: z.object({ p256dh: z.string(), auth: z.string() }) }).optional(),
+    }));
+    return c.json(accounts.registerDevice(c.get("userId"), input));
+  });
+  v1.delete("/devices/:id", (c) => { accounts.removeDevice(c.get("userId"), c.req.param("id")); return c.json({ ok: true }); });
+  v1.get("/onboarding", (c) => c.json(onboarding(services.publicUrl)));
+
   v1.get("/pairing/lookup", (c) => c.json(accounts.lookupPairing(c.req.query("code") ?? "")));
   v1.post("/pairing/:id/claim", (c) => idempotent(c, services, c.get("userId"), () => accounts.claimPairing(c.get("userId"), c.req.param("id"))));
   v1.post("/pairing/:id/reject", (c) => idempotent(c, services, c.get("userId"), () => { accounts.rejectPairing(c.get("userId"), c.req.param("id")); return { ok: true }; }));
@@ -151,6 +172,8 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     throw new ApiError("internal", "課金の受付はまだ準備中です。");
   });
 
+  // 知らないAPIのpathにWeb版のHTMLを返さない（アプリが形式不正として扱えるよう、JSONの404にする）。
+  v1.all("*", () => { throw new ApiError("not_found", "そのAPIはありません。"); });
   app.route("/v1", v1);
 
   // ================= コネクタ（AI側）=================
@@ -238,6 +261,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       unsubscribe();
     });
   });
+  conn.all("*", () => { throw new ApiError("not_found", "そのAPIはありません。"); });
   app.route("/connector/v1", conn);
 
   if (options.staticHandler) app.get("*", options.staticHandler);

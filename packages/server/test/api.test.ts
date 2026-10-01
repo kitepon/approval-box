@@ -149,3 +149,38 @@ test("ログインのリンクは一度だけsessionに替えられる", async (
   const wrong = await ctx.call("POST", "/v1/auth/link", { body: { code: "kll_wrong-code-value" } });
   assert.equal(wrong.status, 401);
 });
+
+test("接続トークンを発行・一覧・失効でき、登録手順と知らないAPIはJSONで返る", async () => {
+  const ctx = setup();
+  const issued = await ctx.call("POST", "/v1/tokens", { token: ctx.session, body: { label: "server" } });
+  assert.equal(issued.status, 200);
+  assert.match(issued.json.setup_command, /^npx -y approval-box@latest setup --server https:\/\/kb\.test --token kbt_/);
+  const conn = await ctx.call("GET", "/connector/v1/connection", { token: issued.json.token });
+  assert.equal(conn.status, 200);
+  const list = await ctx.call("GET", "/v1/tokens", { token: ctx.session });
+  assert.deepEqual(list.json.map((t: { id: string }) => t.id), [issued.json.id]);
+  assert.equal(list.json[0].token, undefined);
+  const conns = await ctx.call("GET", "/v1/connections", { token: ctx.session });
+  assert.equal(conns.json.find((c: { id: string }) => c.id === issued.json.id).kind, "device");
+  assert.equal((await ctx.call("DELETE", `/v1/tokens/${issued.json.id}`, { token: ctx.session })).status, 200);
+  assert.equal((await ctx.call("GET", "/connector/v1/connection", { token: issued.json.token })).status, 401);
+  const guide = await ctx.call("GET", "/v1/onboarding", { token: ctx.session });
+  assert.deepEqual(guide.json.map((g: { client: string }) => g.client), ["claude-code", "codex", "cursor", "grok"]);
+  assert.ok(guide.json[0].steps.some((s: { copy?: string }) => s.copy === "Approval Boxのsetup_testを実行して"));
+  const unknown = await ctx.call("GET", "/v1/nope", { token: ctx.session });
+  assert.equal(unknown.status, 404);
+  assert.equal(unknown.json.error.code, "not_found");
+  const other = await ctx.call("POST", "/v1/tokens", { token: ctx.session, body: { label: "other" } });
+  assert.equal((await ctx.call("GET", "/connector/v1/nope", { token: other.json.token })).status, 404);
+});
+
+test("通知の端末を登録でき、同じtokenは同じidになり、解除できる", async () => {
+  const ctx = setup();
+  const a = await ctx.call("POST", "/v1/devices", { token: ctx.session, body: { platform: "ios", apns_token: "abc", apns_env: "sandbox" } });
+  assert.equal(a.status, 200);
+  const b = await ctx.call("POST", "/v1/devices", { token: ctx.session, body: { platform: "ios", apns_token: "abc", apns_env: "production" } });
+  assert.equal(b.json.id, a.json.id);
+  assert.equal((await ctx.call("POST", "/v1/devices", { token: ctx.session, body: { platform: "android" } })).status, 400);
+  assert.equal((await ctx.call("DELETE", `/v1/devices/${a.json.id}`, { token: ctx.session })).status, 200);
+  assert.equal((await ctx.call("DELETE", `/v1/devices/${a.json.id}`, { token: ctx.session })).status, 404);
+});

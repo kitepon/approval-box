@@ -3,9 +3,26 @@
   "version": "0.1.2",
   "description": "Approval Box connector: lets Claude Code, Codex, Cursor and Grok ask you for a decision, and steers your answer back into the same session.",
   "license": "MIT",
+  "homepage": "https://approval-box.kitepon.dev",
+  "keywords": [
+    "mcp",
+    "claude-code",
+    "codex",
+    "cursor",
+    "grok",
+    "human-in-the-loop",
+    "approval"
+  ],
   "type": "module",
-  "bin": { "approval-box": "dist/cli.mjs" },
-  "files": ["dist", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
+  "bin": {
+    "approval-box": "dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -22,5 +39,7 @@
     "typescript": "^6.0.3",
     "zod": "^4.4.3"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

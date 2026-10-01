@@ -19,6 +19,19 @@ create table if not exists sessions (
   created_at text not null,
   expires_at text not null
 );
+create table if not exists devices (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  platform text not null,
+  push_key text not null,
+  apns_token text,
+  apns_env text,
+  fcm_token text,
+  web_push_subscription text,
+  created_at text not null,
+  updated_at text not null,
+  unique (user_id, push_key)
+);
 create table if not exists login_links (
   code_hash text primary key,
   user_id text not null references users(id) on delete cascade,

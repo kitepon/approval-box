@@ -127,17 +127,56 @@ export class Accounts {
 
   connections(userId: string) {
     return all<ConnectionRow>(this.db, "select * from connections where user_id = ? and revoked_at is null order by created_at", userId).map((c) => ({
-      id: c.id, kind: c.kind, label: c.label, ...(c.os ? { os: c.os } : {}), clients: JSON.parse(c.clients) as string[],
+      id: c.id, kind: c.kind === "token" ? "device" : c.kind, label: c.label, ...(c.os ? { os: c.os } : {}), clients: JSON.parse(c.clients) as string[],
       created_at: c.created_at, ...(c.last_seen_at ? { last_seen_at: c.last_seen_at } : {}),
     }));
   }
 
-  createConnection(userId: string, label: string, os: string | null, clients: string[]) {
+  createConnection(userId: string, label: string, os: string | null, clients: string[], kind: "device" | "token" = "device") {
     const id = uuid();
     const token = secret("kbt");
-    run(this.db, "insert into connections (id, user_id, kind, label, os, clients, token_hash, created_at) values (?, ?, 'device', ?, ?, ?, ?, ?)",
-      id, userId, label, os, JSON.stringify(clients), hash(token), now());
+    run(this.db, "insert into connections (id, user_id, kind, label, os, clients, token_hash, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+      id, userId, kind, label, os, JSON.stringify(clients), hash(token), now());
     return { id, token };
+  }
+
+  // ---- 通知を受ける端末（アプリ・Web Push）。同じ宛先（tokenやsubscription）は同じidに上書きする ----
+
+  registerDevice(userId: string, input: { platform: "ios" | "android" | "web"; apns_token?: string; apns_env?: "sandbox" | "production"; fcm_token?: string; web_push_subscription?: unknown }) {
+    const subscription = input.web_push_subscription === undefined ? null : JSON.stringify(input.web_push_subscription);
+    const key = input.platform === "ios" ? input.apns_token : input.platform === "android" ? input.fcm_token : subscription;
+    if (!key) throw new ApiError("validation_failed", input.platform === "ios" ? "apns_token が要ります。" : input.platform === "android" ? "fcm_token が要ります。" : "web_push_subscription が要ります。");
+    const pushKey = `${input.platform}:${hash(key)}`;
+    const existing = get<{ id: string }>(this.db, "select id from devices where user_id = ? and push_key = ?", userId, pushKey);
+    const id = existing?.id ?? uuid();
+    run(this.db, `insert into devices (id, user_id, platform, push_key, apns_token, apns_env, fcm_token, web_push_subscription, created_at, updated_at)
+      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      on conflict(user_id, push_key) do update set apns_env = excluded.apns_env, updated_at = excluded.updated_at`,
+      id, userId, input.platform, pushKey, input.apns_token ?? null, input.apns_env ?? null, input.fcm_token ?? null, subscription, now(), now());
+    return { id };
+  }
+
+  removeDevice(userId: string, id: string) {
+    const result = run(this.db, "delete from devices where id = ? and user_id = ?", id, userId);
+    if (!result.changes) throw new ApiError("not_found", "その端末は見つかりません。");
+  }
+
+  // ---- 接続トークン（画面の無い端末で npx approval-box setup --token に渡す）。中身は接続そのもので、ペアリングを省いたもの ----
+
+  issueToken(userId: string, label: string, publicUrl: string) {
+    const conn = this.createConnection(userId, label, null, [], "token");
+    this.events.publish(userId, "setup.updated", {});
+    return { id: conn.id, token: conn.token, setup_command: `npx -y approval-box@latest setup --server ${publicUrl} --token ${conn.token}` };
+  }
+
+  tokens(userId: string) {
+    return all<ConnectionRow>(this.db, "select * from connections where user_id = ? and kind = 'token' and revoked_at is null order by created_at", userId)
+      .map((c) => ({ id: c.id, label: c.label, created_at: c.created_at, last_used_at: c.last_seen_at ?? null }));
+  }
+
+  revokeToken(userId: string, id: string) {
+    if (!get(this.db, "select 1 from connections where id = ? and user_id = ? and kind = 'token' and revoked_at is null", id, userId)) throw new ApiError("not_found", "そのトークンは見つかりません。");
+    this.revokeConnection(userId, id);
   }
 
   revokeConnection(userId: string, id: string) {
@@ -147,9 +186,9 @@ export class Accounts {
   }
 
   connectionByToken(token: string | undefined): Connection {
-    if (!token) throw new ApiError("unauthorized", "接続トークンがありません。approval-box setup をやり直してください。");
+    if (!token) throw new ApiError("unauthorized", "接続トークンがありません。npx -y approval-box@latest setup をやり直してください。");
     const row = get<ConnectionRow>(this.db, "select * from connections where token_hash = ? and revoked_at is null", hash(token));
-    if (!row) throw new ApiError("unauthorized", "この端末の接続は外されています。approval-box setup でつなぎ直してください。");
+    if (!row) throw new ApiError("unauthorized", "この端末の接続は外されています。npx -y approval-box@latest setup でつなぎ直してください。");
     run(this.db, "update connections set last_seen_at = ? where id = ?", now(), row.id);
     return { id: row.id, user_id: row.user_id, label: row.label, os: row.os };
   }
@@ -181,14 +220,14 @@ export class Accounts {
     const code = normalizePairingCode(codeInput);
     if (!code) throw new ApiError("validation_failed", "コードは英字と数字の8文字です。");
     const row = get<PairingRow>(this.db, "select * from pairings where code = ?", code);
-    if (!row || row.status !== "waiting" || row.expires_at < now()) throw new ApiError("not_found", "そのコードは見つからないか、期限が切れています。PCで approval-box setup をやり直してください。");
+    if (!row || row.status !== "waiting" || row.expires_at < now()) throw new ApiError("not_found", "そのコードは見つからないか、期限が切れています。PCで npx -y approval-box@latest setup をやり直してください。");
     return { pairing_id: row.id, device_name: row.device_name, ...(row.os ? { os: row.os } : {}), clients: JSON.parse(row.clients) as string[], expires_at: row.expires_at };
   }
 
   claimPairing(userId: string, id: string) {
     return tx(this.db, () => {
       const row = get<PairingRow>(this.db, "select * from pairings where id = ?", id);
-      if (!row || row.status !== "waiting" || row.expires_at < now()) throw new ApiError("not_found", "このペアリングは期限が切れています。PCで approval-box setup をやり直してください。");
+      if (!row || row.status !== "waiting" || row.expires_at < now()) throw new ApiError("not_found", "このペアリングは期限が切れています。PCで npx -y approval-box@latest setup をやり直してください。");
       const conn = this.createConnection(userId, row.device_name, row.os, JSON.parse(row.clients));
       // tokenはPC側が一度取りに来るまでだけ置く。取りに来たら消す。
       run(this.db, "update pairings set status = 'claimed', user_id = ?, connection_id = ?, token = ? where id = ?", userId, conn.id, conn.token, id);
