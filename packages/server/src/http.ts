@@ -13,6 +13,8 @@ import { now } from "./ids.ts";
 export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string } };
 
 const STATUSES = ["pending", "held", "answered", "cancelled"] as const;
+/** アプリへ戻すURLのscheme（AndroidのCustom Tabsから戻る先）。 */
+const APP_SCHEME = "approvalbox";
 const HEARTBEAT_MS = 25_000;
 
 function bearer(c: Context): string | undefined {
@@ -88,12 +90,41 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   // Web版のログインボタンに要る公開の値（秘密ではない）。設定が無ければ空で、Web版はボタンを出さない。
   app.get("/v1/auth/config", (c) => c.json(services.webLogin ?? {}));
   app.post("/v1/auth/apple", signIn("apple", services.appleAudiences ?? []));
+
+  // ブラウザで始めるAppleのログイン（AndroidのCustom Tabs）。Bearer付きなら、IDの無いそのアカウントへ結ぶ（最初の1回）。
+  // Appleは結果を /auth/apple/callback へ form_post する。サーバーは確かめてから、一度きりのコードを付けてアプリへ戻す。
+  // アプリは /v1/auth/link に code と code_verifier を送って session に替える。BearerやsessionはURLに載せない。
+  app.post("/v1/auth/apple/web/start", async (c) => {
+    const servicesId = services.webLogin?.apple_services_id;
+    if (!servicesId) throw new ApiError("validation_failed", "このサーバーではAppleのログインを使えません。");
+    const input = await body(c, z.object({ code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/), code_challenge_method: z.literal("S256") }));
+    const current = bearer(c) ? accounts.userBySession(bearer(c)) : undefined;
+    const flow = accounts.startAuthFlow("apple", current, input.code_challenge);
+    const params = new URLSearchParams({ client_id: servicesId, redirect_uri: `${services.publicUrl}/auth/apple/callback`, response_type: "code id_token", response_mode: "form_post", state: flow.state, nonce: flow.nonce });
+    return c.json({ authorization_url: `https://appleid.apple.com/auth/authorize?${params}`, state: flow.state, expires_at: flow.expires_at });
+  });
+  app.post("/auth/apple/callback", async (c) => {
+    const form = await c.req.parseBody();
+    const state = typeof form.state === "string" ? form.state : "";
+    const back = (query: Record<string, string>) => c.redirect(`${APP_SCHEME}://auth/apple?${new URLSearchParams({ ...query, state })}`, 303);
+    try {
+      if (typeof form.error === "string") return back({ error: form.error === "user_cancelled_authorize" ? "cancelled" : "apple_error" });
+      const flow = accounts.takeAuthFlow(state);
+      if (typeof form.id_token !== "string") return back({ error: "apple_error" });
+      const id = await verifyIdToken("apple", form.id_token, { audiences: [services.webLogin!.apple_services_id!], nonce: flow.nonce, ...(services.idKeys ? { keys: services.idKeys } : {}) });
+      const signed = accounts.signInWithIdentity("apple", id.sub, id.email, flow.link_user_id ?? undefined);
+      accounts.revokeSession(signed.session); // ここで作ったsessionは使わない。アプリには一度きりのコードを渡す
+      return back({ code: accounts.createLoginLink(signed.user.id, "apple", services.publicUrl, flow.code_challenge).code });
+    } catch (error) {
+      return back({ error: error instanceof ApiError ? error.code : "apple_error" });
+    }
+  });
   app.post("/v1/auth/google", signIn("google", services.googleAudiences ?? []));
 
   // ログインのリンクを session に替える（session 不要。v1 の認証より前に置く）。
   app.post("/v1/auth/link", async (c) => {
-    const input = await body(c, z.object({ code: z.string().min(10).max(200) }));
-    return c.json(accounts.redeemLoginLink(input.code));
+    const input = await body(c, z.object({ code: z.string().min(10).max(200), code_verifier: z.string().min(43).max(128).optional() }));
+    return c.json(accounts.redeemLoginLink(input.code, input.code_verifier));
   });
 
   const v1 = new Hono<{ Variables: { userId: string } }>();

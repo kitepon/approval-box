@@ -251,3 +251,61 @@ test("Sign in with Apple: 確かめたtokenで入り、同じApple IDは同じ�
   const gBad = await app.request("/v1/auth/google", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id_token: tokenFor({ sub: "g-1" }) }) });
   assert.equal(gBad.status, 401); // Appleの発行者のtokenはGoogleでは通らない
 });
+
+test("ブラウザで始めるAppleのログイン: callbackで確かめ、code_verifierと合う時だけ一度きりのコードを使える", async () => {
+  const { generateKeyPairSync, sign, createHash, randomBytes } = await import("node:crypto");
+  const { resetKeyCache } = await import("../src/oidc.ts");
+  resetKeyCache();
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const jwk = { ...publicKey.export({ format: "jwk" }), kid: "w1", alg: "RS256" };
+  const db = (await import("../src/db.ts")).openDb(":memory:");
+  const { EventHub } = await import("../src/events.ts");
+  const events = new EventHub(db);
+  const accounts = new Accounts(db, events, "off");
+  const app = createApp({ db, accounts, decisions: new Decisions(db, events), events, publicUrl: "https://kb.test", appleAudiences: ["dev.kitepon.approvalbox"], webLogin: { apple_services_id: "dev.kitepon.approvalbox.web" }, idKeys: async () => [jwk as never] });
+  const verifier = randomBytes(32).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  const startAs = async (session?: string) => {
+    const res = await app.request("/v1/auth/apple/web/start", { method: "POST", headers: { "content-type": "application/json", ...(session ? { authorization: `Bearer ${session}` } : {}) }, body: JSON.stringify({ code_challenge: challenge, code_challenge_method: "S256" }) });
+    return (await res.json()) as { authorization_url: string; state: string };
+  };
+  const idToken = (nonce: string, sub: string) => {
+    const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
+    const head = `${enc({ alg: "RS256", kid: "w1" })}.${enc({ iss: "https://appleid.apple.com", aud: "dev.kitepon.approvalbox.web", exp: Math.floor(Date.now() / 1000) + 600, sub, nonce })}`;
+    return `${head}.${sign("RSA-SHA256", Buffer.from(head), privateKey).toString("base64url")}`;
+  };
+  const callback = async (fields: Record<string, string>) => {
+    const res = await app.request("/auth/apple/callback", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(fields).toString() });
+    assert.equal(res.status, 303);
+    return new URL(res.headers.get("location")!);
+  };
+  const started = await startAs();
+  const auth = new URL(started.authorization_url);
+  assert.equal(auth.searchParams.get("redirect_uri"), "https://kb.test/auth/apple/callback");
+  const back = await callback({ state: started.state, id_token: idToken(auth.searchParams.get("nonce")!, "apple-w1") });
+  assert.equal(back.protocol, "approvalbox:");
+  assert.equal(back.searchParams.get("state"), started.state);
+  const code = back.searchParams.get("code")!;
+  const link = (extra: Record<string, string>) => app.request("/v1/auth/link", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code, ...extra }) });
+  assert.equal((await link({})).status, 401); // verifier が無ければ使えない
+  assert.equal((await link({ code_verifier: randomBytes(32).toString("base64url") })).status, 401);
+  assert.equal((await link({ code_verifier: verifier })).status, 200);
+  assert.equal((await link({ code_verifier: verifier })).status, 401); // 一度きり
+  // 同じ state は二度使えない・nonce違いは通らない
+  assert.equal((await callback({ state: started.state, id_token: idToken(auth.searchParams.get("nonce")!, "apple-w1") })).searchParams.get("error"), "unauthorized");
+  const s2 = await startAs();
+  assert.equal((await callback({ state: s2.state, id_token: idToken("wrong", "apple-w2") })).searchParams.get("error"), "unauthorized");
+  // 取り消しは cancelled で戻る
+  const s3 = await startAs();
+  assert.equal((await callback({ state: s3.state, error: "user_cancelled_authorize" })).searchParams.get("error"), "cancelled");
+  // IDの無い既存アカウントへ結ぶ（Bearer付きで始める）
+  const owner = accounts.createUser();
+  const { session } = accounts.issueSession(owner, "code");
+  const s4 = await startAs(session);
+  const b4 = await callback({ state: s4.state, id_token: idToken(new URL(s4.authorization_url).searchParams.get("nonce")!, "apple-w4") });
+  const r4 = await app.request("/v1/auth/link", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: b4.searchParams.get("code"), code_verifier: verifier }) });
+  const me = await app.request("/v1/me", { headers: { authorization: `Bearer ${((await r4.json()) as { session: string }).session}` } });
+  const mj = (await me.json()) as { user_id: string; login: string };
+  assert.equal(mj.user_id, owner);
+  assert.equal(mj.login, "apple");
+});

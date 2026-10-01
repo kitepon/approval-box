@@ -34,6 +34,16 @@ create table if not exists personal_links (
   created_at text not null,
   last_used_at text
 );
+create table if not exists auth_flows (
+  state text primary key,
+  provider text not null,
+  nonce text not null,
+  link_user_id text,
+  code_challenge text not null,
+  created_at text not null,
+  expires_at text not null,
+  used_at text
+);
 create table if not exists login_links (
   code_hash text primary key,
   user_id text not null references users(id) on delete cascade,
@@ -189,6 +199,11 @@ const MIGRATIONS: ((db: Db) => void)[] = [
       run(db, "insert or ignore into devices (id, user_id, platform, push_key, apns_token, apns_env, fcm_token, web_push_subscription, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         r.id!, r.user_id!, r.platform!, `${r.platform}:${hash(key)}`, r.apns_token ?? null, r.apns_env ?? null, r.fcm_token ?? null, r.web_push_subscription ?? null, r.created_at!, r.created_at!);
     }
+  },
+  // 2: login_links に code_challenge（アプリへ返す一度きりのコードを、始めたアプリだけが使えるようにする）。
+  (db) => {
+    const columns = all<{ name: string }>(db, "select name from pragma_table_info('login_links')").map((c) => c.name);
+    if (!columns.includes("code_challenge")) db.exec("alter table login_links add column code_challenge text");
   },
 ];
 

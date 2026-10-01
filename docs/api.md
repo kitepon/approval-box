@@ -1,4 +1,4 @@
-# Approval Box API（アプリ・Web版向け） v0.14
+# Approval Box API（アプリ・Web版向け） v0.15
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 
@@ -23,10 +23,17 @@ v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ�
   - **IDに結ばれていない既存アカウント**（ログイン用のURL・コードで作ったもの）だけは、ログイン済みのsession（Bearer）付きで `/auth/apple`・`/auth/google` を呼ぶと、最初の1回に限りそのIDを結べる。既にIDがあるアカウントなら 409 `conflict`。そのIDが別のアカウントで使われていても 409 `conflict`。
   - `/me` の `login` は `"apple" | "google" | null`。null のアカウントにだけ「GoogleかAppleを結ぶ」を出す。
   - サーバーが受け先を設定していなければ 400 `validation_failed`（自分で立てたサーバー）。
+  - **ブラウザで始めるAppleのログイン（AndroidのCustom Tabs）**。BearerもsessionもURLに載せない。
+    1. アプリが `code_verifier`（43〜128文字のランダムなbase64url）を作り、`code_challenge = base64url(SHA-256(code_verifier))` を求める。
+    2. `POST /auth/apple/web/start` `{ code_challenge, code_challenge_method: "S256" }` → `{ authorization_url, state, expires_at }`（10分）。IDの無い既存アカウントへ結ぶ時（最初の1回）だけBearerを付ける。
+    3. アプリは `authorization_url` をCustom Tabsで開き、`state` を覚えておく。
+    4. Appleは結果を `https://<host>/auth/apple/callback` へform_postする。サーバーはid_token（aud はServices ID、nonce はサーバーが入れた値）を確かめ、`approvalbox://auth/apple?code=kll_…&state=…` へ303で戻す。失敗は `approvalbox://auth/apple?error=<code>&state=…`。`<code>` は `cancelled`（利用者が取り消した）・`apple_error`・`unauthorized`（期限切れ・照合失敗）・`conflict`（409と同じ）。
+    5. アプリは戻った `state` が覚えたものと同じか確かめる。そのうえで `POST /auth/link` `{ code, code_verifier }` で session に替える。この code は、始めたアプリの `code_verifier` と合う時だけ、一度だけ使える（15分）。
+    - Androidの戻り先 `approvalbox://auth/apple` は、アプリのintent filterで受ける。
 - 検証期間は、ラプラスが発行する開発用sessionをそのまま使ってよい（ログイン画面は後から差し込める作りにする）。
 - 401 `unauthorized` を受けたらsessionを捨ててログインへ戻す。
 - `POST /auth/logout`（Bearer必須）→ `{ ok: true }`。そのsessionを失効させる。端末の通知を止めるなら、先に `DELETE /devices/{id}`。
-- `POST /auth/link` `{ code }`（Bearer不要）→ `{ session, expires_at }`。コードでのログイン。codeは2種類:
+- `POST /auth/link` `{ code, code_verifier? }`（Bearer不要。`code_verifier` はブラウザで始めたログインのコードの時だけ要る）→ `{ session, expires_at }`。コードでのログイン。codeは2種類:
   - `kll_…` 一度だけ使えるログインのコード。15分で切れる。サーバーの管理者が `admin login-link <user_id|new>` で出す。
   - `kpl_…` 利用者ごとに固定のログインのコード。何度でも使える。Web版の「設定 → ログイン用のURL」（`POST /me/personal-link`）か `admin personal-link <user_id>` で出す。作り直すと前のコードは 401。
   - どちらも `https://<host>/login#code=<code>` のURLの形で渡されることが多い。アプリの入力欄は、URLを丸ごと貼っても、コードだけでも受ける（`#code=` の後ろを取り出す。前後の空白は捨てる）。401 `unauthorized` は「使えないコード」として出す。
@@ -235,6 +242,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.15 2026-10-01 ベルの依頼で、AndroidのAppleログイン（Custom Tabs）の開始・復帰の取り決めを追加。`POST /auth/apple/web/start`、`/auth/apple/callback`、`approvalbox://auth/apple`、`/auth/link` の `code_verifier`（PKCE S256）。
 - v0.14 2026-10-01 クオの裁定: ログインはGoogleとAppleの2本、1アカウント1ID、両方使えば別アカウント。`POST /auth/google` を実装。Bearer付きで結べるのはIDの無い既存アカウントだけ（最初の1回）。`/me` に `login`。
 - v0.13 2026-10-01 ベルの依頼で、コードでのログイン（`kll_`・`kpl_`）、URL/コードの入力欄の扱い、`/me/personal-link` を明記（実装は既にある）。
 - v0.12 2026-10-01 `POST /auth/apple` を実装。Bearer付きで呼ぶと既存アカウントへ結ぶ（409 `conflict` は別アカウントに結ばれている時）。`/auth/google` はまだ。

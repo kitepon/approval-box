@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { type Db, all, get, run, tx } from "./db.ts";
 import { ApiError } from "./errors.ts";
 import type { EventHub } from "./events.ts";
@@ -49,12 +50,33 @@ export class Accounts {
   }
 
   /** 一度だけ使えるログインのリンク。Apple・Googleのログインが無いサーバーで、管理者が利用者へ渡す。コードはURLの#の後ろに置き、サーバーのログに残さない。 */
-  createLoginLink(userId: string, label: string, publicUrl: string): { url: string; expires_at: string } {
+  createLoginLink(userId: string, label: string, publicUrl: string, codeChallenge?: string): { url: string; code: string; expires_at: string } {
     if (!get(this.db, "select 1 from users where id = ?", userId)) throw new ApiError("not_found", "その利用者はいません。");
     const code = secret("kll");
     const expires = new Date(Date.now() + LOGIN_LINK_MINUTES * 60_000).toISOString();
-    run(this.db, "insert into login_links (code_hash, user_id, label, created_at, expires_at) values (?, ?, ?, ?, ?)", hash(code), userId, label, now(), expires);
-    return { url: `${publicUrl}/login#code=${code}`, expires_at: expires };
+    run(this.db, "insert into login_links (code_hash, user_id, label, created_at, expires_at, code_challenge) values (?, ?, ?, ?, ?, ?)", hash(code), userId, label, now(), expires, codeChallenge ?? null);
+    return { url: `${publicUrl}/login#code=${code}`, code, expires_at: expires };
+  }
+
+  // ---- ブラウザで始めるAppleのログイン（AndroidのCustom Tabs）。state と nonce と、アプリの code_challenge を覚えておく ----
+
+  startAuthFlow(provider: "apple", currentUserId: string | undefined, codeChallenge: string) {
+    const state = secret("kst");
+    const nonce = secret("kno");
+    const expires = new Date(Date.now() + LOGIN_LINK_MINUTES * 60_000).toISOString();
+    run(this.db, "insert into auth_flows (state, provider, nonce, link_user_id, code_challenge, created_at, expires_at) values (?, ?, ?, ?, ?, ?, ?)",
+      state, provider, nonce, currentUserId ?? null, codeChallenge, now(), expires);
+    run(this.db, "delete from auth_flows where expires_at < ?", new Date(Date.now() - 86400_000).toISOString());
+    return { state, nonce, expires_at: expires };
+  }
+
+  takeAuthFlow(state: string) {
+    return tx(this.db, () => {
+      const row = get<{ provider: string; nonce: string; link_user_id: string | null; code_challenge: string; expires_at: string; used_at: string | null }>(this.db, "select * from auth_flows where state = ?", state);
+      if (!row || row.used_at || row.expires_at < now()) throw new ApiError("unauthorized", "ログインの手続きの期限が切れました。最初からやり直してください。");
+      run(this.db, "update auth_flows set used_at = ? where state = ?", now(), state);
+      return row;
+    });
   }
 
   /**
@@ -99,7 +121,7 @@ export class Accounts {
     run(this.db, "delete from personal_links where user_id = ?", userId);
   }
 
-  redeemLoginLink(code: string): { session: string; expires_at: string } {
+  redeemLoginLink(code: string, codeVerifier?: string): { session: string; expires_at: string } {
     if (code.startsWith("kpl_")) {
       const row = get<{ user_id: string }>(this.db, "select user_id from personal_links where key_hash = ?", hash(code));
       if (!row) throw new ApiError("unauthorized", "このログインのURLは使えません。作り直された可能性があります。");
@@ -107,8 +129,12 @@ export class Accounts {
       return this.issueSession(row.user_id, "personal-link");
     }
     return tx(this.db, () => {
-      const row = get<{ user_id: string; label: string | null; expires_at: string; used_at: string | null }>(this.db, "select user_id, label, expires_at, used_at from login_links where code_hash = ?", hash(code));
+      const row = get<{ user_id: string; label: string | null; expires_at: string; used_at: string | null; code_challenge: string | null }>(this.db, "select user_id, label, expires_at, used_at, code_challenge from login_links where code_hash = ?", hash(code));
       if (!row || row.used_at || row.expires_at < now()) throw new ApiError("unauthorized", "このログインのリンクは使えません。期限切れか、もう使われています。");
+      // アプリへ返したコードは、始めたアプリが持つ code_verifier と合う時だけ使える（横取り対策。PKCEのS256と同じ）。
+      if (row.code_challenge && (!codeVerifier || createHash("sha256").update(codeVerifier).digest("base64url") !== row.code_challenge)) {
+        throw new ApiError("unauthorized", "このログインのリンクは使えません。期限切れか、もう使われています。");
+      }
       run(this.db, "update login_links set used_at = ? where code_hash = ?", now(), hash(code));
       return this.issueSession(row.user_id, row.label ?? "login-link");
     });
