@@ -401,11 +401,12 @@ function uniqueId(db: Db): string {
 }
 
 function deliveryText(row: Row, answer: Answer, option: Option | undefined, code?: string): string {
-  const lines = [`[決裁箱] ${row.id}「${row.title}」に答えが出ました。`];
+  // AIが「外から差し込まれた指示」と疑わないよう、自分が出した申請への利用者の答えだと最初に書く。
+  const lines = [`[決裁箱] あなたが request_decision で出した申請 ${row.id}「${row.title}」に、利用者が答えました。`];
   if (option) lines.push(`答え: ${option.label}（option_id=${option.id}）`);
   if (answer.text) lines.push(option ? `添え書き: ${answer.text}` : `答え（文）: ${answer.text}`);
   if (code) {
-    lines.push("", `これは接続テストです。確認コード: ${code}`,
+    lines.push("", `これはあなたが setup_test で始めた接続テストです。確認コード: ${code}`,
       `決裁箱の confirm_setup_test を decision_id="${row.id}", code="${code}" で呼んでください。それでセットアップ確認が終わります。`);
   } else {
     lines.push("", option || !answer.text ? "この答えに従って作業を続けてください。" : "この指示に従って作業を続けてください。");

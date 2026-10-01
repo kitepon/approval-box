@@ -9,7 +9,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import * as steer from "aiterm-steer-delivery";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -50,12 +50,13 @@ if (saved) copyFileSync(configFile, saved);
 mkdirSync(kbHome, { recursive: true });
 writeFileSync(configFile, JSON.stringify({ server: serverUrl, token: conn.token }), { mode: 0o600 });
 // 別の試験の配送デーモンが残っていれば止める（古いサーバーを見ているため）。
-try { const lock = JSON.parse((await import("node:fs")).readFileSync(join(kbHome, "state", "daemon.json"), "utf8")); process.kill(lock.pid); } catch {}
+try { const lock = JSON.parse(readFileSync(join(kbHome, "state", "daemon.json"), "utf8")); process.kill(lock.pid); } catch {}
 
 // ---- 試験用project（AIへの登録はここだけ）----
 const project = join(work, "project");
 mkdirSync(project);
 const mcp = { command: node, args: [join(dist, "cli.mjs"), "mcp"] };
+let codexHome = null;
 if (harness === "claude-code") {
   writeFileSync(join(project, ".mcp.json"), JSON.stringify({ mcpServers: { kessaibako: { type: "stdio", ...mcp } } }, null, 1));
   mkdirSync(join(project, ".claude"));
@@ -65,6 +66,14 @@ if (harness === "claude-code") {
 } else if (harness === "codex-cli") {
   mkdirSync(join(project, ".codex"));
   writeFileSync(join(project, ".codex", "config.toml"), `[mcp_servers.kessaibako]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\n`);
+  // 作業中の割り込み（Steer）のhookは CODEX_HOME に入る。共有の設定に触れないよう、使い捨てのCODEX_HOMEを作り、認証だけ複製する。
+  const realCodexHome = process.env.CODEX_HOME ?? join(homedir(), ".codex");
+  codexHome = join(work, "codex-home");
+  mkdirSync(codexHome);
+  copyFileSync(join(realCodexHome, "auth.json"), join(codexHome, "auth.json"));
+  writeFileSync(join(codexHome, "config.toml"), "");
+  const steered = await steer.configureCodexSteer(PROFILE, "enable", { hook: join(dist, "kessaibako-codex-hook.mjs"), codex_home: codexHome });
+  log("codex steer", JSON.stringify(steered));
 } else if (harness === "cursor-cli") {
   const cursorHome = join(project, ".cursor");
   mkdirSync(cursorHome);
@@ -90,7 +99,7 @@ const deliveryOf = (id) => decisions.toApi(decisions.forUser(userId, id)).delive
 
 // ---- Aitermで本物のAIを起動 ----
 const aitermCommand = JSON.parse(process.env.AITERM_CMD ?? '["aiterm-mcp"]');
-const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AITERM_")));
+const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AITERM_"))), ...(codexHome ? { CODEX_HOME: codexHome } : {}) };
 const client = new Client({ name: "kessaibako-e2e", version: "1" });
 await client.connect(new StdioClientTransport({ command: aitermCommand[0], args: aitermCommand.slice(1), env, stderr: "ignore" }));
 const call = (name, args) => client.callTool({ name, arguments: args }, undefined, { timeout: 600_000 });
@@ -102,9 +111,29 @@ const screen = async (sid) => {
   seen.set(sid, kept);
   return kept;
 };
+// CursorのTUIは画面から文字を読み損ねることがある。Cursorは会話の記録（agent-transcripts）も見る。
+const cursorTranscript = () => {
+  if (harness !== "cursor-cli") return "";
+  const root = join(homedir(), ".cursor", "projects");
+  const slug = readdirSync(root).find((name) => name.endsWith(project.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-/, "")));
+  if (!slug) return "";
+  const dir = join(root, slug, "agent-transcripts");
+  if (!existsSync(dir)) return "";
+  let text = "";
+  for (const id of readdirSync(dir)) {
+    const file = join(dir, id, `${id}.jsonl`);
+    if (!existsSync(file)) continue;
+    for (const line of readFileSync(file, "utf8").split("\n").filter(Boolean)) {
+      const entry = JSON.parse(line);
+      if (entry.role !== "assistant") continue;
+      for (const part of entry.message?.content ?? []) if (part.type === "text") text += `\n${part.text}`;
+    }
+  }
+  return text;
+};
 const waitScreen = async (sid, pattern, ms) => {
   const deadline = Date.now() + ms;
-  while (Date.now() < deadline) { if (pattern.test(await screen(sid))) return true; await sleep(2000); }
+  while (Date.now() < deadline) { if (pattern.test(await screen(sid)) || pattern.test(cursorTranscript())) return true; await sleep(2000); }
   return false;
 };
 const send = async (sid, text) => {
@@ -162,7 +191,9 @@ try {
   await sleep(15000);
   if (busy) answer(busy);
   result.checks.busy = !!busy && await waitScreen(sid, new RegExp(`GOT ${busy.id}`, "u"), 240_000);
-  result.checks.busy_done = await waitScreen(sid, /BUSYDONE/u, 180_000);
+  result.checks.busy_done = await waitScreen(sid, /BUSYDONE[\s\S]*BUSYDONE/u, 180_000); // 1つ目は送った依頼文
+  // 割り込みで届いたなら、答え（GOT）はコマンドの終わり（BUSYDONE）より前に出る。参考として記録する。
+  if (busy) { const text = await screen(sid); result.busy_steered = text.indexOf(`GOT ${busy.id}`) >= 0 && text.indexOf(`GOT ${busy.id}`) < text.lastIndexOf("BUSYDONE"); }
   if (busy) result.deliveries[busy.id] = deliveryOf(busy.id);
   log("busy", result.checks.busy, result.checks.busy_done);
 
@@ -186,7 +217,7 @@ try {
     await call("pty_close", { session_id: sid }).catch(() => {});
   }
   await sleep(5000);
-  try { const lock = JSON.parse((await import("node:fs")).readFileSync(join(kbHome, "state", "daemon.json"), "utf8")); process.kill(lock.pid); } catch {}
+  try { const lock = JSON.parse(readFileSync(join(kbHome, "state", "daemon.json"), "utf8")); process.kill(lock.pid); } catch {}
   if (saved) { copyFileSync(saved, configFile); rmSync(saved); } else rmSync(configFile, { force: true });
   const table = process.platform === "win32"
     ? execFileSync("pwsh", ["-NoProfile", "-Command", "(Get-CimInstance Win32_Process).CommandLine"], { encoding: "utf8" })
