@@ -6,6 +6,7 @@ export type ErrorCode =
   | "conflict"
   | "setup_not_verified"
   | "duplicate_suspected"
+  | "confirm_required"
   | "rate_limited"
   | "internal";
 
@@ -17,6 +18,7 @@ const statusOf: Record<ErrorCode, number> = {
   conflict: 409,
   setup_not_verified: 409,
   duplicate_suspected: 409,
+  confirm_required: 409,
   rate_limited: 429,
   internal: 500,
 };

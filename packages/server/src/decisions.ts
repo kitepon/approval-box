@@ -2,7 +2,7 @@ import { z } from "zod";
 import { type Db, all, get, run, tx } from "./db.ts";
 import { ApiError } from "./errors.ts";
 import type { EventHub } from "./events.ts";
-import { decisionId, normalizeTitle, now, testCode, uuid } from "./ids.ts";
+import { decisionId, hash, normalizeTitle, now, secret, testCode, uuid } from "./ids.ts";
 
 export const URGENCIES = ["low", "normal", "high"] as const;
 export const AMEND_FIELDS = ["title", "context", "options", "recommendation", "urgency", "deadline"] as const;
@@ -40,6 +40,7 @@ export const createSchema = z.object({
   client: z.string().trim().min(1).max(40),
   route: z.object({ channel_id: z.string().min(1).max(100), harness: z.string().min(1).max(20) }).optional(),
   distinct_reason: z.string().trim().min(1).max(500).optional(),
+  check_token: z.string().max(200).optional(),
 });
 
 export const amendSchema = z.object({
@@ -60,6 +61,8 @@ export const answerSchema = z.object({
   text: z.string().trim().max(5000).optional(),
   version: z.number().int().positive(),
 }).refine((body) => body.option_id || body.text, "選択肢か文のどちらかが必要です");
+
+const CHECK_TTL_MS = 30 * 60_000;
 
 const urgencyRank: Record<string, number> = { high: 0, normal: 1, low: 2 };
 
@@ -245,7 +248,9 @@ export class Decisions {
   }
 
   create(conn: Connection, input: z.infer<typeof createSchema>, options: { test?: boolean } = {}) {
+    if (!options.test) this.requireCheck(conn, input);
     return tx(this.db, () => {
+      if (!options.test) this.useCheck(conn, input.check_token!);
       const hourAgo = new Date(Date.now() - 3600_000).toISOString();
       const recent = get<{ n: number }>(this.db, "select count(*) n from decisions where user_id = ? and created_at >= ?", conn.user_id, hourAgo)!.n;
       if (recent >= CREATE_LIMIT_PER_HOUR) throw new ApiError("rate_limited", "1時間に出せる申請の数を超えました。少し待ってください。", {}, 600);
@@ -272,6 +277,34 @@ export class Decisions {
       this.events.publish(conn.user_id, "decision.created", { decision_id: id, version: 1 });
       return row;
     });
+  }
+
+  /**
+   * 申請の前の確かめ（クオの裁定 2026-10-01）。AIが申請を出すと、まず自分の申請の一覧を返し、
+   * 直す・取り下げる申請が無いかをAIに確かめさせる。AIが問題ないとして check_token を付けて出し直した時だけ受け付ける。
+   * 何を直すか・取り下げるかはAIが決める。サーバーは中身を判断しない。
+   */
+  private requireCheck(conn: Connection, input: z.infer<typeof createSchema>) {
+    if (input.check_token && this.checkUsable(conn, input.check_token)) return;
+    const token = secret("chk");
+    const at = new Date();
+    run(this.db, "delete from request_checks where expires_at < ?", at.toISOString());
+    run(this.db, "insert into request_checks (token_hash, connection_id, created_at, expires_at) values (?, ?, ?, ?)",
+      hash(token), conn.id, at.toISOString(), new Date(at.getTime() + CHECK_TTL_MS).toISOString());
+    const head = input.check_token ? "確認の札が古いか、もう使われています。もう一度確かめてください。\n" : "";
+    throw new ApiError("confirm_required",
+      `${head}申請はまだ受け付けていません。下はこの端末から出した申請の一覧です。直す申請があれば amend_decision、要らなくなった申請があれば cancel_decision を先に済ませてください。答えが出ている申請は、その答えに従ってください。問題が無ければ、同じ申請に check_token を付けて出し直してください。`,
+      { check_token: token, decisions: this.listMine(conn, input.route?.channel_id) });
+  }
+
+  private checkUsable(conn: Connection, token: string) {
+    const row = get<{ connection_id: string; expires_at: string; used_at: string | null }>(this.db, "select connection_id, expires_at, used_at from request_checks where token_hash = ?", hash(token));
+    return !!row && row.connection_id === conn.id && !row.used_at && row.expires_at > now();
+  }
+
+  private useCheck(conn: Connection, token: string) {
+    if (!this.checkUsable(conn, token)) throw new ApiError("conflict", "確認の札がもう使われています。申請を出し直してください。");
+    run(this.db, "update request_checks set used_at = ? where token_hash = ?", now(), hash(token));
   }
 
   amend(conn: Connection, id: string, body: z.infer<typeof amendSchema>) {

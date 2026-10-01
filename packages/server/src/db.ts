@@ -131,6 +131,13 @@ create table if not exists idempotency (
   created_at text not null,
   primary key (user_id, key)
 );
+create table if not exists request_checks (
+  token_hash text primary key,
+  connection_id text not null,
+  created_at text not null,
+  expires_at text not null,
+  used_at text
+);
 create table if not exists setup_checks (
   id text primary key,
   user_id text not null references users(id) on delete cascade,

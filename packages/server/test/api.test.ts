@@ -40,17 +40,25 @@ async function paired(ctx: ReturnType<typeof setup>) {
   return poll.json.token as string;
 }
 
+/** 申請する。1回目は一覧と確認の札が返るので、札を付けて出し直す。 */
+async function submit(ctx: ReturnType<typeof setup>, token: string, body: Record<string, unknown>) {
+  const first = await ctx.call("POST", "/connector/v1/decisions", { token, body });
+  assert.equal(first.status, 409);
+  assert.equal(first.json.error.code, "confirm_required");
+  return ctx.call("POST", "/connector/v1/decisions", { token, body: { ...body, check_token: first.json.error.check_token } });
+}
+
 const request = { title: "DBの移行をいま実行してよいか", context: "停止は30秒", options: [{ id: "a", label: "いま実行" }, { id: "b", label: "夜間" }], recommendation: "b", urgency: "high", session_label: "approval-box / server", client: "claude-code", route: { channel_id: "ch-1", harness: "claude" } };
 
 test("申請・重複検知・修正・回答・配送", async () => {
   const ctx = setup();
   const token = await paired(ctx);
-  const created = await ctx.call("POST", "/connector/v1/decisions", { token, body: request });
+  const created = await submit(ctx, token, request);
   assert.equal(created.status, 200);
   const id = created.json.decision_id;
   assert.match(id, /^K-[A-Z2-9]{6}$/);
 
-  const dup = await ctx.call("POST", "/connector/v1/decisions", { token, body: { ...request, title: "ＤＢの移行を いま実行してよいか？" } });
+  const dup = await submit(ctx, token, { ...request, title: "ＤＢの移行を いま実行してよいか？" });
   assert.equal(dup.status, 409);
   assert.equal(dup.json.error.code, "duplicate_suspected");
   assert.equal(dup.json.error.existing[0].decision_id, id);
@@ -89,11 +97,43 @@ test("申請・重複検知・修正・回答・配送", async () => {
   assert.equal(cancelLate.json.error.decision.answer.option_id, "b");
 });
 
+test("申請はまず一覧を返して確かめさせ、札を付けて出し直した時だけ受け付ける", async () => {
+  const ctx = setup();
+  const token = await paired(ctx);
+  const old = (await submit(ctx, token, { ...request, title: "npmへ0.1.5を公開する承認" })).json.decision_id;
+
+  const first = await ctx.call("POST", "/connector/v1/decisions", { token, body: { ...request, title: "npmへ0.1.6を公開する承認" } });
+  assert.equal(first.status, 409);
+  assert.equal(first.json.error.code, "confirm_required");
+  assert.deepEqual(first.json.error.decisions.map((d: { decision_id: string }) => d.decision_id), [old]);
+  assert.equal((await ctx.call("GET", "/v1/decisions?status=pending,held", { token: ctx.session })).json.items.length, 1);
+
+  // 取り下げるかはAIが決める。サーバーは中身を見ない。
+  await ctx.call("POST", `/connector/v1/decisions/${old}/cancel`, { token, body: { reason: "0.1.6に出し直す" } });
+  const body = { ...request, title: "npmへ0.1.6を公開する承認", check_token: first.json.error.check_token };
+  const created = await ctx.call("POST", "/connector/v1/decisions", { token, body });
+  assert.equal(created.status, 200);
+
+  // 札は1回きり。他の接続の札も使えない。
+  const reused = await ctx.call("POST", "/connector/v1/decisions", { token, body: { ...body, title: "別の件" } });
+  assert.equal(reused.json.error.code, "confirm_required");
+  assert.match(reused.json.error.message, /古いか、もう使われています/);
+  const other = await (async () => {
+    const start = await ctx.call("POST", "/connector/v1/pairing", { body: { device_name: "pc2", os: "linux", clients: ["codex"] } });
+    const lookup = await ctx.call("GET", `/v1/pairing/lookup?code=${start.json.code.replace("-", "")}`, { token: ctx.session });
+    await ctx.call("POST", `/v1/pairing/${lookup.json.pairing_id}/claim`, { token: ctx.session });
+    return (await ctx.call("GET", `/connector/v1/pairing/${start.json.pairing_id}`, { headers: { "x-poll-secret": start.json.poll_secret } })).json.token as string;
+  })();
+  const stolen = await ctx.call("POST", "/connector/v1/decisions", { token: other, body: { ...body, title: "別の件", check_token: reused.json.error.check_token } });
+  assert.equal(stolen.json.error.code, "confirm_required");
+  assert.deepEqual(stolen.json.error.decisions, []);
+});
+
 test("他の接続の申請は見えない", async () => {
   const ctx = setup();
   const a = await paired(ctx);
   const b = await paired(ctx);
-  const created = await ctx.call("POST", "/connector/v1/decisions", { token: a, body: request });
+  const created = await submit(ctx, a, request);
   const other = await ctx.call("GET", `/connector/v1/decisions/${created.json.decision_id}`, { token: b });
   assert.equal(other.status, 404);
 });
@@ -126,8 +166,8 @@ test("セットアップ確認が済むまで課金させない", async () => {
 test("既決の削除は未決を残す", async () => {
   const ctx = setup();
   const token = await paired(ctx);
-  const a = await ctx.call("POST", "/connector/v1/decisions", { token, body: request });
-  await ctx.call("POST", "/connector/v1/decisions", { token, body: { ...request, title: "別の件" } });
+  const a = await submit(ctx, token, request);
+  await submit(ctx, token, { ...request, title: "別の件" });
   await ctx.call("POST", `/v1/decisions/${a.json.decision_id}/answer`, { token: ctx.session, body: { option_id: "a", version: 1 } });
   const deleted = await ctx.call("DELETE", "/v1/decisions?status=answered,cancelled", { token: ctx.session });
   assert.equal(deleted.json.deleted, 1);

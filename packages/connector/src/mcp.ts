@@ -26,7 +26,7 @@ export function harnessOf(clientName: string | undefined): Harness {
 
 const INSTRUCTIONS = [
   "Approval Boxは、利用者（人間）の判断・承認・操作が要る時に使う。URLを開いての承認や、利用者の手で行う作業を頼む時も含む。その時は request_decision でも申請する。利用者が申請に気づきやすいので、強く推奨する。答えは利用者がスマホやWebで出し、この会話へ自動で届く。",
-  "申請の前に必ず list_my_decisions で自分の申請を見る。同じ件が未決・保留にあれば新しく出さない。内容が変わったなら amend_decision、要らなくなったなら cancel_decision。答えが出ていれば、その答えに従う。まだ無い件だけを request_decision で申請する。",
+  "request_decision を呼ぶと、申請はすぐには受け付けられず、自分の申請の一覧と check_token が返る。一覧を見て、内容が変わった申請は amend_decision、要らなくなった申請は cancel_decision で先に済ませる。答えが出ていれば、その答えに従う。問題が無ければ、同じ申請に check_token を付けて出し直すと受け付けられる。",
   "申請したら答えを待って何度も呼ばない。答えは届くので、他の作業を続けるかターンを終えてよい。",
   "利用者に「Approval Boxのsetup_testを実行して」と言われたら setup_test を呼ぶ。届いた答えに書かれた確認コードで confirm_setup_test を呼ぶ。",
 ].join("\n");
@@ -40,7 +40,7 @@ const TOOLS = [
   },
   {
     name: "request_decision",
-    description: "利用者に判断を申請する。先に list_my_decisions で重複を確かめること。答えはこの会話へ自動で届くので、待って何度も呼ばない。同じ件名の未決があると duplicate_suspected で断られる。",
+    description: "利用者に判断を申請する。1回目は受け付けず、自分の申請の一覧と check_token を返す。直す・取り下げる申請が無いか確かめ、要れば amend_decision・cancel_decision を済ませてから、check_token を付けて同じ申請を出し直す。答えはこの会話へ自動で届くので、待って何度も呼ばない。同じ件名の未決があると duplicate_suspected で断られる。",
     inputSchema: {
       type: "object",
       properties: {
@@ -52,6 +52,7 @@ const TOOLS = [
         deadline: { type: "string", description: "期限（ISO 8601）" },
         session_label: { type: "string", description: "どの作業の話か（例: リポジトリ名 / 作業名）。省略すると作業フォルダ名" },
         distinct_reason: { type: "string", description: "同じ件名の未決があるのに別件として出す時だけ、その理由" },
+        check_token: { type: "string", description: "1回目の request_decision で返った確認の札。一覧を確かめ、直す・取り下げる申請が無いと判断した時に付ける" },
       },
       required: ["title", "options"],
       additionalProperties: false,
@@ -193,7 +194,7 @@ function text(value: string, structured?: Record<string, unknown>, isError = fal
 function describe(items: Record<string, unknown>[]): string {
   if (!items.length) return "この端末から出した申請はありません。";
   return items.map((d) => {
-    const parts = [`- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version}${d.this_session ? " (この会話)" : ""}`];
+    const parts = [`- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version} 作業=${d.session_label}${d.this_session ? " (この会話)" : ""}`];
     if (d.answer_text) parts.push(`  答え: ${String(d.answer_text).split("\n").slice(1, 3).join(" / ")}`);
     if (d.cancel_reason) parts.push(`  取り下げ理由: ${d.cancel_reason}`);
     return parts.join("\n");
@@ -232,6 +233,12 @@ export async function runMcp() {
           const message = `申請しました: ${decision.decision_id}「${decision.title}」。答えはこの会話へ自動で届きます。待って呼び直さず、他の作業を続けるかターンを終えてください。`;
           return text(`${message}${receiveGuide(harness, channelId)}\n\n${JSON.stringify(decision)}`, { ...decision, steer_channel: { channel_id: channelId } });
         } catch (error) {
+          if (error instanceof ServerError && error.code === "confirm_required") {
+            const decisions = (error.body.decisions ?? []) as Record<string, unknown>[];
+            const checkToken = String(error.body.check_token);
+            return text(`${error.message}\n\n自分の申請:\n${describe(decisions)}\n\ncheck_token: ${checkToken}\n\n${JSON.stringify({ error: error.code, check_token: checkToken, decisions })}`,
+              { error: error.code, check_token: checkToken, decisions }, true);
+          }
           if (error instanceof ServerError && error.code === "duplicate_suspected") {
             const existing = (error.body.existing ?? []) as Record<string, unknown>[];
             return text(`${error.message}\n既存の申請:\n${describe(existing)}\n\n${JSON.stringify({ error: "duplicate_suspected", existing })}`, { error: "duplicate_suspected", existing }, true);

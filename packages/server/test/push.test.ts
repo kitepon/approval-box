@@ -21,7 +21,11 @@ test("申請が来たら件名で鳴らし、取り下げは音なし。無効�
     return token === "gone" ? { status: 410, reason: "Unregistered" } : { status: 200 };
   });
   const conn = accounts.createConnection(userId, "pc", "linux", ["claude-code"]);
-  const created = decisions.create({ id: conn.id, user_id: userId, label: "pc", os: "linux" }, { title: "デプロイしてよいか", context: "", options: [{ id: "a", label: "A" }, { id: "b", label: "B" }], urgency: "normal", session_label: "s", client: "claude-code" });
+  const me = { id: conn.id, user_id: userId, label: "pc", os: "linux" };
+  const input = { title: "デプロイしてよいか", context: "", options: [{ id: "a", label: "A" }, { id: "b", label: "B" }], urgency: "normal" as const, session_label: "s", client: "claude-code" };
+  let check_token = "";
+  try { decisions.create(me, input); } catch (error) { check_token = (error as { extra: { check_token: string } }).extra.check_token; }
+  const created = decisions.create(me, { ...input, check_token });
   await new Promise((r) => setTimeout(r, 20));
   const loud = sent.find((s) => s.token === "good")!;
   assert.equal(loud.env, "sandbox");
