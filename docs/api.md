@@ -1,4 +1,4 @@
-# Approval Box API（アプリ・Web版向け） v0.17
+# Approval Box API（アプリ・Web版向け） v0.18
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 
@@ -145,6 +145,10 @@ setup: {
 - check が変わるたびに `/events` に `setup.updated`、プッシュは音なしで `{ type: "setup.updated" }` を送る。
 - 購入の画面: `setup.verified=false` なら購入ボタンを出さず、セットアップの案内と check の一覧を出す。`true` でも `passed` でない check があれば、「Cursor はまだ確認できていない」のように並べて出す。
 - `/billing/*` は確認前なら409 `setup_not_verified`。
+- **例外: お金の動かない購入（サンドボックス）**（クオの裁定 2026-10-01）。App Reviewの審査とTestFlight、Xcodeでの購入はサンドボックスになり、審査の担当者はPCをつながないので接続テストを通せない。そこでサンドボックスでは確認を待たずに購入の画面を出し、サーバーも受け付ける。本物の購入（Production）は今までどおり確認が済むまで出さない・受け付けない。
+  - iOS: `AppTransaction.shared` の `environment` が `.sandbox` か `.xcode` なら、`setup.verified=false` でも購入ボタンを出す。
+  - サーバー: `/billing/appstore/verify` に送られた署名付きの取引（JWS）の `environment` が `Sandbox` なら、確認の関門を通す。判断は署名を確かめた取引の値だけで行い、アプリが申告した値は使わない。
+  - Android（Google Play）の試験用購入（ライセンステスター）も同じ扱いにする（購入情報の `purchaseType` が試験）。
 - 接続テストは課金の後もいつでも使える。「接続」画面にAIごとの状態（status・tested_at）と「テストする」を置く。押したら「AIに『Approval Boxのsetup_testを実行して』と言ってください」を出し、`setup.updated` で結果を待つ。アプリからAIを起こすAPIは無い（テストの始まりはAIの側）。
 - 契約後のテストで failed になっても、契約と `verified` は変わらない。直し方を出すだけ。
 
@@ -237,6 +241,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.18 2026-10-01 クオの裁定: サンドボックス（審査・TestFlight・Xcode）とPlayの試験用購入は、セットアップ確認を待たずに購入できる。本物の購入は今までどおり。
 - v0.17 2026-10-01 クオの裁定: ログイン用のURL・コードを廃止。ログインはAppleかGoogleだけ。結ぶ・外す操作を廃止（v0.16 の `logins`・`DELETE /me/logins` は取り消し、`login` のまま）。`/auth/link` はAndroidのAppleログインから戻る一度きりのコード専用（`code_verifier` 必須）。`/me/personal-link` 廃止。
 - v0.16 2026-10-01 クオの指摘「結べるようにしたらいい」: 設定からAppleとGoogleを1つずつ結べ、外せる（`DELETE /me/logins/{provider}`、締め出しになる時は409）。`/me.logins` を追加（`login` は互換）。
 - v0.15 2026-10-01 ベルの依頼で、AndroidのAppleログイン（Custom Tabs）の開始・復帰の取り決めを追加。`POST /auth/apple/web/start`、`/auth/apple/callback`、`approvalbox://auth/apple`、`/auth/link` の `code_verifier`（PKCE S256）。
