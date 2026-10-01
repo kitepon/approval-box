@@ -90,7 +90,10 @@ export class Notifier {
       ? { "apns-push-type": "alert", "apns-priority": "10" }
       : { "apns-push-type": "background", "apns-priority": "5" };
     await Promise.all(devices.map(async (device) => {
-      const result = await this.send(device.apns_env === "sandbox" ? "sandbox" : "production", device.apns_token, headers, payload);
+      const env = device.apns_env === "sandbox" ? "sandbox" : "production";
+      const result = await this.send(env, device.apns_token, headers, payload);
+      // tokenは書かない。届かない時に、Appleの返事を後から辿れるようにする
+      console.log(`approval-box-server: push ${headers["apns-push-type"]} ${id} v${version} device ${device.id.slice(0, 8)} ${env} → ${result.status}${result.reason ? ` ${result.reason}` : ""}`);
       if (result.status === 410 || (result.status === 400 && (result.reason === "BadDeviceToken" || result.reason === "DeviceTokenNotForTopic"))) {
         run(this.db, "delete from devices where id = ?", device.id);
       }
