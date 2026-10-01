@@ -1,3 +1,4 @@
+import { hash } from "./ids.ts";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -18,19 +19,6 @@ create table if not exists sessions (
   label text,
   created_at text not null,
   expires_at text not null
-);
-create table if not exists devices (
-  id text primary key,
-  user_id text not null references users(id) on delete cascade,
-  platform text not null,
-  push_key text not null,
-  apns_token text,
-  apns_env text,
-  fcm_token text,
-  web_push_subscription text,
-  created_at text not null,
-  updated_at text not null,
-  unique (user_id, push_key)
 );
 create table if not exists personal_links (
   user_id text primary key references users(id) on delete cascade,
@@ -146,15 +134,21 @@ create table if not exists setup_checks (
   detail text,
   unique (connection_id, client)
 );
+`;
+
+const DEVICES = `
 create table if not exists devices (
   id text primary key,
   user_id text not null references users(id) on delete cascade,
   platform text not null,
+  push_key text not null,
   apns_token text,
   apns_env text,
   fcm_token text,
   web_push_subscription text,
-  created_at text not null
+  created_at text not null,
+  updated_at text not null,
+  unique (user_id, push_key)
 );
 `;
 
@@ -165,7 +159,44 @@ export function openDb(file: string): Db {
   const db = new DatabaseSync(file);
   db.exec("pragma journal_mode = wal; pragma foreign_keys = on; pragma busy_timeout = 5000;");
   db.exec(schema);
+  migrate(db);
   return db;
+}
+
+/**
+ * 既にあるDBの形を新しい形へ移す。user_version が版。「無ければ作る」だけでは列の違う古い表が残るため、移す手順はここに足していく。
+ * 各手順は、新しいDBにも古いDBにも同じ結果になるように書く。
+ */
+const MIGRATIONS: ((db: Db) => void)[] = [
+  // 1: devices。最初の形（push_key・updated_at が無い）から作り直す。行は宛先ごとの鍵を付けて移す。
+  (db) => {
+    const columns = all<{ name: string }>(db, "select name from pragma_table_info('devices')").map((c) => c.name);
+    if (columns.includes("push_key")) return;
+    const rows = columns.length ? all<Record<string, string | null>>(db, "select * from devices") : [];
+    db.exec("drop table if exists devices");
+    db.exec(DEVICES);
+    for (const r of rows) {
+      const key = r.platform === "ios" ? r.apns_token : r.platform === "android" ? r.fcm_token : r.web_push_subscription;
+      if (!key) continue;
+      run(db, "insert or ignore into devices (id, user_id, platform, push_key, apns_token, apns_env, fcm_token, web_push_subscription, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        r.id!, r.user_id!, r.platform!, `${r.platform}:${hash(key)}`, r.apns_token ?? null, r.apns_env ?? null, r.fcm_token ?? null, r.web_push_subscription ?? null, r.created_at!, r.created_at!);
+    }
+  },
+];
+
+function migrate(db: Db) {
+  const version = (get<{ user_version: number }>(db, "pragma user_version")?.user_version) ?? 0;
+  for (let i = version; i < MIGRATIONS.length; i++) {
+    db.exec("begin immediate");
+    try {
+      MIGRATIONS[i]!(db);
+      db.exec(`pragma user_version = ${i + 1}`);
+      db.exec("commit");
+    } catch (error) {
+      db.exec("rollback");
+      throw error;
+    }
+  }
 }
 
 export function get<T>(db: Db, sql: string, ...params: SQLInputValue[]): T | undefined {
