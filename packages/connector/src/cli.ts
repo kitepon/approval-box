@@ -213,6 +213,7 @@ async function status() {
 
 async function doctor() {
   const problems: string[] = [];
+  const hints: string[] = [];
   const config = readConfig();
   if (!config?.token) problems.push("Approval Boxにつながっていません → npx approval-box setup");
   else {
@@ -228,7 +229,10 @@ async function doctor() {
     if (!r.mcp) problems.push(`${LABEL[target]}: MCPが登録されていません → npx approval-box setup --only ${target}`);
     if (r.hooks === false) problems.push(`${LABEL[target]}: hookが登録されていません → npx approval-box setup --only ${target}`);
     if (r.entry && !existsSync(r.entry)) problems.push(`${LABEL[target]}: 登録先のファイルがありません（${r.entry}）。node やApproval Boxを入れ直した時に起きます → npx approval-box setup`);
+    // 足さないと選んだ人もいるので、問題ではなく案内にする
+    if (r.mcp && r.instructions === false) hints.push(`${LABEL[target]}: 全体の指示にApproval Boxの一節がありません。AIが申請を出さない時は → npx approval-box setup --only ${target}`);
   }
+  for (const hint of hints) out(`・${hint}`);
   if (!problems.length) out("問題は見つかりませんでした。届かない時は、AIに「Approval Boxのsetup_testを実行して」と言って、どこで止まるかを確かめてください。");
   else for (const problem of problems) out(`✗ ${problem}`);
   if (problems.length) process.exitCode = 1;
