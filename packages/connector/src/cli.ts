@@ -173,9 +173,9 @@ async function status() {
   if (!config?.token) { out("未接続です。kessaibako setup を実行してください。"); return; }
   out(`サーバー: ${config.server}`);
   try {
-    const info = await new Api(config).call<{ label: string; clients: string[]; me: { setup: { verified: boolean; checks: Check[] }; plan: string } }>("GET", "/connection");
+    const info = await new Api(config).call<{ connection_id: string; label: string; clients: string[]; me: { setup: { verified: boolean; checks: Check[] }; plan: string } }>("GET", "/connection");
     out(`端末: ${info.label}  契約: ${info.me.plan}  セットアップ確認: ${info.me.setup.verified ? "済み" : "まだ"}`);
-    for (const check of info.me.setup.checks) out(`  ${check.client}: ${STATUS_LABEL[check.status] ?? check.status}${check.tested_at ? `（${check.tested_at}）` : ""}`);
+    for (const check of info.me.setup.checks.filter((c) => c.connection_id === info.connection_id)) out(`  ${check.client}: ${STATUS_LABEL[check.status] ?? check.status}${check.tested_at ? `（${check.tested_at}）` : ""}`);
   } catch (error) { out(`サーバー: ${(error as Error).message}`); }
   for (const target of HARNESSES) {
     if (!detect(target)) continue;

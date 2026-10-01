@@ -16,7 +16,7 @@ const claudeDir = () => process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claud
 const claudeJson = () => (process.env.CLAUDE_CONFIG_DIR ? join(process.env.CLAUDE_CONFIG_DIR, ".claude.json") : join(homedir(), ".claude.json"));
 const cursorDir = () => process.env.CURSOR_HOME ?? join(homedir(), ".cursor");
 export const codexHome = () => process.env.CODEX_HOME ?? join(homedir(), ".codex");
-const grokDir = () => join(homedir(), ".grok");
+const grokDir = () => process.env.GROK_HOME ?? join(homedir(), ".grok");
 
 /** 書き換えるファイル。setupの画面で利用者に見せる。 */
 export function filesOf(target: Target): string[] {
