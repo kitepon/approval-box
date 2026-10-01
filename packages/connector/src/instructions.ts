@@ -3,9 +3,10 @@ import { dirname } from "node:path";
 
 /**
  * AIが毎回読む全体の指示へ足す一節。MCPの説明文だけでは、AIはチャットで聞く癖を優先する。
- * 禁止の形にしない（クオの裁定）。チャットで聞くのは止めず、Approval Boxでも申請するよう勧める。
+ * 禁止の形にしない（クオの裁定）。「判断」だけだとAIはURLを開いての承認などを外すので、承認・操作も書く（同）。
+ * チャットで聞くのは止めず、Approval Boxでも申請するよう勧める。
  */
-export const INSTRUCTION_TEXT = "ユーザーの判断が必要なときは、決裁システムである Approval Box の request_decision でも申請する。これを使えばユーザーが申請に気づきやすいので、強く推奨する。";
+export const INSTRUCTION_TEXT = "ユーザーの判断・承認・操作が必要なときは、決裁システムである Approval Box の request_decision でも申請する。これを使えばユーザーが申請に気づきやすいので、強く推奨する。";
 
 const START = "<!-- approval-box:start -->";
 const END = "<!-- approval-box:end -->";
