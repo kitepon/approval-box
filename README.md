@@ -28,26 +28,15 @@ npx -y approval-box@latest setup
 
 ## 自分でサーバーを立てる
 
-Dockerで立てる場合（Web版も入っています）:
+ログインは、AppleかGoogleのどちらかが要ります（ログイン用のURLやパスワードはありません）。
+
+- Apple: Apple Developerで Services ID を作り、ドメインと Return URL（`https://<あなたのURL>/auth/apple/callback`）を登録します。`APPLE_WEB_SERVICES_ID` にそのIDを入れます。
+- Google: Google Cloudで「ウェブ アプリケーション」のOAuthクライアントを作り、承認済みのJavaScript生成元にあなたのURLを入れます。`GOOGLE_WEB_CLIENT_ID` にそのIDを入れます。
 
 ```sh
 git clone https://github.com/kitepon/approval-box && cd approval-box
-PUBLIC_URL=https://Approval Boxを置くURL docker compose up -d --build
-docker compose exec server node server/dist/main.js admin login-link new   # 一度だけ使えるログインのリンク
-```
-
-Nodeで直接動かす場合:
-
-```sh
-npm install && npm run build
-PUBLIC_URL=https://Approval Boxを置くURL node packages/server/dist/main.js
-node packages/server/dist/main.js admin login-link new
-```
-
-ログインした後は、Web版の「設定」→「ログイン用のURL」で、ブックマークできる自分専用のURLを作れます。PCは次の1行でつなぎます。
-
-```sh
-npx -y approval-box@latest setup --server https://Approval Boxを置くURL
+PUBLIC_URL=https://<あなたのURL> APPLE_WEB_SERVICES_ID=<Services ID> docker compose up -d --build
+npx -y approval-box@latest setup --server https://<あなたのURL>
 ```
 
 自分で立てたサーバーは無料で、課金の仕組みは止まっています（`BILLING=off`）。iPhone・Androidアプリは公式サーバー専用です。自分のサーバーではWeb版をホーム画面に追加して使ってください。

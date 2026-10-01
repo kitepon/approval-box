@@ -49,30 +49,43 @@ export class Accounts {
     return row.user_id;
   }
 
-  /** 一度だけ使えるログインのリンク。Apple・Googleのログインが無いサーバーで、管理者が利用者へ渡す。コードはURLの#の後ろに置き、サーバーのログに残さない。 */
-  createLoginLink(userId: string, label: string, publicUrl: string, codeChallenge?: string): { url: string; code: string; expires_at: string } {
-    if (!get(this.db, "select 1 from users where id = ?", userId)) throw new ApiError("not_found", "その利用者はいません。");
+  // ---- ログインはAppleかGoogleだけ（クオの裁定）。ログイン用のURL・コードは無い ----
+  // 例外は、ブラウザで始めるAppleのログイン（AndroidのCustom Tabs）からアプリへ戻す一度きりのコード。
+  // 始めたアプリの code_verifier（PKCE S256）と合う時だけ使える。利用者が手で入れる場所は無い。
+
+  createAppCode(userId: string, codeChallenge: string): string {
     const code = secret("kll");
     const expires = new Date(Date.now() + LOGIN_LINK_MINUTES * 60_000).toISOString();
-    run(this.db, "insert into login_links (code_hash, user_id, label, created_at, expires_at, code_challenge) values (?, ?, ?, ?, ?, ?)", hash(code), userId, label, now(), expires, codeChallenge ?? null);
-    return { url: `${publicUrl}/login#code=${code}`, code, expires_at: expires };
+    run(this.db, "insert into login_links (code_hash, user_id, label, created_at, expires_at, code_challenge) values (?, ?, 'apple-web', ?, ?, ?)", hash(code), userId, now(), expires, codeChallenge);
+    return code;
+  }
+
+  redeemAppCode(code: string, codeVerifier: string): { session: string; expires_at: string } {
+    return tx(this.db, () => {
+      const row = get<{ user_id: string; expires_at: string; used_at: string | null; code_challenge: string | null }>(this.db, "select user_id, expires_at, used_at, code_challenge from login_links where code_hash = ?", hash(code));
+      const invalid = new ApiError("unauthorized", "ログインの手続きの期限が切れました。最初からやり直してください。");
+      if (!row || row.used_at || row.expires_at < now() || !row.code_challenge) throw invalid;
+      if (createHash("sha256").update(codeVerifier).digest("base64url") !== row.code_challenge) throw invalid;
+      run(this.db, "update login_links set used_at = ? where code_hash = ?", now(), hash(code));
+      return this.issueSession(row.user_id, "apple");
+    });
   }
 
   // ---- ブラウザで始めるAppleのログイン（AndroidのCustom Tabs）。state と nonce と、アプリの code_challenge を覚えておく ----
 
-  startAuthFlow(provider: "apple", currentUserId: string | undefined, codeChallenge: string) {
+  startAuthFlow(provider: "apple", codeChallenge: string) {
     const state = secret("kst");
     const nonce = secret("kno");
     const expires = new Date(Date.now() + LOGIN_LINK_MINUTES * 60_000).toISOString();
-    run(this.db, "insert into auth_flows (state, provider, nonce, link_user_id, code_challenge, created_at, expires_at) values (?, ?, ?, ?, ?, ?, ?)",
-      state, provider, nonce, currentUserId ?? null, codeChallenge, now(), expires);
+    run(this.db, "insert into auth_flows (state, provider, nonce, code_challenge, created_at, expires_at) values (?, ?, ?, ?, ?, ?)",
+      state, provider, nonce, codeChallenge, now(), expires);
     run(this.db, "delete from auth_flows where expires_at < ?", new Date(Date.now() - 86400_000).toISOString());
     return { state, nonce, expires_at: expires };
   }
 
   takeAuthFlow(state: string) {
     return tx(this.db, () => {
-      const row = get<{ provider: string; nonce: string; link_user_id: string | null; code_challenge: string; expires_at: string; used_at: string | null }>(this.db, "select * from auth_flows where state = ?", state);
+      const row = get<{ provider: string; nonce: string; code_challenge: string; expires_at: string; used_at: string | null }>(this.db, "select * from auth_flows where state = ?", state);
       if (!row || row.used_at || row.expires_at < now()) throw new ApiError("unauthorized", "ログインの手続きの期限が切れました。最初からやり直してください。");
       run(this.db, "update auth_flows set used_at = ? where state = ?", now(), state);
       return row;
@@ -80,75 +93,15 @@ export class Accounts {
   }
 
   /**
-   * 外部のログイン（Apple・Google）で入る。結ばれたアカウントがあればそこへ、無ければ作る。
-   * ログイン済み（currentUserId あり）で呼ばれたら、そのアカウントにこのIDを結ぶ（既存アカウントへ「Appleでログインを追加」）。
+   * AppleかGoogleで入る。そのIDのアカウントがあればそこへ、無ければ作る。
+   * 同じIDならどの画面から入っても同じアカウント。違うIDなら別のアカウント（結ぶ・まとめる操作は無い。クオの裁定）。
    */
-  signInWithIdentity(provider: "apple" | "google", subject: string, email: string | undefined, currentUserId: string | undefined) {
+  signInWithIdentity(provider: "apple" | "google", subject: string, email: string | undefined) {
     return tx(this.db, () => {
       const linked = get<{ user_id: string }>(this.db, "select user_id from identities where provider = ? and subject = ?", provider, subject);
-      const name = provider === "apple" ? "Apple ID" : "Googleアカウント";
-      if (linked && currentUserId && linked.user_id !== currentUserId) {
-        throw new ApiError("conflict", `この${name}は、別のApproval Boxのアカウントで使われています。`);
-      }
-      // ログイン済みなら、そのアカウントへ結ぶ（設定から。AppleとGoogleを1つずつ）。同じ種類のIDが既にあれば、先に外してもらう。
-      if (!linked && currentUserId && get(this.db, "select 1 from identities where user_id = ? and provider = ?", currentUserId, provider)) {
-        throw new ApiError("conflict", `このアカウントには別の${name}が結ばれています。替える時は、先に外してください。`);
-      }
-      const userId = linked?.user_id ?? currentUserId ?? this.createUser();
+      const userId = linked?.user_id ?? this.createUser();
       if (!linked) run(this.db, "insert into identities (provider, subject, user_id, email, created_at) values (?, ?, ?, ?, ?)", provider, subject, userId, email ?? null, now());
       return { ...this.issueSession(userId, provider), user: { id: userId } };
-    });
-  }
-
-  /** 結んだログインのIDを外す。ログインの手段（ほかのID・固定のログインURL）が1つも残らない時は外さない。 */
-  unlinkIdentity(userId: string, provider: "apple" | "google") {
-    return tx(this.db, () => {
-      if (!get(this.db, "select 1 from identities where user_id = ? and provider = ?", userId, provider)) throw new ApiError("not_found", "そのログインは結ばれていません。");
-      const others = get<{ n: number }>(this.db, "select count(*) as n from identities where user_id = ? and provider <> ?", userId, provider)!.n;
-      const personal = get(this.db, "select 1 from personal_links where user_id = ?", userId);
-      if (!others && !personal) throw new ApiError("conflict", "これを外すとログインできなくなります。先にほかのログインを結ぶか、ログイン用のURLを作ってください。");
-      run(this.db, "delete from identities where user_id = ? and provider = ?", userId, provider);
-      return { ok: true };
-    });
-  }
-
-  /**
-   * 利用者ごとに固定のログインURL（何度でも使える。ブックマーク用）。作り直すと前のURLは使えなくなる。
-   * URLを知っていれば誰でもログインできるので、本人だけが持つ。値は保存しない（作った時に一度だけ返す）。
-   */
-  createPersonalLink(userId: string, publicUrl: string): { url: string; created_at: string } {
-    const key = secret("kpl");
-    const created = now();
-    run(this.db, "insert into personal_links (user_id, key_hash, created_at) values (?, ?, ?) on conflict(user_id) do update set key_hash = excluded.key_hash, created_at = excluded.created_at, last_used_at = null",
-      userId, hash(key), created);
-    return { url: `${publicUrl}/login#code=${key}`, created_at: created };
-  }
-
-  personalLink(userId: string) {
-    const row = get<{ created_at: string; last_used_at: string | null }>(this.db, "select created_at, last_used_at from personal_links where user_id = ?", userId);
-    return row ? { exists: true, created_at: row.created_at, last_used_at: row.last_used_at } : { exists: false };
-  }
-
-  revokePersonalLink(userId: string) {
-    run(this.db, "delete from personal_links where user_id = ?", userId);
-  }
-
-  redeemLoginLink(code: string, codeVerifier?: string): { session: string; expires_at: string } {
-    if (code.startsWith("kpl_")) {
-      const row = get<{ user_id: string }>(this.db, "select user_id from personal_links where key_hash = ?", hash(code));
-      if (!row) throw new ApiError("unauthorized", "このログインのURLは使えません。作り直された可能性があります。");
-      run(this.db, "update personal_links set last_used_at = ? where user_id = ?", now(), row.user_id);
-      return this.issueSession(row.user_id, "personal-link");
-    }
-    return tx(this.db, () => {
-      const row = get<{ user_id: string; label: string | null; expires_at: string; used_at: string | null; code_challenge: string | null }>(this.db, "select user_id, label, expires_at, used_at, code_challenge from login_links where code_hash = ?", hash(code));
-      if (!row || row.used_at || row.expires_at < now()) throw new ApiError("unauthorized", "このログインのリンクは使えません。期限切れか、もう使われています。");
-      // アプリへ返したコードは、始めたアプリが持つ code_verifier と合う時だけ使える（横取り対策。PKCEのS256と同じ）。
-      if (row.code_challenge && (!codeVerifier || createHash("sha256").update(codeVerifier).digest("base64url") !== row.code_challenge)) {
-        throw new ApiError("unauthorized", "このログインのリンクは使えません。期限切れか、もう使われています。");
-      }
-      run(this.db, "update login_links set used_at = ? where code_hash = ?", now(), hash(code));
-      return this.issueSession(row.user_id, row.label ?? "login-link");
     });
   }
 
@@ -178,11 +131,10 @@ export class Accounts {
     }
     // セルフホスト（課金なし）は全員を契約中として扱う。
     const plan = this.billing === "off" ? "active" : user.plan;
-    const logins = all<{ provider: string }>(this.db, "select provider from identities where user_id = ? order by created_at", userId).map((r) => r.provider);
+    const login = get<{ provider: string }>(this.db, "select provider from identities where user_id = ? order by created_at", userId);
     return {
       user_id: user.id,
-      logins,
-      login: logins[0] ?? null, // v0.14 の互換。新しいアプリは logins を見る
+      login: login?.provider ?? null,
       setup: { verified: !!user.setup_verified_at, ...(user.setup_verified_at ? { verified_at: user.setup_verified_at } : {}), checks },
       plan,
       ...(user.plan_expires_at && this.billing !== "off" ? { expires_at: user.plan_expires_at } : {}),

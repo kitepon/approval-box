@@ -1,4 +1,4 @@
-# Approval Box API（アプリ・Web版向け） v0.16
+# Approval Box API（アプリ・Web版向け） v0.17
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 
@@ -16,30 +16,24 @@ v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ�
   - iOS・Web: `POST /auth/apple` `{ identity_token }`
   - Android・Web: `POST /auth/google` `{ id_token }`（Sign in with Google）
   - 応答 `{ session, expires_at, user: { id } }`。
-  - ログインは「Googleでログイン」と「Appleでログイン」の2本（クオの裁定）。Web版・iPhone・Androidのどれにも並べる。ログイン画面から、どのアカウントにも結ばれていないIDで入ると、新しいアカウントになる（GoogleとAppleを別々に使えば別のアカウント）。
-  - 設定からは、ログイン済みのアカウントへ Apple と Google を1つずつ結べる（v0.16、クオの指摘）。結んだあとは、どちらで入っても同じアカウント。外すのは `DELETE /me/logins/{apple|google}`。ログインの手段（ほかのID・固定のログインURL）が1つも残らない時は 409 `conflict`。替える時は外してから結ぶ。アカウントの統合は無い。
-  - `POST /auth/apple` `{ identity_token, nonce? }`: Appleの公開鍵で確かめる（aud はアプリの Bundle ID `dev.kitepon.approvalbox`、Web版は Services ID）。
+  - ログインは「Googleでログイン」と「Appleでログイン」だけ（クオの裁定）。Web版・iPhone・Androidのどれにも並べる。ログイン用のURL・コード・パスワードは無い。
+  - 同じIDなら、どの画面から入っても同じアカウント。違うIDなら別のアカウント（GoogleとAppleを別々に使えば別アカウント）。IDを結ぶ・外す・アカウントをまとめる操作は無い。Bearerを付けて呼んでも結ばない。
+  - `POST /auth/apple` `{ identity_token, nonce? }`: Appleの公開鍵で確かめる（aud はアプリの Bundle ID `dev.kitepon.approvalbox`、Web版は Services ID `dev.kitepon.approvalbox.web`）。
   - `POST /auth/google` `{ id_token, nonce? }`: Googleの公開鍵で確かめる（aud は Web・iOS・Android の OAuthクライアントID）。
   - nonce は送った時だけ照合する（生の値・SHA-256のどちらでもよい）。初めてのIDなら新しいアカウントを作る。
-  - **ログイン済みのsession（Bearer）付きで** `/auth/apple`・`/auth/google` を呼ぶと、そのアカウントへそのIDを結ぶ。そのIDが別のアカウントで使われていれば 409 `conflict`。同じ種類のIDが既に結ばれていれば 409 `conflict`（先に外す）。
-  - `/me` の `logins` は結ばれているログイン `("apple" | "google")[]`（空ならログイン用のURLだけで使っている）。`login` は v0.14 の互換（`logins` の最初、無ければ null）。設定には、結ばれているものに「外す」、結ばれていないものに「結ぶ」を出す。
+  - `GET /auth/config`（Bearer不要）→ `{ google_client_id?, apple_services_id? }`。Web版のボタン用。無いものはボタンを出さない。
+  - `/me` の `login` は `"apple" | "google" | null`（null は廃止した入口で作った古いアカウント）。
   - サーバーが受け先を設定していなければ 400 `validation_failed`（自分で立てたサーバー）。
   - **ブラウザで始めるAppleのログイン（AndroidのCustom Tabs）**。BearerもsessionもURLに載せない。
     1. アプリが `code_verifier`（43〜128文字のランダムなbase64url）を作り、`code_challenge = base64url(SHA-256(code_verifier))` を求める。
-    2. `POST /auth/apple/web/start` `{ code_challenge, code_challenge_method: "S256" }` → `{ authorization_url, state, expires_at }`（10分）。IDの無い既存アカウントへ結ぶ時（最初の1回）だけBearerを付ける。
+    2. `POST /auth/apple/web/start` `{ code_challenge, code_challenge_method: "S256" }` → `{ authorization_url, state, expires_at }`（10分）。
     3. アプリは `authorization_url` をCustom Tabsで開き、`state` を覚えておく。
-    4. Appleは結果を `https://<host>/auth/apple/callback` へform_postする。サーバーはid_token（aud はServices ID、nonce はサーバーが入れた値）を確かめ、`approvalbox://auth/apple?code=kll_…&state=…` へ303で戻す。失敗は `approvalbox://auth/apple?error=<code>&state=…`。`<code>` は `cancelled`（利用者が取り消した）・`apple_error`・`unauthorized`（期限切れ・照合失敗）・`conflict`（409と同じ）。
-    5. アプリは戻った `state` が覚えたものと同じか確かめる。そのうえで `POST /auth/link` `{ code, code_verifier }` で session に替える。この code は、始めたアプリの `code_verifier` と合う時だけ、一度だけ使える（15分）。
+    4. Appleは結果を `https://<host>/auth/apple/callback` へform_postする。サーバーはid_token（aud はServices ID、nonce はサーバーが入れた値）を確かめ、`approvalbox://auth/apple?code=kll_…&state=…` へ303で戻す。失敗は `approvalbox://auth/apple?error=<code>&state=…`。`<code>` は `cancelled`（利用者が取り消した）・`apple_error`・`unauthorized`（期限切れ・照合失敗）。
+    5. アプリは戻った `state` が覚えたものと同じか確かめる。そのうえで `POST /auth/link` `{ code, code_verifier }`（両方必須）で session に替える。この code は、始めたアプリの `code_verifier` と合う時だけ、一度だけ使える（15分）。利用者が手で入れるものではない。
     - Androidの戻り先 `approvalbox://auth/apple` は、アプリのintent filterで受ける。
 - 検証期間は、ラプラスが発行する開発用sessionをそのまま使ってよい（ログイン画面は後から差し込める作りにする）。
 - 401 `unauthorized` を受けたらsessionを捨ててログインへ戻す。
 - `POST /auth/logout`（Bearer必須）→ `{ ok: true }`。そのsessionを失効させる。端末の通知を止めるなら、先に `DELETE /devices/{id}`。
-- `POST /auth/link` `{ code, code_verifier? }`（Bearer不要。`code_verifier` はブラウザで始めたログインのコードの時だけ要る）→ `{ session, expires_at }`。コードでのログイン。codeは2種類:
-  - `kll_…` 一度だけ使えるログインのコード。15分で切れる。サーバーの管理者が `admin login-link <user_id|new>` で出す。
-  - `kpl_…` 利用者ごとに固定のログインのコード。何度でも使える。Web版の「設定 → ログイン用のURL」（`POST /me/personal-link`）か `admin personal-link <user_id>` で出す。作り直すと前のコードは 401。
-  - どちらも `https://<host>/login#code=<code>` のURLの形で渡されることが多い。アプリの入力欄は、URLを丸ごと貼っても、コードだけでも受ける（`#code=` の後ろを取り出す。前後の空白は捨てる）。401 `unauthorized` は「使えないコード」として出す。
-  - App Reviewのデモアカウントには `kpl_` のコードを使う。
-- 利用者ごとに固定のログインURL（Bearer必須）: `GET /me/personal-link` → `{ exists, created_at?, last_used_at? }`（URLは返さない）、`POST /me/personal-link` → `{ url, created_at }`（URLは作った時に一度だけ返す。前のURLは使えなくなる）、`DELETE /me/personal-link` → `{ ok: true }`。
 
 ## 決裁
 
@@ -182,7 +176,7 @@ setup: {
 
 | メソッド | パス | 内容 |
 |---|---|---|
-| GET | `/me` | `{ user_id (UUID、小文字), logins: ("apple" \| "google")[], login (互換), setup, plan: "trial" \| "active" \| "expired", expires_at?, store?: "app_store" \| "google_play" \| "web" }` |
+| GET | `/me` | `{ user_id (UUID、小文字), login: "apple" \| "google" \| null, setup, plan: "trial" \| "active" \| "expired", expires_at?, store?: "app_store" \| "google_play" \| "web" }` |
 | DELETE | `/me` | アカウントと全データの削除（App Store・Google Playの審査で必須） |
 | DELETE | `/decisions?status=answered,cancelled` | 設定の「データ削除」。既決（answered・cancelled）だけを消す → `{ deleted: int }`。pending・heldは消さない（AIが答えを待っているため）。アカウント・接続・端末は残る |
 | GET | `/me/settings` | `{ retention_days: 7 \| 30 \| 90 \| 365 }`（既定30。既決をこの日数で自動削除） |
@@ -243,6 +237,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.17 2026-10-01 クオの裁定: ログイン用のURL・コードを廃止。ログインはAppleかGoogleだけ。結ぶ・外す操作を廃止（v0.16 の `logins`・`DELETE /me/logins` は取り消し、`login` のまま）。`/auth/link` はAndroidのAppleログインから戻る一度きりのコード専用（`code_verifier` 必須）。`/me/personal-link` 廃止。
 - v0.16 2026-10-01 クオの指摘「結べるようにしたらいい」: 設定からAppleとGoogleを1つずつ結べ、外せる（`DELETE /me/logins/{provider}`、締め出しになる時は409）。`/me.logins` を追加（`login` は互換）。
 - v0.15 2026-10-01 ベルの依頼で、AndroidのAppleログイン（Custom Tabs）の開始・復帰の取り決めを追加。`POST /auth/apple/web/start`、`/auth/apple/callback`、`approvalbox://auth/apple`、`/auth/link` の `code_verifier`（PKCE S256）。
 - v0.14 2026-10-01 クオの裁定: ログインはGoogleとAppleの2本、1アカウント1ID、両方使えば別アカウント。`POST /auth/google` を実装。Bearer付きで結べるのはIDの無い既存アカウントだけ（最初の1回）。`/me` に `login`。

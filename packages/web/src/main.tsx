@@ -1,6 +1,6 @@
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { api, ApiError, getSession, setSession, setUnauthorizedHandler, subscribeEvents } from "./api";
+import { getSession, setSession, setUnauthorizedHandler, subscribeEvents } from "./api";
 import { linkProps, navigate, useLocation } from "./router";
 import { bump, loadOpen, useResource } from "./store";
 import { Connections, Pair } from "./pages/Connections";
@@ -8,61 +8,19 @@ import { DecisionView } from "./pages/DecisionView";
 import { History } from "./pages/History";
 import { Inbox } from "./pages/Inbox";
 import { Settings } from "./pages/Settings";
-import { IdLogin } from "./idlogin";
+import { IdLogin, loginConfig } from "./idlogin";
 import "./style.css";
 
 function Login({ onLogin }: { onLogin: () => void }) {
-  const [code, setCode] = useState("");
-  const [other, setOther] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  async function submitCode(e: Event) {
-    e.preventDefault();
-    const raw = code.trim();
-    if (!raw) return;
-    if (raw.startsWith("kss_")) { setSession(raw); onLogin(); return; } // 管理者が出したsessionキー（自分で立てたサーバー）
-    const value = raw.includes("#code=") ? raw.slice(raw.indexOf("#code=") + 6).trim() : raw;
-    try { const r = await api<{ session: string }>("POST", "/auth/link", { code: value }, { idempotent: false }); setSession(r.session); onLogin(); }
-    catch (err) { setError(err instanceof ApiError ? err.message : "ログインできませんでした。"); }
-  }
+  const [hasLogin, setHasLogin] = useState<boolean | null>(null);
+  useEffect(() => { loginConfig().then((c) => setHasLogin(!!(c.google_client_id || c.apple_services_id))); }, []);
   return (
     <section class="login">
       <h1>Approval Box</h1>
       <p>AIが判断を求める時に、ここへ集まります。答えはその場でAIの会話へ届きます。</p>
       <IdLogin onDone={(r) => { setSession(r.session); onLogin(); }} />
-      <p class="muted">GoogleとAppleは別のアカウントになります。いつも同じ方でログインしてください。</p>
-      {!other && <p><button class="link" onClick={() => setOther(true)}>ほかの方法（ログイン用のURL・コード）</button></p>}
-      {other && (
-        <form class="panel" onSubmit={submitCode}>
-          <label class="field">
-            <span>ログイン用のURLかコード</span>
-            <input value={code} onInput={(e) => setCode((e.target as HTMLInputElement).value)} placeholder="https://…/login#code=…" autocomplete="off" />
-          </label>
-          <button class="primary" type="submit">ログイン</button>
-          {error && <p class="error">{error}</p>}
-          <p class="muted">自分で立てたサーバーでは <code>approval-box-server admin login-link new</code> でログインのリンクを出します。</p>
-        </form>
-      )}
-    </section>
-  );
-}
-
-function LinkLogin({ code, onLogin }: { code: string; onLogin: () => void }) {
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    history.replaceState(null, "", "/login");
-    const had = getSession();
-    api<{ session: string }>("POST", "/auth/link", { code }, { idempotent: false })
-      .then((r) => { setSession(r.session); navigate("/"); onLogin(); })
-      .catch((e) => {
-        // 使い終わったリンクを開いても、このブラウザでログイン済みならそのまま受信へ進む。
-        if (had) { setSession(had); navigate("/"); onLogin(); return; }
-        setError(e instanceof ApiError ? e.message : "ログインできませんでした。");
-      });
-  }, [code]);
-  return (
-    <section class="login">
-      <h1>Approval Box</h1>
-      <p>{error ?? "ログインしています…"}</p>
+      {hasLogin && <p class="muted">GoogleとAppleは別のアカウントになります。いつも同じ方でログインしてください。</p>}
+      {hasLogin === false && <p class="muted">このサーバーにはログインの設定がありません。管理者は、AppleかGoogleのログインを設定してください（READMEの「自分でサーバーを立てる」）。</p>}
     </section>
   );
 }
@@ -98,8 +56,7 @@ function App() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
-  const linkCode = path === "/login" ? new URLSearchParams(location.hash.slice(1)).get("code") : null;
-  if (linkCode) return <main class="shell"><LinkLogin code={linkCode} onLogin={() => setSessionState(getSession())} /></main>;
+  if (path === "/login") { history.replaceState(null, "", "/"); } // 廃止したログインのURL（ブックマーク）で来た時
   if (!session) return <main class="shell"><Login onLogin={() => setSessionState(getSession())} /></main>;
 
   let page;

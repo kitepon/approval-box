@@ -3,7 +3,6 @@ import { api, setSession } from "../api";
 import { navigate } from "../router";
 import { bump, loadMe, useResource } from "../store";
 import { CHECK_LABEL, clientLabel } from "../format";
-import { IdLogin, loginConfig } from "../idlogin";
 
 const PLAN_LABEL: Record<string, string> = { trial: "無料体験", active: "契約中", expired: "期限切れ" };
 const STORE_LABEL: Record<string, string> = { app_store: "App Storeで契約中", google_play: "Google Playで契約中", web: "Webで契約中" };
@@ -27,24 +26,6 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
     if (prompt("確認のため「削除」と入力してください") !== "削除") return;
     try { await api("DELETE", "/me"); setSession(null); onLogout(); } catch (e) { alert((e as Error).message); }
   }
-  const idConfig = useResource(loginConfig);
-  const personal = useResource(() => api<{ exists: boolean; created_at?: string; last_used_at?: string | null }>("GET", "/me/personal-link"));
-  const [personalUrl, setPersonalUrl] = useState<string | null>(null);
-  async function makePersonal() {
-    if (personal.data?.exists && !confirm("作り直すと、前のURLでは入れなくなります。よろしいですか？")) return;
-    try { const r = await api<{ url: string }>("POST", "/me/personal-link", undefined, { idempotent: false }); setPersonalUrl(r.url); bump(); }
-    catch (e) { alert((e as Error).message); }
-  }
-  async function revokePersonal() {
-    if (!confirm("ログイン用のURLを無効にします。よろしいですか？")) return;
-    try { await api("DELETE", "/me/personal-link"); setPersonalUrl(null); bump(); } catch (e) { alert((e as Error).message); }
-  }
-
-  async function unlink(provider: "apple" | "google") {
-    if (!confirm(`${provider === "google" ? "Google" : "Apple"}でのログインを外します。よろしいですか？`)) return;
-    try { await api("DELETE", `/me/logins/${provider}`); bump(); } catch (e) { alert((e as Error).message); }
-  }
-
   async function logout() {
     try { await api("POST", "/auth/logout"); } catch { /* 期限切れでも続ける */ }
     setSession(null);
@@ -55,34 +36,7 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   return (
     <section>
       <h1>設定</h1>
-      {m && (
-        <div class="panel">
-          <h2>ログインの方法</h2>
-          {m.logins.length === 0 && <p class="muted">いまは、ログイン用のURLで使っています。</p>}
-          {m.logins.map((p) => (
-            <p key={p}>{p === "google" ? "Google" : "Apple"}でログインできます。 <button onClick={() => unlink(p)}>外す</button></p>
-          ))}
-          {(idConfig.data?.google_client_id && !m.logins.includes("google")) || (idConfig.data?.apple_services_id && !m.logins.includes("apple")) ? (
-            <>
-              <p class="muted">結ぶと、次からそれでもこのアカウントに入れます（アプリでも同じアカウントになります）。結んでいないIDでログイン画面から入ると、別のアカウントになります。</p>
-              <IdLogin skip={m.logins} onDone={(r) => { setSession(r.session); bump(); }} />
-            </>
-          ) : null}
-        </div>
-      )}
-      <div class="panel">
-        <h2>ログイン用のURL</h2>
-        <p class="muted">ほかのブラウザやスマホで開くと、そのままログインできるあなた専用のURLです。ブックマークしておけば何度でも使えます。URLを知っている人は誰でもログインできるので、人に見せないでください。</p>
-        {personalUrl && (
-          <p><code class="copyable">{personalUrl}</code> <button onClick={() => navigator.clipboard?.writeText(personalUrl)}>コピー</button></p>
-        )}
-        {personalUrl && <p class="muted">このURLはいま一度だけ表示しています。ブックマークかコピーをしてください。</p>}
-        {!personalUrl && personal.data?.exists && <p class="muted">作成済み{personal.data.last_used_at ? `（最後に使った日時 ${new Date(personal.data.last_used_at).toLocaleString()}）` : ""}。URLを忘れた時は作り直してください。</p>}
-        <p>
-          <button class="primary" onClick={makePersonal}>{personal.data?.exists ? "作り直す" : "URLを作る"}</button>{" "}
-          {personal.data?.exists && <button onClick={revokePersonal}>無効にする</button>}
-        </p>
-      </div>
+      {m && <div class="panel"><h2>ログイン</h2><p>{m.login === "google" ? "Googleでログインしています。" : m.login === "apple" ? "Appleでログインしています。" : "AppleでもGoogleでもないログインで使っています（廃止した入口）。"}</p></div>}
       {m && (
         <div class="panel">
           <h2>契約</h2>

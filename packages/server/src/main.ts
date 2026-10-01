@@ -26,19 +26,11 @@ const [command, ...args] = process.argv.slice(2);
 
 if (command === "admin") {
   const [sub, value] = args;
-  if (sub === "create-user") {
-    const userId = accounts.createUser();
-    const session = accounts.issueSession(userId, value ?? "admin");
-    console.log(JSON.stringify({ user_id: userId, ...session }, null, 2));
-  } else if (sub === "login-link") {
-    const userId = value && value !== "new" ? value : accounts.createUser();
-    console.log(JSON.stringify({ user_id: userId, ...accounts.createLoginLink(userId, args[2] ?? "login-link", publicUrl) }, null, 2));
-  } else if (sub === "personal-link" && value) {
-    console.log(JSON.stringify({ user_id: value, ...accounts.createPersonalLink(value, publicUrl) }, null, 2));
-  } else if (sub === "session" && value) {
+  // 運用者だけが使う。ログインはAppleかGoogleで行い、ここでアカウントは作らない。
+  if (sub === "session" && value) {
     console.log(JSON.stringify(accounts.issueSession(value, "admin"), null, 2));
   } else {
-    console.error("usage: approval-box-server admin create-user [label] | admin session <user_id> | admin login-link <user_id|new> [label] | admin personal-link <user_id>");
+    console.error("usage: approval-box-server admin session <user_id>   # 運用の調べもの用。利用者のログインはAppleかGoogle");
     process.exit(2);
   }
   process.exit(0);

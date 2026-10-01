@@ -135,21 +135,6 @@ test("既決の削除は未決を残す", async () => {
   assert.equal(open.json.items.length, 1);
 });
 
-test("ログインのリンクは一度だけsessionに替えられる", async () => {
-  const ctx = setup();
-  const link = ctx.accounts.createLoginLink(ctx.userId, "owner", "https://kb.test");
-  assert.match(link.url, /^https:\/\/kb\.test\/login#code=kll_/);
-  const code = link.url.split("#code=")[1];
-  const first = await ctx.call("POST", "/v1/auth/link", { body: { code } });
-  assert.equal(first.status, 200);
-  const me = await ctx.call("GET", "/v1/me", { token: first.json.session });
-  assert.equal(me.json.user_id, ctx.userId);
-  const again = await ctx.call("POST", "/v1/auth/link", { body: { code } });
-  assert.equal(again.status, 401);
-  const wrong = await ctx.call("POST", "/v1/auth/link", { body: { code: "kll_wrong-code-value" } });
-  assert.equal(wrong.status, 401);
-});
-
 test("接続トークンを発行・一覧・失効でき、登録手順と知らないAPIはJSONで返る", async () => {
   const ctx = setup();
   const issued = await ctx.call("POST", "/v1/tokens", { token: ctx.session, body: { label: "server" } });
@@ -185,19 +170,6 @@ test("通知の端末を登録でき、同じtokenは同じidになり、解除�
   assert.equal((await ctx.call("DELETE", `/v1/devices/${a.json.id}`, { token: ctx.session })).status, 404);
 });
 
-test("固定のログインURLは何度でも使え、作り直すと前のURLは使えない", async () => {
-  const ctx = setup();
-  const made = await ctx.call("POST", "/v1/me/personal-link", { token: ctx.session });
-  const code = made.json.url.split("#code=")[1];
-  for (let i = 0; i < 2; i++) assert.equal((await ctx.call("POST", "/v1/auth/link", { body: { code } })).status, 200);
-  assert.equal((await ctx.call("GET", "/v1/me/personal-link", { token: ctx.session })).json.exists, true);
-  const again = await ctx.call("POST", "/v1/me/personal-link", { token: ctx.session });
-  assert.equal((await ctx.call("POST", "/v1/auth/link", { body: { code } })).status, 401);
-  assert.equal((await ctx.call("POST", "/v1/auth/link", { body: { code: again.json.url.split("#code=")[1] } })).status, 200);
-  await ctx.call("DELETE", "/v1/me/personal-link", { token: ctx.session });
-  assert.equal((await ctx.call("GET", "/v1/me/personal-link", { token: ctx.session })).json.exists, false);
-});
-
 test("Sign in with Apple: 確かめたtokenで入り、同じApple IDは同じアカウント、ログイン済みなら結ぶ", async () => {
   const { generateKeyPairSync, sign } = await import("node:crypto");
   const { resetKeyCache } = await import("../src/oidc.ts");
@@ -228,22 +200,13 @@ test("Sign in with Apple: 確かめたtokenで入り、同じApple IDは同じ�
   assert.equal((await post(tokenFor({ sub: "apple-1", nonce: "n1" }), { nonce: "n1" })).status, 200);
   const tampered = tokenFor({ sub: "apple-1" }).replace(/\.[^.]+\./, (m) => m.slice(0, -2) + "x.");
   assert.equal((await post(tampered)).status, 401);
-  // IDの無い既存アカウント（コードで入った人）には、最初の1回だけ結べる
-  const owner = accounts.createUser();
-  const { session } = accounts.issueSession(owner, "code");
-  const linked = await post(tokenFor({ sub: "apple-2" }), {}, session);
-  assert.equal(linked.json.user.id, owner);
-  assert.equal((await post(tokenFor({ sub: "apple-2" }))).json.user.id, owner);
-  assert.equal((await post(tokenFor({ sub: "apple-1" }), {}, session)).status, 409); // 別アカウントのApple ID
-  assert.equal((await post(tokenFor({ sub: "apple-3" }), {}, session)).status, 409); // 同じ種類（Apple）が既にある
-  const me = await app.request("/v1/me", { headers: { authorization: `Bearer ${session}` } });
-  assert.deepEqual(((await me.json()) as { logins: string[] }).logins, ["apple"]);
-  // 外すとログインの手段が無くなる時は外せない。固定URLがあれば外せて、別のApple IDを結び直せる
-  const del = (s: string) => app.request("/v1/me/logins/apple", { method: "DELETE", headers: { authorization: `Bearer ${s}` } });
-  assert.equal((await del(session)).status, 409);
-  accounts.createPersonalLink(owner, "https://kb.test");
-  assert.equal((await del(session)).status, 200);
-  assert.equal((await post(tokenFor({ sub: "apple-3" }), {}, session)).json.user.id, owner);
+  // Bearer付きで呼んでも結ばない（ログインはIDごと。クオの裁定）
+  const other = accounts.createUser();
+  const { session } = accounts.issueSession(other, "admin");
+  const viaBearer = await post(tokenFor({ sub: "apple-2" }), {}, session);
+  assert.notEqual(viaBearer.json.user.id, other);
+  const me = await app.request("/v1/me", { headers: { authorization: `Bearer ${viaBearer.json.session}` } });
+  assert.equal(((await me.json()) as { login: string }).login, "apple");
   // Google: 別のIDなので別のアカウントになる
   const gToken = (claims: Record<string, unknown>) => {
     const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -253,12 +216,7 @@ test("Sign in with Apple: 確かめたtokenで入り、同じApple IDは同じ�
   const g = await app.request("/v1/auth/google", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id_token: gToken({ sub: "g-1" }) }) });
   const gj = (await g.json()) as { user: { id: string } };
   assert.equal(g.status, 200);
-  assert.notEqual(gj.user.id, first.json.user.id); // ログイン画面から別のIDで入れば別のアカウント
-  // 設定からなら、Appleのアカウントに Google も結べる（その後はどちらでも同じアカウント）
-  const g2 = await app.request("/v1/auth/google", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session}` }, body: JSON.stringify({ id_token: gToken({ sub: "g-2" }) }) });
-  assert.equal(((await g2.json()) as { user: { id: string } }).user.id, owner);
-  const g3 = await app.request("/v1/auth/google", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id_token: gToken({ sub: "g-2" }) }) });
-  assert.equal(((await g3.json()) as { user: { id: string } }).user.id, owner);
+  assert.notEqual(gj.user.id, first.json.user.id); // 別のIDなら別のアカウント
   const gBad = await app.request("/v1/auth/google", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id_token: tokenFor({ sub: "g-1" }) }) });
   assert.equal(gBad.status, 401); // Appleの発行者のtokenはGoogleでは通らない
 });
@@ -298,7 +256,7 @@ test("ブラウザで始めるAppleのログイン: callbackで確かめ、code_
   assert.equal(back.searchParams.get("state"), started.state);
   const code = back.searchParams.get("code")!;
   const link = (extra: Record<string, string>) => app.request("/v1/auth/link", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code, ...extra }) });
-  assert.equal((await link({})).status, 401); // verifier が無ければ使えない
+  assert.equal((await link({})).status, 400); // verifier が無ければ使えない
   assert.equal((await link({ code_verifier: randomBytes(32).toString("base64url") })).status, 401);
   assert.equal((await link({ code_verifier: verifier })).status, 200);
   assert.equal((await link({ code_verifier: verifier })).status, 401); // 一度きり
@@ -309,14 +267,4 @@ test("ブラウザで始めるAppleのログイン: callbackで確かめ、code_
   // 取り消しは cancelled で戻る
   const s3 = await startAs();
   assert.equal((await callback({ state: s3.state, error: "user_cancelled_authorize" })).searchParams.get("error"), "cancelled");
-  // IDの無い既存アカウントへ結ぶ（Bearer付きで始める）
-  const owner = accounts.createUser();
-  const { session } = accounts.issueSession(owner, "code");
-  const s4 = await startAs(session);
-  const b4 = await callback({ state: s4.state, id_token: idToken(new URL(s4.authorization_url).searchParams.get("nonce")!, "apple-w4") });
-  const r4 = await app.request("/v1/auth/link", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: b4.searchParams.get("code"), code_verifier: verifier }) });
-  const me = await app.request("/v1/me", { headers: { authorization: `Bearer ${((await r4.json()) as { session: string }).session}` } });
-  const mj = (await me.json()) as { user_id: string; login: string };
-  assert.equal(mj.user_id, owner);
-  assert.equal(mj.login, "apple");
 });

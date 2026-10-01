@@ -28,12 +28,6 @@ create table if not exists identities (
   created_at text not null,
   primary key (provider, subject)
 );
-create table if not exists personal_links (
-  user_id text primary key references users(id) on delete cascade,
-  key_hash text not null unique,
-  created_at text not null,
-  last_used_at text
-);
 create table if not exists auth_flows (
   state text primary key,
   provider text not null,
@@ -204,6 +198,11 @@ const MIGRATIONS: ((db: Db) => void)[] = [
   (db) => {
     const columns = all<{ name: string }>(db, "select name from pragma_table_info('login_links')").map((c) => c.name);
     if (!columns.includes("code_challenge")) db.exec("alter table login_links add column code_challenge text");
+  },
+  // 3: ログイン用のURL・コードの廃止（クオの裁定）。固定のログインURLの表を消し、アプリに結ばれていないコードを捨てる。
+  (db) => {
+    db.exec("drop table if exists personal_links");
+    db.exec("delete from login_links where code_challenge is null");
   },
 ];
 
