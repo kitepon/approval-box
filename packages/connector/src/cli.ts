@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { hostname } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import QRCode from "qrcode";
 import { Api, ServerError } from "./api.ts";
@@ -31,6 +31,19 @@ const FAILED_HINT: Record<string, string> = {
   notify: "アプリの通知が届いていません。アプリの通知の許可を確かめてください。",
   delivery: "答えがAIへ届きませんでした。approval-box doctor で原因を確かめてください。",
 };
+
+const STEER_LABEL: Record<string, string> = {
+  ready: "作業中の割り込みも使えます",
+  restart_required: "作業中の割り込みは、開いているCodexをすべて閉じて開き直すと使えます。それまでは作業の区切りで届きます",
+  disabled: "作業中の割り込みは使いません。答えは作業の区切りで届きます",
+  failed: "作業中の割り込みを有効にできませんでした。答えは作業の区切りで届きます（approval-box doctor で原因を確かめられます）",
+};
+
+/** approval-box コマンドがPATHで見つかるか。npm の global の置き場にPATHが通っていない環境がある。 */
+function onPathSelf(): boolean {
+  const names = process.platform === "win32" ? ["approval-box.cmd", "approval-box.ps1", "approval-box.exe"] : ["approval-box"];
+  return (process.env.PATH ?? "").split(delimiter).filter(Boolean).some((dir) => names.some((n) => existsSync(join(dir, n))));
+}
 
 async function ask(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -75,6 +88,7 @@ async function pair(server: string, targets: Target[]): Promise<{ token: string;
     if (result.status === "claimed" && result.token) return { token: result.token, connection_id: result.connection_id! };
     if (result.status === "rejected") throw new Error("アプリで「心当たりがない」が押されました。もう一度 approval-box setup を実行してください。");
     if (result.status === "expired" || result.status === "delivered") throw new Error("ペアリングの期限が切れました。もう一度 approval-box setup を実行してください。");
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
 }
 
@@ -124,13 +138,21 @@ async function setup() {
   else connection = await pair(server, targets);
   writeConfig({ server, token: connection.token, ...(connection.connection_id ? { connection_id: connection.connection_id } : {}), device_name: option("name") ?? hostname() });
   const api = new Api({ server, token: connection.token });
-  await api.call("GET", "/connection");
+  try {
+    await api.call("GET", "/connection");
+  } catch (error) {
+    if (error instanceof ServerError && error.code === "network" && !option("server") && server !== OFFICIAL_SERVER) {
+      throw new Error(`${error.message}\n前に保存した接続先（${server}）を使いました。公式サーバーを使うなら: approval-box setup --server ${OFFICIAL_SERVER}`);
+    }
+    throw error;
+  }
 
   // ここからは複製した置き場のコードで登録する（hookに書かれるpathを固定するため）。
   const { spawnSync } = await import("node:child_process");
   const result = spawnSync(process.execPath, [cli, "register", "--targets", targets.join(",")], { stdio: "inherit" });
   if (result.status !== 0) throw new Error("AIへの登録に失敗しました。");
   await api.call("PUT", "/connection/clients", { clients: targets.map((t) => CLIENT[t]), os: osName() });
+  if (!onPathSelf()) out("\n※ このPCでは approval-box コマンドにPATHが通っていません（npm の global の置き場がPATHにありません）。AIからの利用には影響しません。端末で使う時は npx approval-box test のように npx を付けてください。");
   if (flag("no-test")) return;
   await waitForChecks(api, targets.map((t) => CLIENT[t]));
 }
@@ -140,7 +162,7 @@ async function registerTargets() {
   let failed = false;
   for (const target of targets) {
     const result = await register(target);
-    const extra = result.steer ? `（割り込み: ${result.steer}）` : "";
+    const extra = result.steer ? `（${STEER_LABEL[result.steer.split(":")[0] ?? ""] ?? `作業中の割り込み: ${result.steer}`}）` : "";
     out(`  ${LABEL[target]}: ${result.status === "registered" ? "登録しました" : `失敗 — ${result.detail}`}${extra}`);
     if (result.status === "failed") failed = true;
   }

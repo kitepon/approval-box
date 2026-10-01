@@ -91,7 +91,7 @@ const TOOLS = [
   },
   {
     name: "setup_test",
-    description: "Approval Boxの接続テストを始める（利用者に「Approval Boxのテストをして」と言われた時）。テストの申請が利用者に届き、答えがこの会話へ届く。",
+    description: "Approval Boxの接続テスト（セットアップ確認）を始める。利用者に「Approval Boxのテストをして」「Approval Boxを試して」「接続テストをして」と言われたら、他の方法を調べずにこのtoolを呼ぶ。Start the Approval Box connection test when the user says \"test Approval Box\". テストの申請が利用者に届き、答えがこの会話へ届く。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
