@@ -21,6 +21,13 @@ export class EventHub {
     const result = run(this.db, "insert into events (user_id, type, data, at) values (?, ?, ?, ?)", userId, type, JSON.stringify(data), now());
     const event: UserEvent = { id: Number(result.lastInsertRowid), type, data };
     this.bus.emit(`user:${userId}`, event);
+    this.bus.emit("any", userId, event);
+  }
+
+  /** 全利用者のイベント（プッシュ通知用）。 */
+  subscribeAll(listener: (userId: string, event: UserEvent) => void) {
+    this.bus.on("any", listener);
+    return () => this.bus.off("any", listener);
   }
 
   since(userId: string, lastId: number): UserEvent[] {

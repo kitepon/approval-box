@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { Apns, Notifier } from "./push.ts";
 import { serve } from "@hono/node-server";
 import { existsSync, readFileSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
@@ -70,6 +71,11 @@ const googleAudiences = (env.GOOGLE_CLIENT_IDS ?? "").split(",").map((s) => s.tr
 const webLogin = { ...(env.GOOGLE_WEB_CLIENT_ID ? { google_client_id: env.GOOGLE_WEB_CLIENT_ID } : {}), ...(env.APPLE_WEB_SERVICES_ID ? { apple_services_id: env.APPLE_WEB_SERVICES_ID } : {}) };
 if (webLogin.google_client_id && !googleAudiences.includes(webLogin.google_client_id)) googleAudiences.push(webLogin.google_client_id);
 if (webLogin.apple_services_id && !appleAudiences.includes(webLogin.apple_services_id)) appleAudiences.push(webLogin.apple_services_id);
+// iPhoneへの通知（APNs）。鍵が無ければ送らない（自分で立てたサーバーは Web Push を後で足す）。
+if (env.APNS_KEY && env.APNS_KEY_ID && env.APNS_TEAM_ID) {
+  const apns = new Apns({ keyPem: env.APNS_KEY.replace(/\\n/g, "\n"), keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, topic: env.APNS_TOPIC ?? "dev.kitepon.approvalbox" });
+  new Notifier(db, events, apns.send);
+}
 const app = createApp({ db, accounts, decisions, events, publicUrl, appleAudiences, googleAudiences, webLogin }, { staticHandler });
 
 setInterval(() => {

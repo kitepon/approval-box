@@ -12,6 +12,10 @@ services:
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
       GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID:-}
       APPLE_WEB_SERVICES_ID: ${APPLE_WEB_SERVICES_ID:-}
+      APNS_KEY: ${APNS_KEY:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_TOPIC: ${APNS_TOPIC:-}
     ports:
       - "${BIND:-127.0.0.1}:${HOST_PORT:-8787}:8787"
     volumes:
