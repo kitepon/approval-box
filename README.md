@@ -12,7 +12,7 @@ npx -y approval-box@latest setup
 
 1. `setup` が、PCにあるAIを見つけてApproval Boxを登録します。書き換えるファイルを先に見せ、控えを残してから書き換えます。
 2. 画面に出るQRコードかコードを、アプリかWeb版の「端末を追加」で読み取ります。
-3. AIに「Approval Boxのテストをして」と言います。テストの申請に答え、その答えがAIまで届けば準備完了です。
+3. AIに「Approval Boxのsetup_testを実行して」と言います。テストの申請に答え、その答えがAIまで届けば準備完了です。
 
 元に戻すには `npx approval-box uninstall`。届かない時は `npx approval-box doctor`。
 

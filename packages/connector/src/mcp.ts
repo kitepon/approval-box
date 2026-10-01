@@ -28,7 +28,7 @@ const INSTRUCTIONS = [
   "Approval Boxは、利用者（人間）の判断が要る時に使う。チャットで聞かずに request_decision で申請する。答えは利用者がスマホやWebで出し、この会話へ自動で届く。",
   "申請の前に必ず list_my_decisions で自分の申請を見る。同じ件が未決・保留にあれば新しく出さない。内容が変わったなら amend_decision、要らなくなったなら cancel_decision。答えが出ていれば、その答えに従う。まだ無い件だけを request_decision で申請する。",
   "申請したら答えを待って何度も呼ばない。答えは届くので、他の作業を続けるかターンを終えてよい。",
-  "利用者に「Approval Boxのテストをして」と言われたら setup_test を呼ぶ。届いた答えに書かれた確認コードで confirm_setup_test を呼ぶ。",
+  "利用者に「Approval Boxのsetup_testを実行して」と言われたら setup_test を呼ぶ。届いた答えに書かれた確認コードで confirm_setup_test を呼ぶ。",
 ].join("\n");
 
 const optionSchema = { type: "object", properties: { id: { type: "string" }, label: { type: "string" } }, required: ["id", "label"], additionalProperties: false };
@@ -91,7 +91,7 @@ const TOOLS = [
   },
   {
     name: "setup_test",
-    description: "Approval Boxの接続テスト（セットアップ確認）を始める。利用者に「Approval Boxのテストをして」「Approval Boxを試して」「接続テストをして」と言われたら、他の方法を調べずにこのtoolを呼ぶ。Start the Approval Box connection test when the user says \"test Approval Box\". テストの申請が利用者に届き、答えがこの会話へ届く。",
+    description: "Approval Boxの接続テスト（セットアップ確認）を始める。利用者に「Approval Boxのsetup_testを実行して」「Approval Boxのテストをして」「接続テストをして」と言われたら、他の方法を調べずにこのtoolを呼ぶ。Start the Approval Box connection test when the user says \"test Approval Box\". テストの申請が利用者に届き、答えがこの会話へ届く。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {

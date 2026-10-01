@@ -79,7 +79,7 @@ export function Connections() {
               <button class="ghost danger" onClick={() => revoke(c)}>外す</button>
             </div>
             {testing === c.id && (
-              <p class="notice">テストしたいAIを開いて「<strong>Approval Boxのテストをして</strong>」と言ってください。テストの申請が受信一覧に届くので、答えるとAIへ届き、ここが「確認済み」になります。</p>
+              <p class="notice">テストしたいAIを開いて「<strong>Approval Boxのsetup_testを実行して</strong>」と言ってください。テストの申請が受信一覧に届くので、答えるとAIへ届き、ここが「確認済み」になります。</p>
             )}
           </div>
         );

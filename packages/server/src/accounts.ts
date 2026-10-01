@@ -120,7 +120,7 @@ export class Accounts {
 
   assertSetupVerified(userId: string) {
     const user = get<UserRow>(this.db, "select * from users where id = ?", userId)!;
-    if (!user.setup_verified_at) throw new ApiError("setup_not_verified", "セットアップ確認がまだです。AIに「Approval Boxのテストをして」と言って、答えがAIまで届くことを確かめてから契約してください。");
+    if (!user.setup_verified_at) throw new ApiError("setup_not_verified", "セットアップ確認がまだです。AIに「Approval Boxのsetup_testを実行して」と言って、答えがAIまで届くことを確かめてから契約してください。");
   }
 
   // ---- 接続（端末・リモート）----

@@ -90,7 +90,7 @@ async function pair(server: string, targets: Target[]): Promise<{ token: string;
 async function waitForChecks(api: Api, clients: string[]) {
   out("\n■ セットアップ確認");
   out("答えがAIまで届くことを確かめます。使うAIを開いて、こう言ってください:");
-  out("\n    Approval Boxのテストをして\n");
+  out("\n    Approval Boxのsetup_testを実行して\n");
   out("AIがテストの申請を出します。アプリかWeb版で答えると、答えがAIへ届き、確認が終わります。");
   out("（AIを開いたままのものは、新しい会話で試すか、AIを再起動してください。終わるまで待ちます。Ctrl+C でやめても、あとで npx approval-box test で続けられます）\n");
   const shown = new Map<string, string>();
@@ -220,7 +220,7 @@ async function doctor() {
     if (r.hooks === false) problems.push(`${LABEL[target]}: hookが登録されていません → npx approval-box setup --only ${target}`);
     if (r.entry && !existsSync(r.entry)) problems.push(`${LABEL[target]}: 登録先のファイルがありません（${r.entry}）。node やApproval Boxを入れ直した時に起きます → npx approval-box setup`);
   }
-  if (!problems.length) out("問題は見つかりませんでした。届かない時は、AIに「Approval Boxのテストをして」と言って、どこで止まるかを確かめてください。");
+  if (!problems.length) out("問題は見つかりませんでした。届かない時は、AIに「Approval Boxのsetup_testを実行して」と言って、どこで止まるかを確かめてください。");
   else for (const problem of problems) out(`✗ ${problem}`);
   if (problems.length) process.exitCode = 1;
 }
@@ -238,7 +238,7 @@ function help() {
 
   npx approval-box setup [--server URL] [--token TOKEN] [--only claude,codex,cursor,grok] [--yes]
       AIにApproval Boxを登録し、この端末をアカウントに結び、セットアップ確認まで行う
-  npx approval-box test       接続テスト（AIに「Approval Boxのテストをして」と言って確かめる）
+  npx approval-box test       接続テスト（AIに「Approval Boxのsetup_testを実行して」と言って確かめる）
   npx approval-box status     つながり、登録、確認の状態
   npx approval-box doctor     届かない時の原因を調べる
   npx approval-box uninstall  登録を全部外し、この端末の接続を解除する`);
