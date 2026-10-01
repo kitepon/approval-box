@@ -82,10 +82,11 @@ export async function register(target: Target): Promise<RegisterResult> {
       return { target, status: "registered" };
     }
     if (target === "codex") {
+      // CodexはMCPへ決まった環境変数しか渡さない。CODEX_HOMEを渡さないと、MCPは別のCODEX_HOME（~/.codex）を親だと思い、hookの確認に失敗する。
       const config = join(codexHome(), "config.toml");
       backupOnce(config);
       await withCodexConfig(async (request) => {
-        await request("config/batchWrite", { filePath: config, edits: [{ keyPath: `mcp_servers.${MCP_SERVER}`, value: registration(), mergeStrategy: "replace" }] });
+        await request("config/batchWrite", { filePath: config, edits: [{ keyPath: `mcp_servers.${MCP_SERVER}`, value: { ...registration(), env_vars: ["CODEX_HOME"] }, mergeStrategy: "replace" }] });
       });
       // 作業中のturnへの割り込み（Steer）。有効にできなくても、公式キューでの配送（turnの区切り）は使える。
       let steerStatus: string;

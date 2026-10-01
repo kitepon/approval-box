@@ -65,13 +65,23 @@ if (harness === "claude-code") {
     hooks: steer.claudeParentHookEntries(PROFILE, { command: node, script: join(dist, "approval-box-claude-hook.mjs") }) }, null, 1));
 } else if (harness === "codex-cli") {
   mkdirSync(join(project, ".codex"));
-  writeFileSync(join(project, ".codex", "config.toml"), `[mcp_servers.approval-box]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\n`);
+  writeFileSync(join(project, ".codex", "config.toml"), `[mcp_servers.approval-box]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\nenv_vars = ["CODEX_HOME"]\n`);
   // 作業中の割り込み（Steer）のhookは CODEX_HOME に入る。共有の設定に触れないよう、使い捨てのCODEX_HOMEを作り、認証だけ複製する。
   const realCodexHome = process.env.CODEX_HOME ?? join(homedir(), ".codex");
   codexHome = join(work, "codex-home");
   mkdirSync(codexHome);
   copyFileSync(join(realCodexHome, "auth.json"), join(codexHome, "auth.json"));
-  writeFileSync(join(codexHome, "config.toml"), "");
+  // 共有の~/.codexと同じく承認を求めない設定にする（MCPのtool承認で試験が止まらないように）。
+  writeFileSync(join(codexHome, "config.toml"), 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n');
+  // 前の試験が使い捨てのCODEX_HOMEでSteerを有効にしたまま落ちていたら、先に外す（共有の~/.codexには触れない）。
+  const recordFile = join(kbHome, "codex-parent-hooks", "config.json");
+  if (existsSync(recordFile)) {
+    const record = JSON.parse(readFileSync(recordFile, "utf8"));
+    if (record.enabled && record.codex_home.includes(`${tmpdir()}/kb-e2e-codex-cli-`)) {
+      if (existsSync(record.codex_home)) await steer.configureCodexSteer(PROFILE, "disable", { hook: record.hook, codex_home: record.codex_home });
+      else rmSync(recordFile);
+    }
+  }
   const steered = await steer.configureCodexSteer(PROFILE, "enable", { hook: join(dist, "approval-box-codex-hook.mjs"), codex_home: codexHome });
   log("codex steer", JSON.stringify(steered));
 } else if (harness === "cursor-cli") {
@@ -81,7 +91,7 @@ if (harness === "claude-code") {
   steer.mergeCursorParentHooks(PROFILE, join(cursorHome, "hooks.json"), { command: node, script: join(dist, "approval-box-cursor-hook.mjs") });
 } else {
   mkdirSync(join(project, ".grok"));
-  writeFileSync(join(project, ".grok", "config.toml"), `[mcp_servers.approval-box]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\n`);
+  writeFileSync(join(project, ".grok", "config.toml"), `[mcp_servers.approval-box]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\nenv_vars = ["CODEX_HOME"]\n`);
 }
 log("server", serverUrl, "project", project);
 
@@ -182,7 +192,7 @@ const rules = "You are testing the MCP server approval-box (Approval Box). Follo
 const result = { harness, checks: {}, deliveries: {} };
 let sid = null;
 try {
-  const launch = await call("agent_launch", { harness, cwd: project, trust_project: true, ...(harness === "cursor-cli" ? { model: "auto" } : {}) });
+  const launch = await call("agent_launch", { harness, cwd: project, trust_project: true, ...(harness === "cursor-cli" ? { model: "auto" } : {}), ...(codexHome ? { env_vars: ["CODEX_HOME"] } : {}) });
   if (launch.isError) throw new Error(clean(launch));
   sid = launch.structuredContent.session_id;
   log("session", sid);
@@ -244,6 +254,7 @@ try {
   await sleep(5000);
   try { const lock = JSON.parse(readFileSync(join(kbHome, "state", "daemon.json"), "utf8")); process.kill(lock.pid); } catch {}
   if (saved) { copyFileSync(saved, configFile); rmSync(saved); } else rmSync(configFile, { force: true });
+  if (codexHome) await steer.configureCodexSteer(PROFILE, "disable", { hook: join(dist, "approval-box-codex-hook.mjs"), codex_home: codexHome }).catch((e) => log("steer disable:", e.message));
   const table = process.platform === "win32"
     ? execFileSync("pwsh", ["-NoProfile", "-Command", "(Get-CimInstance Win32_Process).CommandLine"], { encoding: "utf8" })
     : execFileSync("ps", ["-eo", "args"], { encoding: "utf8" });
