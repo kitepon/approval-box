@@ -40,6 +40,11 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
     try { await api("DELETE", "/me/personal-link"); setPersonalUrl(null); bump(); } catch (e) { alert((e as Error).message); }
   }
 
+  async function unlink(provider: "apple" | "google") {
+    if (!confirm(`${provider === "google" ? "Google" : "Apple"}でのログインを外します。よろしいですか？`)) return;
+    try { await api("DELETE", `/me/logins/${provider}`); bump(); } catch (e) { alert((e as Error).message); }
+  }
+
   async function logout() {
     try { await api("POST", "/auth/logout"); } catch { /* 期限切れでも続ける */ }
     setSession(null);
@@ -50,14 +55,21 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   return (
     <section>
       <h1>設定</h1>
-      {m && m.login === null && (idConfig.data?.google_client_id || idConfig.data?.apple_services_id) && (
+      {m && (
         <div class="panel">
-          <h2>GoogleかAppleを結ぶ</h2>
-          <p class="muted">このアカウントは、ログイン用のURLで使っています。GoogleかAppleのどちらかを結ぶと、次からそれでログインできます（アプリでも同じアカウントに入れます）。結べるのは1つだけで、あとから替えられません。</p>
-          <IdLogin onDone={(r) => { setSession(r.session); bump(); }} />
+          <h2>ログインの方法</h2>
+          {m.logins.length === 0 && <p class="muted">いまは、ログイン用のURLで使っています。</p>}
+          {m.logins.map((p) => (
+            <p key={p}>{p === "google" ? "Google" : "Apple"}でログインできます。 <button onClick={() => unlink(p)}>外す</button></p>
+          ))}
+          {(idConfig.data?.google_client_id && !m.logins.includes("google")) || (idConfig.data?.apple_services_id && !m.logins.includes("apple")) ? (
+            <>
+              <p class="muted">結ぶと、次からそれでもこのアカウントに入れます（アプリでも同じアカウントになります）。結んでいないIDでログイン画面から入ると、別のアカウントになります。</p>
+              <IdLogin skip={m.logins} onDone={(r) => { setSession(r.session); bump(); }} />
+            </>
+          ) : null}
         </div>
       )}
-      {m && m.login && <div class="panel"><h2>ログイン</h2><p>{m.login === "google" ? "Google" : "Apple"}でログインしています。</p></div>}
       <div class="panel">
         <h2>ログイン用のURL</h2>
         <p class="muted">ほかのブラウザやスマホで開くと、そのままログインできるあなた専用のURLです。ブックマークしておけば何度でも使えます。URLを知っている人は誰でもログインできるので、人に見せないでください。</p>

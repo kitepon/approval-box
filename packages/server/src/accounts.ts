@@ -90,13 +90,25 @@ export class Accounts {
       if (linked && currentUserId && linked.user_id !== currentUserId) {
         throw new ApiError("conflict", `この${name}は、別のApproval Boxのアカウントで使われています。`);
       }
-      // 1つのアカウントはGoogleかAppleのどちらか1つのIDに結ぶ（クオの裁定）。結べるのは、まだIDの無いアカウントだけ。
-      if (!linked && currentUserId && get(this.db, "select 1 from identities where user_id = ?", currentUserId)) {
-        throw new ApiError("conflict", "このアカウントは既に別のIDでログインしています。1つのアカウントに結べるIDは1つだけです。");
+      // ログイン済みなら、そのアカウントへ結ぶ（設定から。AppleとGoogleを1つずつ）。同じ種類のIDが既にあれば、先に外してもらう。
+      if (!linked && currentUserId && get(this.db, "select 1 from identities where user_id = ? and provider = ?", currentUserId, provider)) {
+        throw new ApiError("conflict", `このアカウントには別の${name}が結ばれています。替える時は、先に外してください。`);
       }
       const userId = linked?.user_id ?? currentUserId ?? this.createUser();
       if (!linked) run(this.db, "insert into identities (provider, subject, user_id, email, created_at) values (?, ?, ?, ?, ?)", provider, subject, userId, email ?? null, now());
       return { ...this.issueSession(userId, provider), user: { id: userId } };
+    });
+  }
+
+  /** 結んだログインのIDを外す。ログインの手段（ほかのID・固定のログインURL）が1つも残らない時は外さない。 */
+  unlinkIdentity(userId: string, provider: "apple" | "google") {
+    return tx(this.db, () => {
+      if (!get(this.db, "select 1 from identities where user_id = ? and provider = ?", userId, provider)) throw new ApiError("not_found", "そのログインは結ばれていません。");
+      const others = get<{ n: number }>(this.db, "select count(*) as n from identities where user_id = ? and provider <> ?", userId, provider)!.n;
+      const personal = get(this.db, "select 1 from personal_links where user_id = ?", userId);
+      if (!others && !personal) throw new ApiError("conflict", "これを外すとログインできなくなります。先にほかのログインを結ぶか、ログイン用のURLを作ってください。");
+      run(this.db, "delete from identities where user_id = ? and provider = ?", userId, provider);
+      return { ok: true };
     });
   }
 
@@ -166,10 +178,11 @@ export class Accounts {
     }
     // セルフホスト（課金なし）は全員を契約中として扱う。
     const plan = this.billing === "off" ? "active" : user.plan;
-    const login = get<{ provider: string }>(this.db, "select provider from identities where user_id = ?", userId);
+    const logins = all<{ provider: string }>(this.db, "select provider from identities where user_id = ? order by created_at", userId).map((r) => r.provider);
     return {
       user_id: user.id,
-      login: login?.provider ?? null,
+      logins,
+      login: logins[0] ?? null, // v0.14 の互換。新しいアプリは logins を見る
       setup: { verified: !!user.setup_verified_at, ...(user.setup_verified_at ? { verified_at: user.setup_verified_at } : {}), checks },
       plan,
       ...(user.plan_expires_at && this.billing !== "off" ? { expires_at: user.plan_expires_at } : {}),

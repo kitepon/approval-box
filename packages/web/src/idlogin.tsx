@@ -26,7 +26,7 @@ function loadScript(src: string): Promise<void> {
 let configPromise: Promise<Config> | null = null;
 export const loginConfig = (): Promise<Config> => (configPromise ??= api<Config>("GET", "/auth/config").catch((): Config => ({})));
 
-export function IdLogin({ onDone }: { onDone: (r: Result) => void }) {
+export function IdLogin({ onDone, skip = [] }: { onDone: (r: Result) => void; skip?: string[] }) {
   const [config, setConfig] = useState<Config | null>(null);
   const [error, setError] = useState<string | null>(null);
   const googleRef = useRef<HTMLDivElement>(null);
@@ -36,7 +36,7 @@ export function IdLogin({ onDone }: { onDone: (r: Result) => void }) {
     api<Result>("POST", path, body, { idempotent: false }).then(onDone).catch((e) => setError(e instanceof ApiError ? e.message : "ログインできませんでした。"));
 
   useEffect(() => {
-    if (!config?.google_client_id || !googleRef.current) return;
+    if (!config?.google_client_id || skip.includes("google") || !googleRef.current) return;
     loadScript("https://accounts.google.com/gsi/client").then(() => {
       window.google!.accounts.id.initialize({ client_id: config.google_client_id, callback: (r: { credential: string }) => send("/auth/google", { id_token: r.credential }) });
       window.google!.accounts.id.renderButton(googleRef.current!, { theme: "outline", size: "large", text: "signin_with", locale: "ja", width: 280 });
@@ -57,11 +57,13 @@ export function IdLogin({ onDone }: { onDone: (r: Result) => void }) {
   }
 
   if (!config) return null;
-  if (!config.google_client_id && !config.apple_services_id) return null;
+  const google = !!config.google_client_id && !skip.includes("google");
+  const appleOn = !!config.apple_services_id && !skip.includes("apple");
+  if (!google && !appleOn) return null;
   return (
     <div class="idlogin">
-      {config.google_client_id && <div ref={googleRef} class="google-button" />}
-      {config.apple_services_id && <button class="apple-button" onClick={apple}>Appleでログイン</button>}
+      {google && <div ref={googleRef} class="google-button" />}
+      {appleOn && <button class="apple-button" onClick={apple}>Appleでログイン</button>}
       {error && <p class="error">{error}</p>}
     </div>
   );

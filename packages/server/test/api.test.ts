@@ -235,9 +235,15 @@ test("Sign in with Apple: 確かめたtokenで入り、同じApple IDは同じ�
   assert.equal(linked.json.user.id, owner);
   assert.equal((await post(tokenFor({ sub: "apple-2" }))).json.user.id, owner);
   assert.equal((await post(tokenFor({ sub: "apple-1" }), {}, session)).status, 409); // 別アカウントのApple ID
-  assert.equal((await post(tokenFor({ sub: "apple-3" }), {}, session)).status, 409); // 既にIDがある
+  assert.equal((await post(tokenFor({ sub: "apple-3" }), {}, session)).status, 409); // 同じ種類（Apple）が既にある
   const me = await app.request("/v1/me", { headers: { authorization: `Bearer ${session}` } });
-  assert.equal(((await me.json()) as { login: string }).login, "apple");
+  assert.deepEqual(((await me.json()) as { logins: string[] }).logins, ["apple"]);
+  // 外すとログインの手段が無くなる時は外せない。固定URLがあれば外せて、別のApple IDを結び直せる
+  const del = (s: string) => app.request("/v1/me/logins/apple", { method: "DELETE", headers: { authorization: `Bearer ${s}` } });
+  assert.equal((await del(session)).status, 409);
+  accounts.createPersonalLink(owner, "https://kb.test");
+  assert.equal((await del(session)).status, 200);
+  assert.equal((await post(tokenFor({ sub: "apple-3" }), {}, session)).json.user.id, owner);
   // Google: 別のIDなので別のアカウントになる
   const gToken = (claims: Record<string, unknown>) => {
     const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -247,7 +253,12 @@ test("Sign in with Apple: 確かめたtokenで入り、同じApple IDは同じ�
   const g = await app.request("/v1/auth/google", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id_token: gToken({ sub: "g-1" }) }) });
   const gj = (await g.json()) as { user: { id: string } };
   assert.equal(g.status, 200);
-  assert.notEqual(gj.user.id, first.json.user.id);
+  assert.notEqual(gj.user.id, first.json.user.id); // ログイン画面から別のIDで入れば別のアカウント
+  // 設定からなら、Appleのアカウントに Google も結べる（その後はどちらでも同じアカウント）
+  const g2 = await app.request("/v1/auth/google", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session}` }, body: JSON.stringify({ id_token: gToken({ sub: "g-2" }) }) });
+  assert.equal(((await g2.json()) as { user: { id: string } }).user.id, owner);
+  const g3 = await app.request("/v1/auth/google", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id_token: gToken({ sub: "g-2" }) }) });
+  assert.equal(((await g3.json()) as { user: { id: string } }).user.id, owner);
   const gBad = await app.request("/v1/auth/google", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id_token: tokenFor({ sub: "g-1" }) }) });
   assert.equal(gBad.status, 401); // Appleの発行者のtokenはGoogleでは通らない
 });
