@@ -14,7 +14,7 @@ export function readConfig(): Config | null {
 
 export function requireConfig(): Config & { token: string } {
   const config = readConfig();
-  if (!config?.token) throw new Error("Approval Boxにつながっていません。approval-box setup を実行してください。");
+  if (!config?.token) throw new Error("Approval Boxにつながっていません。npx approval-box setup を実行してください。");
   return config as Config & { token: string };
 }
 

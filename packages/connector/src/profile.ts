@@ -21,8 +21,8 @@ export const HOOK_FILES = {
 export const PROFILE: ProductProfile = {
   id: "approval-box",
   display_name: "Approval Box",
-  setup_command: "approval-box setup",
-  codex_steer_command: "approval-box setup --only codex",
+  setup_command: "npx approval-box setup",
+  codex_steer_command: "npx approval-box setup --only codex",
   mcp_server: MCP_SERVER,
   dispatch_tools: DISPATCH_TOOLS,
   state_root: stateRoot,

@@ -21,7 +21,7 @@ const grokDir = () => process.env.GROK_HOME ?? join(homedir(), ".grok");
 /** 書き換えるファイル。setupの画面で利用者に見せる。 */
 export function filesOf(target: Target): string[] {
   if (target === "claude") return [claudeJson(), join(claudeDir(), "settings.json")];
-  if (target === "cursor") return [join(cursorDir(), "mcp.json"), join(cursorDir(), "hooks.json")];
+  if (target === "cursor") return [join(cursorDir(), "mcp.json"), join(cursorDir(), "hooks.json"), cursorCliConfig()];
   if (target === "codex") return [join(codexHome(), "config.toml"), join(codexHome(), "hooks.json")];
   return [join(grokDir(), "config.toml")];
 }
@@ -41,7 +41,30 @@ export function detect(target: Target): boolean {
   return existsSync(grokDir()) || !!onPath("grok");
 }
 
-const registration = () => ({ command: process.execPath, args: [runtimeEntry("cli"), "mcp"] });
+/**
+ * 設定へ書くnodeの起動先。HomebrewのCellar実体（版ごとのpath）は更新で消えるので、同じformulaの opt を使う。
+ * それ以外（公式インストーラ・nvm・fnm・asdf・Windows）は実行中のnodeをそのまま使い、nodeを消した時は doctor が知らせる。
+ */
+export function stableNode(): string {
+  try { return steer.setupNodeExecutable(process.execPath); } catch { return process.execPath; }
+}
+
+/** CursorでApproval Boxのtoolを使うたびに許可を聞かれないよう、cli-config.json の許可リストへ足すtool。 */
+const CURSOR_TOOLS = ["list_my_decisions", "request_decision", "amend_decision", "cancel_decision", "get_decision", "setup_test", "confirm_setup_test"];
+const cursorCliConfig = () => join(cursorDir(), "cli-config.json");
+function setCursorPermissions(enable: boolean) {
+  const file = cursorCliConfig();
+  if (!existsSync(file) && !enable) return;
+  backupOnce(file);
+  const current = readJson(file);
+  const permissions = (current.permissions as { allow?: string[]; deny?: string[] } | undefined) ?? {};
+  const ours = new Set(CURSOR_TOOLS.map((tool) => `Mcp(${MCP_SERVER}:${tool})`));
+  const allow = (permissions.allow ?? []).filter((rule) => !ours.has(rule));
+  if (enable) allow.push(...ours);
+  writeJsonFile(file, { ...current, permissions: { ...permissions, allow, deny: permissions.deny ?? [] } });
+}
+
+const registration = () => ({ command: stableNode(), args: [runtimeEntry("cli"), "mcp"] });
 
 function readJson(file: string): Record<string, unknown> {
   if (!existsSync(file)) return {};
@@ -69,7 +92,7 @@ async function withCodexConfig<T>(fn: (request: (method: string, params: unknown
 export type RegisterResult = { target: Target; status: "registered" | "removed" | "failed"; detail?: string; steer?: string };
 
 export async function register(target: Target): Promise<RegisterResult> {
-  const hook = (kind: "claude" | "cursor") => ({ command: process.execPath, script: runtimeEntry(kind) });
+  const hook = (kind: "claude" | "cursor") => ({ command: stableNode(), script: runtimeEntry(kind) });
   try {
     if (target === "claude") {
       setMcpJson(claudeJson(), { type: "stdio", ...registration() });
@@ -79,6 +102,7 @@ export async function register(target: Target): Promise<RegisterResult> {
     if (target === "cursor") {
       setMcpJson(join(cursorDir(), "mcp.json"), registration());
       steer.mergeCursorParentHooks(PROFILE, join(cursorDir(), "hooks.json"), hook("cursor"));
+      setCursorPermissions(true);
       return { target, status: "registered" };
     }
     if (target === "codex") {
@@ -91,7 +115,7 @@ export async function register(target: Target): Promise<RegisterResult> {
       // 作業中のturnへの割り込み（Steer）。有効にできなくても、公式キューでの配送（turnの区切り）は使える。
       let steerStatus: string;
       try {
-        const result = await steer.configureCodexSteer(PROFILE, "enable", { hook: runtimeEntry("codex"), codex_home: codexHome() });
+        const result = await steer.configureCodexSteer(PROFILE, "enable", { hook: runtimeEntry("codex"), codex_home: codexHome(), node: stableNode() });
         steerStatus = result.status + (result.reason_code ? `:${result.reason_code}` : "");
       } catch (error) {
         steerStatus = `failed:${(error as { code?: string }).code ?? (error as Error).message}`;
@@ -117,6 +141,7 @@ export async function unregister(target: Target): Promise<RegisterResult> {
     } else if (target === "cursor") {
       if (existsSync(join(cursorDir(), "mcp.json"))) setMcpJson(join(cursorDir(), "mcp.json"), null);
       steer.removeCursorParentHooks(PROFILE, join(cursorDir(), "hooks.json"));
+      setCursorPermissions(false);
     } else if (target === "codex") {
       if (existsSync(join(codexHome(), "config.toml"))) {
         await withCodexConfig(async (request) => {

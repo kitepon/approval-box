@@ -146,7 +146,7 @@ async function channelFor(harness: Harness, clientName: string | undefined, meta
   }
   if (harness === "claude") {
     const parent = steer.claudeParentFromRequest(PROFILE, clientName, meta, steer.claudeHookRoot(PROFILE));
-    if (!parent) throw new Error("Claude Codeのhookが見つかりません。approval-box setup をやり直し、Claude Codeを再起動してください。");
+    if (!parent) throw new Error("Claude Codeのhookが見つかりません。npx approval-box setup をやり直し、Claude Codeを再起動してください。");
     // /clear で session_id が変わる。依頼のたびに親を特定し、変わっていたら開き直す。
     const key = `claude:${parent.session_id}`;
     const existing = reuse(key, true);

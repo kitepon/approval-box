@@ -7,15 +7,14 @@ AIが「人間の判断が要る」と思った時に、チャットで聞く代
 ## 使い方
 
 ```sh
-npm install -g approval-box
-approval-box setup
+npx -y approval-box@latest setup
 ```
 
 1. `setup` が、PCにあるAIを見つけてApproval Boxを登録します。書き換えるファイルを先に見せ、控えを残してから書き換えます。
 2. 画面に出るQRコードかコードを、アプリかWeb版の「端末を追加」で読み取ります。
 3. AIに「Approval Boxのテストをして」と言います。テストの申請に答え、その答えがAIまで届けば準備完了です。
 
-元に戻すには `approval-box uninstall`。届かない時は `approval-box doctor`。
+元に戻すには `npx approval-box uninstall`。届かない時は `npx approval-box doctor`。
 
 ## 構成
 
@@ -33,7 +32,7 @@ approval-box setup
 npm install && npm run build
 PUBLIC_URL=https://Approval Boxを置くURL node packages/server/dist/main.js
 node packages/server/dist/main.js admin create-user   # Web版にログインするキーを発行
-approval-box setup --server https://Approval Boxを置くURL
+npx -y approval-box@latest setup --server https://Approval Boxを置くURL
 ```
 
 自分で立てたサーバーは無料で、課金の仕組みは止まっています（`BILLING=off`）。iPhone・Androidアプリは公式サーバー専用です。自分のサーバーではWeb版をホーム画面に追加して使ってください。

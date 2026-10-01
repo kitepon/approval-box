@@ -1,6 +1,6 @@
 {
   "name": "approval-box",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Approval Box connector: lets Claude Code, Codex, Cursor and Grok ask you for a decision, and steers your answer back into the same session.",
   "license": "MIT",
   "type": "module",

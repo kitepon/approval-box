@@ -5,7 +5,7 @@ import { bump, loadMe, useResource } from "../store";
 import { ago, CHECK_LABEL, clientLabel, dateTime, FAILED_STEP } from "../format";
 import type { Check, Connection } from "../types";
 
-const INSTALL = "npm install -g approval-box && approval-box setup";
+const INSTALL = "npx -y approval-box@latest setup";
 
 function CopyLine({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -60,7 +60,7 @@ export function Connections() {
           <input class="code-input" value={code} onInput={(e) => setCode((e.target as HTMLInputElement).value)} placeholder="ABCD-EFGH" autocomplete="off" autocapitalize="characters" />
           <button class="primary" type="submit">次へ</button>
         </form>
-        <p class="muted">PCで <code>approval-box setup</code> を実行すると出るコードです。QRコードはスマホのカメラで読めます。</p>
+        <p class="muted">PCで <code>npx -y approval-box@latest setup</code> を実行すると出るコードです。QRコードはスマホのカメラで読めます。</p>
       </div>
 
       {conns.data && !conns.data.length && <SetupGuide />}
@@ -123,7 +123,7 @@ export function Pair({ code }: { code: string }) {
             {info.os && <><dt>OS</dt><dd>{info.os}</dd></>}
             <dt>使うAI</dt><dd>{info.clients.map(clientLabel).join("・") || "—"}</dd>
           </dl>
-          <p class="muted">自分で approval-box setup を実行した覚えがなければ「心当たりがない」を押してください。</p>
+          <p class="muted">自分で approval-box の setup を実行した覚えがなければ「心当たりがない」を押してください。</p>
           <div class="row">
             <button class="primary" onClick={() => decide(true)}>この端末を追加</button>
             <button class="ghost danger" onClick={() => decide(false)}>心当たりがない</button>

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { hostname } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import QRCode from "qrcode";
 import { Api, ServerError } from "./api.ts";
@@ -27,23 +27,18 @@ const STATUS_LABEL: Record<string, string> = {
   untested: "未テスト", waiting_answer: "答え待ち（アプリかWeb版で答えてください）", waiting_ai: "AIへ配送中", passed: "✓ 確認済み", failed: "✗ 失敗",
 };
 const FAILED_HINT: Record<string, string> = {
-  request: "AIにApproval Boxが登録されていません。approval-box setup をやり直し、AIを再起動してください。",
+  request: "AIにApproval Boxが登録されていません。npx approval-box setup をやり直し、AIを再起動してください。",
   notify: "アプリの通知が届いていません。アプリの通知の許可を確かめてください。",
-  delivery: "答えがAIへ届きませんでした。approval-box doctor で原因を確かめてください。",
+  delivery: "答えがAIへ届きませんでした。npx approval-box doctor で原因を確かめてください。",
 };
 
 const STEER_LABEL: Record<string, string> = {
   ready: "作業中の割り込みも使えます",
   restart_required: "作業中の割り込みは、開いているCodexをすべて閉じて開き直すと使えます。それまでは作業の区切りで届きます",
   disabled: "作業中の割り込みは使いません。答えは作業の区切りで届きます",
-  failed: "作業中の割り込みを有効にできませんでした。答えは作業の区切りで届きます（approval-box doctor で原因を確かめられます）",
+  failed: "作業中の割り込みを有効にできませんでした。答えは作業の区切りで届きます（npx approval-box doctor で原因を確かめられます）",
 };
 
-/** approval-box コマンドがPATHで見つかるか。npm の global の置き場にPATHが通っていない環境がある。 */
-function onPathSelf(): boolean {
-  const names = process.platform === "win32" ? ["approval-box.cmd", "approval-box.ps1", "approval-box.exe"] : ["approval-box"];
-  return (process.env.PATH ?? "").split(delimiter).filter(Boolean).some((dir) => names.some((n) => existsSync(join(dir, n))));
-}
 
 async function ask(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -86,8 +81,8 @@ async function pair(server: string, targets: Target[]): Promise<{ token: string;
   for (;;) {
     const result = await api.call<{ status: string; token?: string; connection_id?: string }>("GET", `/pairing/${started.pairing_id}`, undefined, { "x-poll-secret": started.poll_secret });
     if (result.status === "claimed" && result.token) return { token: result.token, connection_id: result.connection_id! };
-    if (result.status === "rejected") throw new Error("アプリで「心当たりがない」が押されました。もう一度 approval-box setup を実行してください。");
-    if (result.status === "expired" || result.status === "delivered") throw new Error("ペアリングの期限が切れました。もう一度 approval-box setup を実行してください。");
+    if (result.status === "rejected") throw new Error("アプリで「心当たりがない」が押されました。もう一度 npx approval-box setup を実行してください。");
+    if (result.status === "expired" || result.status === "delivered") throw new Error("ペアリングの期限が切れました。もう一度 npx approval-box setup を実行してください。");
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
 }
@@ -97,7 +92,7 @@ async function waitForChecks(api: Api, clients: string[]) {
   out("答えがAIまで届くことを確かめます。使うAIを開いて、こう言ってください:");
   out("\n    Approval Boxのテストをして\n");
   out("AIがテストの申請を出します。アプリかWeb版で答えると、答えがAIへ届き、確認が終わります。");
-  out("（AIを開いたままのものは、新しい会話で試すか、AIを再起動してください。終わるまで待ちます。Ctrl+C でやめても、あとで approval-box test で続けられます）\n");
+  out("（AIを開いたままのものは、新しい会話で試すか、AIを再起動してください。終わるまで待ちます。Ctrl+C でやめても、あとで npx approval-box test で続けられます）\n");
   const shown = new Map<string, string>();
   for (;;) {
     const info = await api.call<{ connection_id: string; me: { setup: { checks: Check[] } } }>("GET", "/connection");
@@ -128,7 +123,7 @@ async function setup() {
   if (targets.includes("claude")) out("・Claude Code の Stop hook は、すべての会話でターンが終わるたびに node を1回起動します（Approval Boxの申請が無ければすぐ終わります）。");
   if (targets.includes("codex")) out("・Codex は、作業中に答えを割り込ませるため hook も登録します。登録後に Codex の再起動が要ることがあります。");
   if (targets.includes("cursor") || targets.includes("grok")) out("・Cursor（止まっている時）と Grok は、申請の時にAIが背景で受信を起動します。");
-  out(`・書き換える前のファイルは「${".approval-box-backup"}」を付けて控えます。元に戻すには approval-box uninstall。\n`);
+  out(`・書き換える前のファイルは「${".approval-box-backup"}」を付けて控えます。元に戻すには npx approval-box uninstall。\n`);
   if (!flag("yes") && !/^y(es)?$/i.test(await ask("続けますか？ [y/N] "))) { out("やめました。"); return; }
 
   const cli = installRuntime();
@@ -142,7 +137,7 @@ async function setup() {
     await api.call("GET", "/connection");
   } catch (error) {
     if (error instanceof ServerError && error.code === "network" && !option("server") && server !== OFFICIAL_SERVER) {
-      throw new Error(`${error.message}\n前に保存した接続先（${server}）を使いました。公式サーバーを使うなら: approval-box setup --server ${OFFICIAL_SERVER}`);
+      throw new Error(`${error.message}\n前に保存した接続先（${server}）を使いました。公式サーバーを使うなら: npx approval-box setup --server ${OFFICIAL_SERVER}`);
     }
     throw error;
   }
@@ -152,7 +147,6 @@ async function setup() {
   const result = spawnSync(process.execPath, [cli, "register", "--targets", targets.join(",")], { stdio: "inherit" });
   if (result.status !== 0) throw new Error("AIへの登録に失敗しました。");
   await api.call("PUT", "/connection/clients", { clients: targets.map((t) => CLIENT[t]), os: osName() });
-  if (!onPathSelf()) out("\n※ このPCでは approval-box コマンドにPATHが通っていません（npm の global の置き場がPATHにありません）。AIからの利用には影響しません。端末で使う時は npx approval-box test のように npx を付けてください。");
   if (flag("no-test")) return;
   await waitForChecks(api, targets.map((t) => CLIENT[t]));
 }
@@ -186,13 +180,13 @@ async function uninstall() {
     catch (error) { out(`  サーバー: 接続の解除に失敗しました（アプリの「接続」から外してください）: ${(error as Error).message}`); }
   }
   rmSync(join(home(), "config.json"), { force: true });
-  out("\nApproval Boxを外しました。npm uninstall -g approval-box で本体も消せます。");
+  out("\nApproval Boxを外しました。npm install -g で入れた場合は、npm uninstall -g approval-box で本体も消せます。");
 }
 
 async function status() {
   const config = readConfig();
   out(`Approval Box ${VERSION}（${runtimeDir()}）`);
-  if (!config?.token) { out("未接続です。approval-box setup を実行してください。"); return; }
+  if (!config?.token) { out("未接続です。npx approval-box setup を実行してください。"); return; }
   out(`サーバー: ${config.server}`);
   try {
     const info = await new Api(config).call<{ connection_id: string; label: string; clients: string[]; me: { setup: { verified: boolean; checks: Check[] }; plan: string } }>("GET", "/connection");
@@ -211,20 +205,20 @@ async function status() {
 async function doctor() {
   const problems: string[] = [];
   const config = readConfig();
-  if (!config?.token) problems.push("Approval Boxにつながっていません → approval-box setup");
+  if (!config?.token) problems.push("Approval Boxにつながっていません → npx approval-box setup");
   else {
     try { await new Api(config).call("GET", "/connection"); }
     catch (error) {
-      problems.push(error instanceof ServerError && error.status === 401 ? "この端末の接続が外されています → approval-box setup" : `サーバーにつながりません: ${(error as Error).message}`);
+      problems.push(error instanceof ServerError && error.status === 401 ? "この端末の接続が外されています → npx approval-box setup" : `サーバーにつながりません: ${(error as Error).message}`);
     }
   }
   if (!existsSync(process.execPath)) problems.push(`node が見つかりません（${process.execPath}）`);
   for (const target of HARNESSES) {
     if (!detect(target)) continue;
     const r = registered(target);
-    if (!r.mcp) problems.push(`${LABEL[target]}: MCPが登録されていません → approval-box setup --only ${target}`);
-    if (r.hooks === false) problems.push(`${LABEL[target]}: hookが登録されていません → approval-box setup --only ${target}`);
-    if (r.entry && !existsSync(r.entry)) problems.push(`${LABEL[target]}: 登録先のファイルがありません（${r.entry}）。node やApproval Boxを入れ直した時に起きます → approval-box setup`);
+    if (!r.mcp) problems.push(`${LABEL[target]}: MCPが登録されていません → npx approval-box setup --only ${target}`);
+    if (r.hooks === false) problems.push(`${LABEL[target]}: hookが登録されていません → npx approval-box setup --only ${target}`);
+    if (r.entry && !existsSync(r.entry)) problems.push(`${LABEL[target]}: 登録先のファイルがありません（${r.entry}）。node やApproval Boxを入れ直した時に起きます → npx approval-box setup`);
   }
   if (!problems.length) out("問題は見つかりませんでした。届かない時は、AIに「Approval Boxのテストをして」と言って、どこで止まるかを確かめてください。");
   else for (const problem of problems) out(`✗ ${problem}`);
@@ -242,12 +236,12 @@ async function test() {
 function help() {
   out(`Approval Box ${VERSION}
 
-  approval-box setup [--server URL] [--token TOKEN] [--only claude,codex,cursor,grok] [--yes]
+  npx approval-box setup [--server URL] [--token TOKEN] [--only claude,codex,cursor,grok] [--yes]
       AIにApproval Boxを登録し、この端末をアカウントに結び、セットアップ確認まで行う
-  approval-box test       接続テスト（AIに「Approval Boxのテストをして」と言って確かめる）
-  approval-box status     つながり、登録、確認の状態
-  approval-box doctor     届かない時の原因を調べる
-  approval-box uninstall  登録を全部外し、この端末の接続を解除する`);
+  npx approval-box test       接続テスト（AIに「Approval Boxのテストをして」と言って確かめる）
+  npx approval-box status     つながり、登録、確認の状態
+  npx approval-box doctor     届かない時の原因を調べる
+  npx approval-box uninstall  登録を全部外し、この端末の接続を解除する`);
 }
 
 const commands: Record<string, () => Promise<void> | void> = {
