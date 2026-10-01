@@ -72,8 +72,12 @@ const webLogin = { ...(env.GOOGLE_WEB_CLIENT_ID ? { google_client_id: env.GOOGLE
 if (webLogin.google_client_id && !googleAudiences.includes(webLogin.google_client_id)) googleAudiences.push(webLogin.google_client_id);
 if (webLogin.apple_services_id && !appleAudiences.includes(webLogin.apple_services_id)) appleAudiences.push(webLogin.apple_services_id);
 // iPhoneへの通知（APNs）。鍵が無ければ送らない（自分で立てたサーバーは Web Push を後で足す）。
-if (env.APNS_KEY && env.APNS_KEY_ID && env.APNS_TEAM_ID) {
-  const apns = new Apns({ keyPem: env.APNS_KEY.replace(/\\n/g, "\n"), keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, topic: env.APNS_TOPIC ?? "dev.kitepon.approvalbox" });
+// 鍵は APNS_KEY_FILE（.p8 のファイル。読み取り専用で渡す）か APNS_KEY（PEMの中身。改行は \n）で渡す。
+const apnsKey = env.APNS_KEY_FILE ? (existsSync(env.APNS_KEY_FILE) ? readFileSync(env.APNS_KEY_FILE, "utf8") : "") : (env.APNS_KEY ?? "").replace(/\\n/g, "\n");
+if (env.APNS_KEY_FILE && !apnsKey) console.error(`approval-box-server: APNS_KEY_FILE（${env.APNS_KEY_FILE}）が読めません。iPhoneへの通知は送りません。`);
+if (apnsKey && env.APNS_KEY_ID && env.APNS_TEAM_ID) {
+  const apns = new Apns({ keyPem: apnsKey, keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, topic: env.APNS_TOPIC ?? "dev.kitepon.approvalbox" });
+  console.log(`approval-box-server: iPhoneへの通知を送ります（key ${env.APNS_KEY_ID}）`);
   new Notifier(db, events, apns.send);
 }
 const app = createApp({ db, accounts, decisions, events, publicUrl, appleAudiences, googleAudiences, webLogin }, { staticHandler });
