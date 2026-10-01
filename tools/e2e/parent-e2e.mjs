@@ -131,9 +131,28 @@ const cursorTranscript = () => {
   }
   return text;
 };
+// GrokのTUIも長い出力で画面から行を取りこぼす。Grokは会話の記録（sessions/<cwd>/<id>/chat_history.jsonl）も見る。
+const grokTranscript = () => {
+  if (harness !== "grok-cli") return "";
+  const dir = join(process.env.GROK_HOME ?? join(homedir(), ".grok"), "sessions", encodeURIComponent(project));
+  if (!existsSync(dir)) return "";
+  let text = "";
+  for (const id of readdirSync(dir)) {
+    const file = join(dir, id, "chat_history.jsonl");
+    if (!existsSync(file)) continue;
+    for (const line of readFileSync(file, "utf8").split("\n").filter(Boolean)) {
+      let entry; try { entry = JSON.parse(line); } catch { continue; }
+      if (entry.type !== "assistant") continue;
+      const content = entry.content;
+      text += "\n" + (typeof content === "string" ? content : Array.isArray(content) ? content.map((p) => p?.text ?? "").join("") : "");
+    }
+  }
+  return text;
+};
+const transcript = () => cursorTranscript() + grokTranscript();
 const waitScreen = async (sid, pattern, ms) => {
   const deadline = Date.now() + ms;
-  while (Date.now() < deadline) { if (pattern.test(await screen(sid)) || pattern.test(cursorTranscript())) return true; await sleep(2000); }
+  while (Date.now() < deadline) { if (pattern.test(await screen(sid)) || pattern.test(transcript())) return true; await sleep(2000); }
   return false;
 };
 const send = async (sid, text) => {
@@ -141,7 +160,13 @@ const send = async (sid, text) => {
     const r = await call("pty_send", { session_id: sid, text });
     const message = r.isError ? clean(r) : "";
     if (!r.isError) return;
-    if (!message.includes("完了待ち") || Date.now() > deadline) throw new Error(message);
+    // 子のturnが送る直前に終わると、文は新しいturnとして始まったか不明になる。画面か記録に文が出ていれば送れている。
+    if (message.includes("STEER_NOT_QUEUED")) {
+      await sleep(5000);
+      const head = text.slice(0, 40);
+      if ((await screen(sid)).includes(head) || transcript().includes(head)) return;
+    }
+    if (!message.includes("完了待ち") && !message.includes("STEER_NOT_QUEUED") || Date.now() > deadline) throw new Error(message);
     await sleep(10000);
   }
 };
