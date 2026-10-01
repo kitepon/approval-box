@@ -66,7 +66,11 @@ function staticHandler(c: Context) {
 const appleAudiences = (env.APPLE_AUDIENCES ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 // Googleのログインを受けるOAuthクライアントID（Web・iOS・Android）。空なら /auth/google は使えない。
 const googleAudiences = (env.GOOGLE_CLIENT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-const app = createApp({ db, accounts, decisions, events, publicUrl, appleAudiences, googleAudiences }, { staticHandler });
+// Web版のボタンに使う値。Webのクライアントも受け先に入れる。
+const webLogin = { ...(env.GOOGLE_WEB_CLIENT_ID ? { google_client_id: env.GOOGLE_WEB_CLIENT_ID } : {}), ...(env.APPLE_WEB_SERVICES_ID ? { apple_services_id: env.APPLE_WEB_SERVICES_ID } : {}) };
+if (webLogin.google_client_id && !googleAudiences.includes(webLogin.google_client_id)) googleAudiences.push(webLogin.google_client_id);
+if (webLogin.apple_services_id && !appleAudiences.includes(webLogin.apple_services_id)) appleAudiences.push(webLogin.apple_services_id);
+const app = createApp({ db, accounts, decisions, events, publicUrl, appleAudiences, googleAudiences, webLogin }, { staticHandler });
 
 setInterval(() => {
   decisions.purgeExpired();

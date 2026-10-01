@@ -8,27 +8,44 @@ import { DecisionView } from "./pages/DecisionView";
 import { History } from "./pages/History";
 import { Inbox } from "./pages/Inbox";
 import { Settings } from "./pages/Settings";
+import { IdLogin } from "./idlogin";
 import "./style.css";
 
 function Login({ onLogin }: { onLogin: () => void }) {
-  const [key, setKey] = useState("");
+  const [code, setCode] = useState("");
+  const [other, setOther] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function submitCode(e: Event) {
+    e.preventDefault();
+    const raw = code.trim();
+    if (!raw) return;
+    if (raw.startsWith("kss_")) { setSession(raw); onLogin(); return; } // 管理者が出したsessionキー（自分で立てたサーバー）
+    const value = raw.includes("#code=") ? raw.slice(raw.indexOf("#code=") + 6).trim() : raw;
+    try { const r = await api<{ session: string }>("POST", "/auth/link", { code: value }, { idempotent: false }); setSession(r.session); onLogin(); }
+    catch (err) { setError(err instanceof ApiError ? err.message : "ログインできませんでした。"); }
+  }
   return (
     <section class="login">
       <h1>Approval Box</h1>
       <p>AIが判断を求める時に、ここへ集まります。答えはその場でAIの会話へ届きます。</p>
-      <form class="panel" onSubmit={(e) => { e.preventDefault(); if (key.trim()) { setSession(key.trim()); onLogin(); } }}>
-        <label class="field">
-          <span>セッションキー</span>
-          <input value={key} onInput={(e) => setKey((e.target as HTMLInputElement).value)} placeholder="kss_…" autocomplete="off" />
-        </label>
-        <button class="primary" type="submit">ログイン</button>
-        <p class="muted">Apple・Googleでのログインは準備中です。自分で立てたサーバーでは <code>approval-box-server admin create-user</code> でキーを発行します。</p>
-      </form>
+      <IdLogin onDone={(r) => { setSession(r.session); onLogin(); }} />
+      <p class="muted">GoogleとAppleは別のアカウントになります。いつも同じ方でログインしてください。</p>
+      {!other && <p><button class="link" onClick={() => setOther(true)}>ほかの方法（ログイン用のURL・コード）</button></p>}
+      {other && (
+        <form class="panel" onSubmit={submitCode}>
+          <label class="field">
+            <span>ログイン用のURLかコード</span>
+            <input value={code} onInput={(e) => setCode((e.target as HTMLInputElement).value)} placeholder="https://…/login#code=…" autocomplete="off" />
+          </label>
+          <button class="primary" type="submit">ログイン</button>
+          {error && <p class="error">{error}</p>}
+          <p class="muted">自分で立てたサーバーでは <code>approval-box-server admin login-link new</code> でログインのリンクを出します。</p>
+        </form>
+      )}
     </section>
   );
 }
 
-/** /login#code=… のリンクで開いた時。コードを session に替えて受信へ進む。コードは一度だけ使える。 */
 function LinkLogin({ code, onLogin }: { code: string; onLogin: () => void }) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {

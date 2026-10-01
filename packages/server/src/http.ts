@@ -10,7 +10,7 @@ import type { EventHub, UserEvent } from "./events.ts";
 import { Decisions, amendSchema, answerSchema, createSchema } from "./decisions.ts";
 import { now } from "./ids.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string } };
 
 const STATUSES = ["pending", "held", "answered", "cancelled"] as const;
 const HEARTBEAT_MS = 25_000;
@@ -85,6 +85,8 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     const id = await verifyIdToken(provider, token, { audiences, ...(input.nonce ? { nonce: input.nonce } : {}), ...(services.idKeys ? { keys: services.idKeys } : {}) });
     return c.json(accounts.signInWithIdentity(provider, id.sub, id.email, current));
   };
+  // Web版のログインボタンに要る公開の値（秘密ではない）。設定が無ければ空で、Web版はボタンを出さない。
+  app.get("/v1/auth/config", (c) => c.json(services.webLogin ?? {}));
   app.post("/v1/auth/apple", signIn("apple", services.appleAudiences ?? []));
   app.post("/v1/auth/google", signIn("google", services.googleAudiences ?? []));
 
