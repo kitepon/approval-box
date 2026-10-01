@@ -1,0 +1,12 @@
+{
+  "name": "kessaibako-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/server", "packages/web", "packages/connector"],
+  "scripts": {
+    "build": "npm run build -w packages/server -w packages/web -w packages/connector",
+    "test": "npm test -w packages/server -w packages/connector",
+    "typecheck": "npm run typecheck -w packages/server -w packages/connector"
+  },
+  "engines": { "node": ">=22.13" }
+}

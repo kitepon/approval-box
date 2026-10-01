@@ -1,0 +1,201 @@
+import { type Db, all, get, run, tx } from "./db.ts";
+import { ApiError } from "./errors.ts";
+import type { EventHub } from "./events.ts";
+import { hash, normalizePairingCode, now, pairingCode, secret, uuid } from "./ids.ts";
+import type { Connection } from "./decisions.ts";
+
+const SESSION_DAYS = 90;
+const PAIRING_MINUTES = 10;
+
+type UserRow = { id: string; created_at: string; setup_verified_at: string | null; retention_days: number; plan: string; plan_expires_at: string | null; store: string | null };
+type ConnectionRow = { id: string; user_id: string; kind: string; label: string; os: string | null; clients: string; created_at: string; last_seen_at: string | null; revoked_at: string | null };
+type PairingRow = { id: string; code: string; poll_secret_hash: string; device_name: string; os: string | null; clients: string; status: string; user_id: string | null; connection_id: string | null; token: string | null; created_at: string; expires_at: string };
+type CheckRow = { connection_id: string; client: string; os: string | null; status: string; decision_id: string | null; passed_at: string | null; tested_at: string | null; failed_step: string | null; detail: string | null };
+
+export type BillingMode = "off" | "store";
+
+export class Accounts {
+  private readonly db: Db;
+  private readonly events: EventHub;
+  private readonly billing: BillingMode;
+
+  constructor(db: Db, events: EventHub, billing: BillingMode) {
+    this.db = db;
+    this.events = events;
+    this.billing = billing;
+  }
+
+  // ---- 利用者とsession ----
+
+  createUser(): string {
+    const id = uuid();
+    run(this.db, "insert into users (id, created_at) values (?, ?)", id, now());
+    return id;
+  }
+
+  issueSession(userId: string, label: string): { session: string; expires_at: string } {
+    const session = secret("kss");
+    const expires = new Date(Date.now() + SESSION_DAYS * 86400_000).toISOString();
+    run(this.db, "insert into sessions (token_hash, user_id, label, created_at, expires_at) values (?, ?, ?, ?, ?)", hash(session), userId, label, now(), expires);
+    return { session, expires_at: expires };
+  }
+
+  userBySession(session: string | undefined): string {
+    if (!session) throw new ApiError("unauthorized", "ログインしてください。");
+    const row = get<{ user_id: string; expires_at: string }>(this.db, "select user_id, expires_at from sessions where token_hash = ?", hash(session));
+    if (!row || row.expires_at < now()) throw new ApiError("unauthorized", "ログインの期限が切れました。もう一度ログインしてください。");
+    return row.user_id;
+  }
+
+  revokeSession(session: string) {
+    run(this.db, "delete from sessions where token_hash = ?", hash(session));
+  }
+
+  deleteUser(userId: string) {
+    run(this.db, "delete from users where id = ?", userId);
+  }
+
+  me(userId: string) {
+    const user = get<UserRow>(this.db, "select * from users where id = ?", userId);
+    if (!user) throw new ApiError("unauthorized", "アカウントが見つかりません。");
+    const checks = all<CheckRow>(this.db, "select * from setup_checks where user_id = ? order by client", userId).map((c) => ({
+      connection_id: c.connection_id, client: c.client, ...(c.os ? { os: c.os } : {}), status: c.status,
+      ...(c.decision_id ? { decision_id: c.decision_id } : {}), ...(c.passed_at ? { passed_at: c.passed_at } : {}),
+      ...(c.tested_at ? { tested_at: c.tested_at } : {}), ...(c.failed_step ? { failed_step: c.failed_step } : {}), ...(c.detail ? { detail: c.detail } : {}),
+    }));
+    // セットアップ確認をしていない組み合わせ（接続に登録したAIでまだテストしていないもの）も並べる。
+    for (const conn of this.connections(userId)) {
+      for (const client of conn.clients) {
+        if (!checks.some((c) => c.connection_id === conn.id && c.client === client)) {
+          checks.push({ connection_id: conn.id, client, ...(conn.os ? { os: conn.os } : {}), status: "untested" });
+        }
+      }
+    }
+    // セルフホスト（課金なし）は全員を契約中として扱う。
+    const plan = this.billing === "off" ? "active" : user.plan;
+    return {
+      user_id: user.id,
+      setup: { verified: !!user.setup_verified_at, ...(user.setup_verified_at ? { verified_at: user.setup_verified_at } : {}), checks },
+      plan,
+      ...(user.plan_expires_at && this.billing !== "off" ? { expires_at: user.plan_expires_at } : {}),
+      ...(user.store && this.billing !== "off" ? { store: user.store } : {}),
+      billing: this.billing,
+    };
+  }
+
+  settings(userId: string) {
+    const row = get<{ retention_days: number }>(this.db, "select retention_days from users where id = ?", userId)!;
+    return { retention_days: row.retention_days };
+  }
+
+  updateSettings(userId: string, retentionDays: number) {
+    run(this.db, "update users set retention_days = ? where id = ?", retentionDays, userId);
+    return this.settings(userId);
+  }
+
+  assertCanUse(userId: string) {
+    if (this.billing === "off") return;
+    const user = get<UserRow>(this.db, "select * from users where id = ?", userId)!;
+    if (user.plan === "expired") throw new ApiError("subscription_expired", "決裁箱の契約が切れています。アプリかWeb版の契約画面から更新してください。");
+  }
+
+  assertSetupVerified(userId: string) {
+    const user = get<UserRow>(this.db, "select * from users where id = ?", userId)!;
+    if (!user.setup_verified_at) throw new ApiError("setup_not_verified", "セットアップ確認がまだです。AIに「決裁箱のテストをして」と言って、答えがAIまで届くことを確かめてから契約してください。");
+  }
+
+  // ---- 接続（端末・リモート）----
+
+  connections(userId: string) {
+    return all<ConnectionRow>(this.db, "select * from connections where user_id = ? and revoked_at is null order by created_at", userId).map((c) => ({
+      id: c.id, kind: c.kind, label: c.label, ...(c.os ? { os: c.os } : {}), clients: JSON.parse(c.clients) as string[],
+      created_at: c.created_at, ...(c.last_seen_at ? { last_seen_at: c.last_seen_at } : {}),
+    }));
+  }
+
+  createConnection(userId: string, label: string, os: string | null, clients: string[]) {
+    const id = uuid();
+    const token = secret("kbt");
+    run(this.db, "insert into connections (id, user_id, kind, label, os, clients, token_hash, created_at) values (?, ?, 'device', ?, ?, ?, ?, ?)",
+      id, userId, label, os, JSON.stringify(clients), hash(token), now());
+    return { id, token };
+  }
+
+  revokeConnection(userId: string, id: string) {
+    const result = run(this.db, "update connections set revoked_at = ?, token_hash = null where id = ? and user_id = ? and revoked_at is null", now(), id, userId);
+    if (!result.changes) throw new ApiError("not_found", "その接続は見つかりません。");
+    run(this.db, "delete from setup_checks where connection_id = ?", id);
+  }
+
+  connectionByToken(token: string | undefined): Connection {
+    if (!token) throw new ApiError("unauthorized", "接続トークンがありません。kessaibako setup をやり直してください。");
+    const row = get<ConnectionRow>(this.db, "select * from connections where token_hash = ? and revoked_at is null", hash(token));
+    if (!row) throw new ApiError("unauthorized", "この端末の接続は外されています。kessaibako setup でつなぎ直してください。");
+    run(this.db, "update connections set last_seen_at = ? where id = ?", now(), row.id);
+    return { id: row.id, user_id: row.user_id, label: row.label, os: row.os };
+  }
+
+  updateConnectionClients(conn: Connection, clients: string[], os?: string) {
+    run(this.db, "update connections set clients = ?, os = coalesce(?, os) where id = ?", JSON.stringify(clients), os ?? null, conn.id);
+    this.events.publish(conn.user_id, "setup.updated", {});
+  }
+
+  connectionInfo(conn: Connection) {
+    const row = get<ConnectionRow>(this.db, "select * from connections where id = ?", conn.id)!;
+    return { connection_id: row.id, label: row.label, os: row.os, clients: JSON.parse(row.clients) as string[], me: this.me(row.user_id) };
+  }
+
+  // ---- ペアリング ----
+
+  startPairing(deviceName: string, os: string | null, clients: string[], publicUrl: string) {
+    const id = uuid();
+    const pollSecret = secret("kps");
+    let code = pairingCode();
+    while (get(this.db, "select 1 from pairings where code = ?", code)) code = pairingCode();
+    const expires = new Date(Date.now() + PAIRING_MINUTES * 60_000).toISOString();
+    run(this.db, "insert into pairings (id, code, poll_secret_hash, device_name, os, clients, status, created_at, expires_at) values (?, ?, ?, ?, ?, ?, 'waiting', ?, ?)",
+      id, code, hash(pollSecret), deviceName, os, JSON.stringify(clients), now(), expires);
+    return { pairing_id: id, code, qr_url: `${publicUrl}/pair?c=${code}`, poll_secret: pollSecret, expires_at: expires };
+  }
+
+  lookupPairing(codeInput: string) {
+    const code = normalizePairingCode(codeInput);
+    if (!code) throw new ApiError("validation_failed", "コードは英字と数字の8文字です。");
+    const row = get<PairingRow>(this.db, "select * from pairings where code = ?", code);
+    if (!row || row.status !== "waiting" || row.expires_at < now()) throw new ApiError("not_found", "そのコードは見つからないか、期限が切れています。PCで kessaibako setup をやり直してください。");
+    return { pairing_id: row.id, device_name: row.device_name, ...(row.os ? { os: row.os } : {}), clients: JSON.parse(row.clients) as string[], expires_at: row.expires_at };
+  }
+
+  claimPairing(userId: string, id: string) {
+    return tx(this.db, () => {
+      const row = get<PairingRow>(this.db, "select * from pairings where id = ?", id);
+      if (!row || row.status !== "waiting" || row.expires_at < now()) throw new ApiError("not_found", "このペアリングは期限が切れています。PCで kessaibako setup をやり直してください。");
+      const conn = this.createConnection(userId, row.device_name, row.os, JSON.parse(row.clients));
+      // tokenはPC側が一度取りに来るまでだけ置く。取りに来たら消す。
+      run(this.db, "update pairings set status = 'claimed', user_id = ?, connection_id = ?, token = ? where id = ?", userId, conn.id, conn.token, id);
+      this.events.publish(userId, "setup.updated", {});
+      return { connection_id: conn.id };
+    });
+  }
+
+  rejectPairing(userId: string, id: string) {
+    run(this.db, "update pairings set status = 'rejected', user_id = ? where id = ? and status = 'waiting'", userId, id);
+  }
+
+  pollPairing(id: string, pollSecret: string | undefined) {
+    const row = get<PairingRow>(this.db, "select * from pairings where id = ?", id);
+    if (!row || !pollSecret || row.poll_secret_hash !== hash(pollSecret)) throw new ApiError("not_found", "そのペアリングは見つかりません。");
+    if (row.status === "claimed" && row.token) {
+      run(this.db, "update pairings set token = null, status = 'delivered' where id = ?", id);
+      return { status: "claimed" as const, token: row.token, connection_id: row.connection_id! };
+    }
+    if (row.status === "rejected") return { status: "rejected" as const };
+    if (row.status === "delivered") return { status: "delivered" as const };
+    if (row.expires_at < now()) return { status: "expired" as const };
+    return { status: "waiting" as const };
+  }
+
+  prunePairings() {
+    run(this.db, "delete from pairings where expires_at < ?", new Date(Date.now() - 86400_000).toISOString());
+  }
+}
