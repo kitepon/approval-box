@@ -25,10 +25,10 @@ export function harnessOf(clientName: string | undefined): Harness {
 }
 
 const INSTRUCTIONS = [
-  "決裁箱は、利用者（人間）の判断が要る時に使う。チャットで聞かずに request_decision で申請する。答えは利用者がスマホやWebで出し、この会話へ自動で届く。",
+  "Approval Boxは、利用者（人間）の判断が要る時に使う。チャットで聞かずに request_decision で申請する。答えは利用者がスマホやWebで出し、この会話へ自動で届く。",
   "申請の前に必ず list_my_decisions で自分の申請を見る。同じ件が未決・保留にあれば新しく出さない。内容が変わったなら amend_decision、要らなくなったなら cancel_decision。答えが出ていれば、その答えに従う。まだ無い件だけを request_decision で申請する。",
   "申請したら答えを待って何度も呼ばない。答えは届くので、他の作業を続けるかターンを終えてよい。",
-  "利用者に「決裁箱のテストをして」と言われたら setup_test を呼ぶ。届いた答えに書かれた確認コードで confirm_setup_test を呼ぶ。",
+  "利用者に「Approval Boxのテストをして」と言われたら setup_test を呼ぶ。届いた答えに書かれた確認コードで confirm_setup_test を呼ぶ。",
 ].join("\n");
 
 const optionSchema = { type: "object", properties: { id: { type: "string" }, label: { type: "string" } }, required: ["id", "label"], additionalProperties: false };
@@ -91,7 +91,7 @@ const TOOLS = [
   },
   {
     name: "setup_test",
-    description: "決裁箱の接続テストを始める（利用者に「決裁箱のテストをして」と言われた時）。テストの申請が利用者に届き、答えがこの会話へ届く。",
+    description: "Approval Boxの接続テストを始める（利用者に「Approval Boxのテストをして」と言われた時）。テストの申請が利用者に届き、答えがこの会話へ届く。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -146,7 +146,7 @@ async function channelFor(harness: Harness, clientName: string | undefined, meta
   }
   if (harness === "claude") {
     const parent = steer.claudeParentFromRequest(PROFILE, clientName, meta, steer.claudeHookRoot(PROFILE));
-    if (!parent) throw new Error("Claude Codeのhookが見つかりません。kessaibako setup をやり直し、Claude Codeを再起動してください。");
+    if (!parent) throw new Error("Claude Codeのhookが見つかりません。approval-box setup をやり直し、Claude Codeを再起動してください。");
     // /clear で session_id が変わる。依頼のたびに親を特定し、変わっていたら開き直す。
     const key = `claude:${parent.session_id}`;
     const existing = reuse(key, true);
@@ -267,13 +267,13 @@ export async function runMcp() {
       }
       if (name === "confirm_setup_test") {
         const result = await api.call("POST", "/setup-test/confirm", { decision_id: args.decision_id, code: String(args.code) });
-        return text(`接続テストが通りました（${result.client}）。決裁箱はこの会話で使えます。`, result);
+        return text(`接続テストが通りました（${result.client}）。Approval Boxはこの会話で使えます。`, result);
       }
       return text(`知らないツールです: ${name}`, undefined, true);
     } catch (error) {
       const code = error instanceof ServerError ? error.code : (error as { delivery_code?: string }).delivery_code ?? "connector_error";
       const message = (error as Error).message;
-      return text(`決裁箱: ${message}\n\n${JSON.stringify({ error: code, message })}`, { error: code, message }, true);
+      return text(`Approval Box: ${message}\n\n${JSON.stringify({ error: code, message })}`, { error: code, message }, true);
     }
   });
   ensureDaemon();

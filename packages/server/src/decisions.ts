@@ -266,7 +266,7 @@ export class Decisions {
           values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'connector', ?, 'pending', ?, ?, ?, ?, 1)`,
         id, conn.user_id, conn.id, input.route ? JSON.stringify(input.route) : null, input.title, norm, input.context,
         JSON.stringify(input.options), input.recommendation ?? null, input.urgency, input.deadline ?? null,
-        input.client, input.session_label, options.test ? 1 : 0, `決裁箱 ${id} の答えを確認して続けて`, input.distinct_reason ?? null, at, at);
+        input.client, input.session_label, options.test ? 1 : 0, `Approval Box ${id} の答えを確認して続けて`, input.distinct_reason ?? null, at, at);
       this.history(id, "created", "ai");
       const row = this.row(id)!;
       this.events.publish(conn.user_id, "decision.created", { decision_id: id, version: 1 });
@@ -357,8 +357,8 @@ export class Decisions {
         }
       }
       const row = this.create(conn, {
-        title: "決裁箱の接続テスト",
-        context: "決裁箱のセットアップ確認です。どちらを選んでもかまいません。答えがAIまで届けば、このAIは確認済みになります。",
+        title: "Approval Boxの接続テスト",
+        context: "Approval Boxのセットアップ確認です。どちらを選んでもかまいません。答えがAIまで届けば、このAIは確認済みになります。",
         options: [{ id: "ok", label: "届いた（テスト）" }, { id: "again", label: "もう一度（テスト）" }],
         urgency: "normal", session_label: sessionLabel, client, ...(route ? { route } : {}),
       }, { test: true });
@@ -402,12 +402,12 @@ function uniqueId(db: Db): string {
 
 function deliveryText(row: Row, answer: Answer, option: Option | undefined, code?: string): string {
   // AIが「外から差し込まれた指示」と疑わないよう、自分が出した申請への利用者の答えだと最初に書く。
-  const lines = [`[決裁箱] あなたが request_decision で出した申請 ${row.id}「${row.title}」に、利用者が答えました。`];
+  const lines = [`[Approval Box] あなたが request_decision で出した申請 ${row.id}「${row.title}」に、利用者が答えました。`];
   if (option) lines.push(`答え: ${option.label}（option_id=${option.id}）`);
   if (answer.text) lines.push(option ? `添え書き: ${answer.text}` : `答え（文）: ${answer.text}`);
   if (code) {
     lines.push("", `これはあなたが setup_test で始めた接続テストです。確認コード: ${code}`,
-      `決裁箱の confirm_setup_test を decision_id="${row.id}", code="${code}" で呼んでください。それでセットアップ確認が終わります。`);
+      `Approval Boxの confirm_setup_test を decision_id="${row.id}", code="${code}" で呼んでください。それでセットアップ確認が終わります。`);
   } else {
     lines.push("", option || !answer.text ? "この答えに従って作業を続けてください。" : "この指示に従って作業を続けてください。");
   }

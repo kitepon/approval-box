@@ -96,12 +96,12 @@ export class Accounts {
   assertCanUse(userId: string) {
     if (this.billing === "off") return;
     const user = get<UserRow>(this.db, "select * from users where id = ?", userId)!;
-    if (user.plan === "expired") throw new ApiError("subscription_expired", "決裁箱の契約が切れています。アプリかWeb版の契約画面から更新してください。");
+    if (user.plan === "expired") throw new ApiError("subscription_expired", "Approval Boxの契約が切れています。アプリかWeb版の契約画面から更新してください。");
   }
 
   assertSetupVerified(userId: string) {
     const user = get<UserRow>(this.db, "select * from users where id = ?", userId)!;
-    if (!user.setup_verified_at) throw new ApiError("setup_not_verified", "セットアップ確認がまだです。AIに「決裁箱のテストをして」と言って、答えがAIまで届くことを確かめてから契約してください。");
+    if (!user.setup_verified_at) throw new ApiError("setup_not_verified", "セットアップ確認がまだです。AIに「Approval Boxのテストをして」と言って、答えがAIまで届くことを確かめてから契約してください。");
   }
 
   // ---- 接続（端末・リモート）----
@@ -128,9 +128,9 @@ export class Accounts {
   }
 
   connectionByToken(token: string | undefined): Connection {
-    if (!token) throw new ApiError("unauthorized", "接続トークンがありません。kessaibako setup をやり直してください。");
+    if (!token) throw new ApiError("unauthorized", "接続トークンがありません。approval-box setup をやり直してください。");
     const row = get<ConnectionRow>(this.db, "select * from connections where token_hash = ? and revoked_at is null", hash(token));
-    if (!row) throw new ApiError("unauthorized", "この端末の接続は外されています。kessaibako setup でつなぎ直してください。");
+    if (!row) throw new ApiError("unauthorized", "この端末の接続は外されています。approval-box setup でつなぎ直してください。");
     run(this.db, "update connections set last_seen_at = ? where id = ?", now(), row.id);
     return { id: row.id, user_id: row.user_id, label: row.label, os: row.os };
   }
@@ -162,14 +162,14 @@ export class Accounts {
     const code = normalizePairingCode(codeInput);
     if (!code) throw new ApiError("validation_failed", "コードは英字と数字の8文字です。");
     const row = get<PairingRow>(this.db, "select * from pairings where code = ?", code);
-    if (!row || row.status !== "waiting" || row.expires_at < now()) throw new ApiError("not_found", "そのコードは見つからないか、期限が切れています。PCで kessaibako setup をやり直してください。");
+    if (!row || row.status !== "waiting" || row.expires_at < now()) throw new ApiError("not_found", "そのコードは見つからないか、期限が切れています。PCで approval-box setup をやり直してください。");
     return { pairing_id: row.id, device_name: row.device_name, ...(row.os ? { os: row.os } : {}), clients: JSON.parse(row.clients) as string[], expires_at: row.expires_at };
   }
 
   claimPairing(userId: string, id: string) {
     return tx(this.db, () => {
       const row = get<PairingRow>(this.db, "select * from pairings where id = ?", id);
-      if (!row || row.status !== "waiting" || row.expires_at < now()) throw new ApiError("not_found", "このペアリングは期限が切れています。PCで kessaibako setup をやり直してください。");
+      if (!row || row.status !== "waiting" || row.expires_at < now()) throw new ApiError("not_found", "このペアリングは期限が切れています。PCで approval-box setup をやり直してください。");
       const conn = this.createConnection(userId, row.device_name, row.os, JSON.parse(row.clients));
       // tokenはPC側が一度取りに来るまでだけ置く。取りに来たら消す。
       run(this.db, "update pairings set status = 'claimed', user_id = ?, connection_id = ?, token = ? where id = ?", userId, conn.id, conn.token, id);

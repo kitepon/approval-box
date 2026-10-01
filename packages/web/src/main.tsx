@@ -14,7 +14,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
   const [key, setKey] = useState("");
   return (
     <section class="login">
-      <h1>決裁箱</h1>
+      <h1>Approval Box</h1>
       <p>AIが判断を求める時に、ここへ集まります。答えはその場でAIの会話へ届きます。</p>
       <form class="panel" onSubmit={(e) => { e.preventDefault(); if (key.trim()) { setSession(key.trim()); onLogin(); } }}>
         <label class="field">
@@ -22,7 +22,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
           <input value={key} onInput={(e) => setKey((e.target as HTMLInputElement).value)} placeholder="kss_…" autocomplete="off" />
         </label>
         <button class="primary" type="submit">ログイン</button>
-        <p class="muted">Apple・Googleでのログインは準備中です。自分で立てたサーバーでは <code>kessaibako-server admin create-user</code> でキーを発行します。</p>
+        <p class="muted">Apple・Googleでのログインは準備中です。自分で立てたサーバーでは <code>approval-box-server admin create-user</code> でキーを発行します。</p>
       </form>
     </section>
   );
@@ -31,7 +31,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
 function Nav({ path }: { path: string }) {
   const open = useResource(loadOpen);
   const count = open.data?.filter((d) => d.status === "pending").length ?? 0;
-  useEffect(() => { document.title = count ? `(${count}) 決裁箱` : "決裁箱"; }, [count]);
+  useEffect(() => { document.title = count ? `(${count}) Approval Box` : "Approval Box"; }, [count]);
   const item = (href: string, label: string, active: boolean, badge?: number) => (
     <a class={`nav-item ${active ? "active" : ""}`} {...linkProps(href)}>{label}{badge ? <span class="count">{badge}</span> : null}</a>
   );

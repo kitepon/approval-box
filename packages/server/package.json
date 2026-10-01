@@ -1,10 +1,10 @@
 {
-  "name": "kessaibako-server",
+  "name": "approval-box-server",
   "version": "0.1.0",
-  "description": "Kessaibako server: collects decision requests from AI sessions and delivers the human's answer back.",
+  "description": "Approval Box server: collects decision requests from AI sessions and delivers the human's answer back.",
   "license": "AGPL-3.0-only",
   "type": "module",
-  "bin": { "kessaibako-server": "dist/main.js" },
+  "bin": { "approval-box-server": "dist/main.js" },
   "files": ["dist", "public"],
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -12,7 +12,7 @@ export class ServerError extends Error {
   }
 }
 
-/** 決裁箱サーバーのコネクタ用API（/connector/v1）。 */
+/** Approval Boxサーバーのコネクタ用API（/connector/v1）。 */
 export class Api {
   readonly server: string;
   private readonly token: string | undefined;
@@ -36,7 +36,7 @@ export class Api {
         ...(signal ? { signal } : {}),
       });
     } catch (error) {
-      throw new ServerError(0, "network", `決裁箱サーバー（${this.server}）につながりません: ${(error as Error).message}`, {});
+      throw new ServerError(0, "network", `Approval Boxサーバー（${this.server}）につながりません: ${(error as Error).message}`, {});
     }
     const text = await response.text();
     const json = text ? (JSON.parse(text) as Record<string, unknown>) : {};

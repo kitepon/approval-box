@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// 決裁箱の配送の実機試験。サーバーをこのprocessの中で立て、本物のAI（harness）にコネクタを試験用projectの中だけで登録し、
+// Approval Boxの配送の実機試験。サーバーをこのprocessの中で立て、本物のAI（harness）にコネクタを試験用projectの中だけで登録し、
 // AIの申請 → 利用者の答え → AIの会話へ配送、を idle中・作業中・連続で確かめる。セットアップ確認（確認コードの往復）も通す。
-// 共有HOMEのユーザー設定（~/.claude/settings.json 等）には触れない。~/.kessaibako の config.json だけ試験中に差し替えて戻す。
+// 共有HOMEのユーザー設定（~/.claude/settings.json 等）には触れない。~/.approval-box の config.json だけ試験中に差し替えて戻す。
 // 使い方: npm run build -w packages/connector && node tools/e2e/parent-e2e.mjs <claude-code|codex-cli|cursor-cli|grok-cli>
 // Aitermを別の場所から起動する時は AITERM_CMD='["node","/path/to/aiterm-mcp/dist/index.js"]'。
 import { serve } from "@hono/node-server";
@@ -42,8 +42,8 @@ const userId = accounts.createUser();
 const conn = accounts.createConnection(userId, "e2e", process.platform, [harness]);
 const connection = { id: conn.id, user_id: userId };
 
-// ---- コネクタの設定（~/.kessaibako/config.json を試験中だけ差し替える）----
-const kbHome = process.env.KESSAIBAKO_HOME ?? join(homedir(), ".kessaibako");
+// ---- コネクタの設定（~/.approval-box/config.json を試験中だけ差し替える）----
+const kbHome = process.env.APPROVAL_BOX_HOME ?? join(homedir(), ".approval-box");
 const configFile = join(kbHome, "config.json");
 const saved = existsSync(configFile) ? `${configFile}.e2e-saved` : null;
 if (saved) copyFileSync(configFile, saved);
@@ -58,30 +58,30 @@ mkdirSync(project);
 const mcp = { command: node, args: [join(dist, "cli.mjs"), "mcp"] };
 let codexHome = null;
 if (harness === "claude-code") {
-  writeFileSync(join(project, ".mcp.json"), JSON.stringify({ mcpServers: { kessaibako: { type: "stdio", ...mcp } } }, null, 1));
+  writeFileSync(join(project, ".mcp.json"), JSON.stringify({ mcpServers: { "approval-box": { type: "stdio", ...mcp } } }, null, 1));
   mkdirSync(join(project, ".claude"));
   writeFileSync(join(project, ".claude", "settings.local.json"), JSON.stringify({ enableAllProjectMcpServers: true,
-    permissions: { allow: ["mcp__kessaibako", "Bash(node:*)", "Bash(sleep:*)"] },
-    hooks: steer.claudeParentHookEntries(PROFILE, { command: node, script: join(dist, "kessaibako-claude-hook.mjs") }) }, null, 1));
+    permissions: { allow: ["mcp__approval-box", "Bash(node:*)", "Bash(sleep:*)"] },
+    hooks: steer.claudeParentHookEntries(PROFILE, { command: node, script: join(dist, "approval-box-claude-hook.mjs") }) }, null, 1));
 } else if (harness === "codex-cli") {
   mkdirSync(join(project, ".codex"));
-  writeFileSync(join(project, ".codex", "config.toml"), `[mcp_servers.kessaibako]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\n`);
+  writeFileSync(join(project, ".codex", "config.toml"), `[mcp_servers.approval-box]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\n`);
   // 作業中の割り込み（Steer）のhookは CODEX_HOME に入る。共有の設定に触れないよう、使い捨てのCODEX_HOMEを作り、認証だけ複製する。
   const realCodexHome = process.env.CODEX_HOME ?? join(homedir(), ".codex");
   codexHome = join(work, "codex-home");
   mkdirSync(codexHome);
   copyFileSync(join(realCodexHome, "auth.json"), join(codexHome, "auth.json"));
   writeFileSync(join(codexHome, "config.toml"), "");
-  const steered = await steer.configureCodexSteer(PROFILE, "enable", { hook: join(dist, "kessaibako-codex-hook.mjs"), codex_home: codexHome });
+  const steered = await steer.configureCodexSteer(PROFILE, "enable", { hook: join(dist, "approval-box-codex-hook.mjs"), codex_home: codexHome });
   log("codex steer", JSON.stringify(steered));
 } else if (harness === "cursor-cli") {
   const cursorHome = join(project, ".cursor");
   mkdirSync(cursorHome);
-  writeFileSync(join(cursorHome, "mcp.json"), JSON.stringify({ mcpServers: { kessaibako: { ...mcp, env: { CURSOR_HOME: cursorHome } } } }, null, 1));
-  steer.mergeCursorParentHooks(PROFILE, join(cursorHome, "hooks.json"), { command: node, script: join(dist, "kessaibako-cursor-hook.mjs") });
+  writeFileSync(join(cursorHome, "mcp.json"), JSON.stringify({ mcpServers: { "approval-box": { ...mcp, env: { CURSOR_HOME: cursorHome } } } }, null, 1));
+  steer.mergeCursorParentHooks(PROFILE, join(cursorHome, "hooks.json"), { command: node, script: join(dist, "approval-box-cursor-hook.mjs") });
 } else {
   mkdirSync(join(project, ".grok"));
-  writeFileSync(join(project, ".grok", "config.toml"), `[mcp_servers.kessaibako]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\n`);
+  writeFileSync(join(project, ".grok", "config.toml"), `[mcp_servers.approval-box]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\n`);
 }
 log("server", serverUrl, "project", project);
 
@@ -100,7 +100,7 @@ const deliveryOf = (id) => decisions.toApi(decisions.forUser(userId, id)).delive
 // ---- Aitermで本物のAIを起動 ----
 const aitermCommand = JSON.parse(process.env.AITERM_CMD ?? '["aiterm-mcp"]');
 const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AITERM_"))), ...(codexHome ? { CODEX_HOME: codexHome } : {}) };
-const client = new Client({ name: "kessaibako-e2e", version: "1" });
+const client = new Client({ name: "approval-box-e2e", version: "1" });
 await client.connect(new StdioClientTransport({ command: aitermCommand[0], args: aitermCommand.slice(1), env, stderr: "ignore" }));
 const call = (name, args) => client.callTool({ name, arguments: args }, undefined, { timeout: 600_000 });
 const clean = (r) => r.content.map((c) => c.text).join("\n").replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/gu, "").replace(/\x1b[\]P^_][^\x07\x1b]*(\x07|\x1b\\)/gu, "");
@@ -148,11 +148,11 @@ const send = async (sid, text) => {
 
 const background = harness === "cursor-cli" || harness === "grok-cli";
 const options = `options [{"id":"a","label":"A"},{"id":"b","label":"B"}]`;
-const rules = "You are testing the MCP server kessaibako (決裁箱). Follow these rules for the whole session:\n" +
-  "- Whenever text starting with \"[決裁箱]\" reaches you, reply with exactly \"GOT <id>\" where <id> is the decision id in it (like K-ABC234). If that text contains 確認コード, first call the kessaibako tool confirm_setup_test with the decision_id and code written there.\n" +
-  (background ? "- When a kessaibako tool result tells you to start a command as a background process, start it in the background (do not wait for it in the foreground). When it completes, its output JSON has deliveries[].text; handle them, then start next_wait_process the same way in the background.\n" : "") +
+const rules = "You are testing the MCP server approval-box (Approval Box). Follow these rules for the whole session:\n" +
+  "- Whenever text starting with \"[Approval Box]\" reaches you, reply with exactly \"GOT <id>\" where <id> is the decision id in it (like K-ABC234). If that text contains 確認コード, first call the approval-box tool confirm_setup_test with the decision_id and code written there.\n" +
+  (background ? "- When a approval-box tool result tells you to start a command as a background process, start it in the background (do not wait for it in the foreground). When it completes, its output JSON has deliveries[].text; handle them, then start next_wait_process the same way in the background.\n" : "") +
   "- Never call request_decision unless I ask, and never wait for answers yourself.\n" +
-  "Now call the kessaibako tool setup_test. Then reply with exactly STARTED.";
+  "Now call the approval-box tool setup_test. Then reply with exactly STARTED.";
 
 const result = { harness, checks: {}, deliveries: {} };
 let sid = null;
@@ -164,7 +164,7 @@ try {
   await send(sid, rules);
 
   // 1. セットアップ確認（idle中の配送 + AIが確認コードを返す）
-  const test = await waitDecision("決裁箱の接続テスト", 300_000);
+  const test = await waitDecision("Approval Boxの接続テスト", 300_000);
   result.checks.setup_requested = !!test;
   if (!test) throw new Error("接続テストの申請が来ません");
   await waitScreen(sid, /STARTED/u, 120_000);
@@ -176,7 +176,7 @@ try {
   log("setup", result.checks.setup_passed, "idle1", result.checks.idle1);
 
   // 2. idle中の二通目
-  await send(sid, `Call kessaibako request_decision with title "E2E idle", ${options}, session_label "e2e". Then reply with exactly REQUESTED1.`);
+  await send(sid, `Call approval-box request_decision with title "E2E idle", ${options}, session_label "e2e". Then reply with exactly REQUESTED1.`);
   const idle = await waitDecision("E2E idle");
   await waitScreen(sid, /REQUESTED1/u, 120_000);
   await sleep(10000);
@@ -186,7 +186,7 @@ try {
   log("idle2", result.checks.idle2);
 
   // 3. 作業中の一通（AIが45秒のコマンドを前面で実行している間に答える）
-  await send(sid, `Call kessaibako request_decision with title "E2E busy", ${options}, session_label "e2e". Then run this shell command in the foreground and wait for it: node -e "setTimeout(()=>console.log('SLEPT'),45000)" . After it finishes reply with exactly BUSYDONE.`);
+  await send(sid, `Call approval-box request_decision with title "E2E busy", ${options}, session_label "e2e". Then run this shell command in the foreground and wait for it: node -e "setTimeout(()=>console.log('SLEPT'),45000)" . After it finishes reply with exactly BUSYDONE.`);
   const busy = await waitDecision("E2E busy");
   await sleep(15000);
   if (busy) answer(busy);
@@ -198,7 +198,7 @@ try {
   log("busy", result.checks.busy, result.checks.busy_done);
 
   // 4. 連続の二通
-  await send(sid, `Call kessaibako request_decision twice: title "E2E burst 1" and title "E2E burst 2", both with ${options}, session_label "e2e". Then reply with exactly REQUESTED2.`);
+  await send(sid, `Call approval-box request_decision twice: title "E2E burst 1" and title "E2E burst 2", both with ${options}, session_label "e2e". Then reply with exactly REQUESTED2.`);
   const b1 = await waitDecision("E2E burst 1");
   const b2 = await waitDecision("E2E burst 2");
   await waitScreen(sid, /REQUESTED2/u, 120_000);

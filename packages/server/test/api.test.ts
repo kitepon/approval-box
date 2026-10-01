@@ -40,7 +40,7 @@ async function paired(ctx: ReturnType<typeof setup>) {
   return poll.json.token as string;
 }
 
-const request = { title: "DBの移行をいま実行してよいか", context: "停止は30秒", options: [{ id: "a", label: "いま実行" }, { id: "b", label: "夜間" }], recommendation: "b", urgency: "high", session_label: "kessaibako / server", client: "claude-code", route: { channel_id: "ch-1", harness: "claude" } };
+const request = { title: "DBの移行をいま実行してよいか", context: "停止は30秒", options: [{ id: "a", label: "いま実行" }, { id: "b", label: "夜間" }], recommendation: "b", urgency: "high", session_label: "approval-box / server", client: "claude-code", route: { channel_id: "ch-1", harness: "claude" } };
 
 test("申請・重複検知・修正・回答・配送", async () => {
   const ctx = setup();

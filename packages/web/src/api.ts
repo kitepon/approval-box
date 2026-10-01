@@ -1,6 +1,6 @@
 import type { ApiErrorBody } from "./types";
 
-const SESSION_KEY = "kessaibako.session";
+const SESSION_KEY = "approval-box.session";
 
 export function getSession(): string | null {
   try { return localStorage.getItem(SESSION_KEY); } catch { return null; }

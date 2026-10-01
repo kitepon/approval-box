@@ -1,10 +1,10 @@
 {
-  "name": "kessaibako",
+  "name": "approval-box",
   "version": "0.1.0",
-  "description": "Kessaibako connector: lets Claude Code, Codex, Cursor and Grok ask you for a decision, and steers your answer back into the same session.",
+  "description": "Approval Box connector: lets Claude Code, Codex, Cursor and Grok ask you for a decision, and steers your answer back into the same session.",
   "license": "MIT",
   "type": "module",
-  "bin": { "kessaibako": "dist/cli.mjs" },
+  "bin": { "approval-box": "dist/cli.mjs" },
   "files": ["dist", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
   "scripts": {
     "build": "node scripts/build.mjs",

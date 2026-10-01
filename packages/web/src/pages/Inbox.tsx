@@ -30,7 +30,7 @@ export function Inbox() {
   const held = data?.filter((d) => d.status === "held") ?? [];
   return (
     <section>
-      <h1>決裁箱</h1>
+      <h1>Approval Box</h1>
       {error && <p class="error">{error}</p>}
       {loading && !data && <p class="muted">読み込み中…</p>}
       {data && !data.length && (

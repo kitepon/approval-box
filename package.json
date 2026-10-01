@@ -1,5 +1,5 @@
 {
-  "name": "kessaibako-monorepo",
+  "name": "approval-box-monorepo",
   "private": true,
   "type": "module",
   "workspaces": ["packages/server", "packages/web", "packages/connector"],

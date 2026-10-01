@@ -1,6 +1,6 @@
 {
-  "name": "決裁箱",
-  "short_name": "決裁箱",
+  "name": "Approval Box",
+  "short_name": "Approval Box",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f6f5f1",

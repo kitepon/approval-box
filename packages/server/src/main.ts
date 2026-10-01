@@ -11,12 +11,12 @@ import { EventHub } from "./events.ts";
 import { createApp } from "./http.ts";
 
 const env = process.env;
-const dataDir = resolve(env.KESSAIBAKO_DATA ?? "data");
+const dataDir = resolve(env.APPROVAL_BOX_DATA ?? "data");
 const port = Number(env.PORT ?? 8787);
 const publicUrl = (env.PUBLIC_URL ?? `http://localhost:${port}`).replace(/\/$/, "");
 const billing: BillingMode = env.BILLING === "store" ? "store" : "off";
 
-const db = openDb(join(dataDir, "kessaibako.db"));
+const db = openDb(join(dataDir, "approval-box.db"));
 const events = new EventHub(db);
 const accounts = new Accounts(db, events, billing);
 const decisions = new Decisions(db, events);
@@ -32,7 +32,7 @@ if (command === "admin") {
   } else if (sub === "session" && value) {
     console.log(JSON.stringify(accounts.issueSession(value, "admin"), null, 2));
   } else {
-    console.error("usage: kessaibako-server admin create-user [label] | admin session <user_id>");
+    console.error("usage: approval-box-server admin create-user [label] | admin session <user_id>");
     process.exit(2);
   }
   process.exit(0);
@@ -40,7 +40,7 @@ if (command === "admin") {
 
 // Web版（packages/web のビルド結果）。APIでないGETは index.html を返し、画面の振り分けはWeb版が行う。
 const here = fileURLToPath(new URL(".", import.meta.url));
-const webRoot = [env.KESSAIBAKO_WEB, join(here, "..", "public"), join(here, "..", "..", "web", "dist")].find((dir) => dir && existsSync(join(dir, "index.html")));
+const webRoot = [env.APPROVAL_BOX_WEB, join(here, "..", "public"), join(here, "..", "..", "web", "dist")].find((dir) => dir && existsSync(join(dir, "index.html")));
 const types: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".webmanifest": "application/manifest+json",
@@ -66,5 +66,5 @@ setInterval(() => {
 }, 3600_000).unref();
 
 serve({ fetch: app.fetch, port }, () => {
-  console.log(`kessaibako-server: ${publicUrl} (port ${port}, data ${dataDir}, billing ${billing}${webRoot ? "" : ", web未ビルド"})`);
+  console.log(`approval-box-server: ${publicUrl} (port ${port}, data ${dataDir}, billing ${billing}${webRoot ? "" : ", web未ビルド"})`);
 });

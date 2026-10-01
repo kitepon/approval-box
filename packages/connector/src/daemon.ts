@@ -41,7 +41,7 @@ export function ensureDaemon() {
     const log = openSync(join(stateRoot(), "daemon.log"), "a", 0o600);
     spawn(process.execPath, [runtimeEntry("cli"), "daemon"], { detached: true, stdio: ["ignore", "ignore", log], windowsHide: true }).unref();
   } catch (error) {
-    process.stderr.write(`kessaibako: 配送デーモンを起動できません: ${(error as Error).message}\n`);
+    process.stderr.write(`approval-box: 配送デーモンを起動できません: ${(error as Error).message}\n`);
   }
 }
 

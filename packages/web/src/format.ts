@@ -18,9 +18,9 @@ export const CHECK_LABEL: Record<string, string> = {
 };
 
 export const FAILED_STEP: Record<string, string> = {
-  request: "AIに決裁箱が登録されていません。PCで kessaibako setup をやり直し、AIを再起動してください。",
+  request: "AIにApproval Boxが登録されていません。PCで approval-box setup をやり直し、AIを再起動してください。",
   notify: "通知が届いていません。通知の許可を確かめてください。",
-  delivery: "答えがAIへ届きませんでした。PCで kessaibako doctor を実行して原因を確かめてください。",
+  delivery: "答えがAIへ届きませんでした。PCで approval-box doctor を実行して原因を確かめてください。",
 };
 
 export function ago(iso: string): string {

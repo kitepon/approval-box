@@ -5,7 +5,7 @@ import { bump, loadMe, useResource } from "../store";
 import { ago, CHECK_LABEL, clientLabel, dateTime, FAILED_STEP } from "../format";
 import type { Check, Connection } from "../types";
 
-const INSTALL = "npm install -g kessaibako && kessaibako setup";
+const INSTALL = "npm install -g approval-box && approval-box setup";
 
 function CopyLine({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -47,7 +47,7 @@ export function Connections() {
   const [testing, setTesting] = useState<string | null>(null);
 
   async function revoke(c: Connection) {
-    if (!confirm(`「${c.label}」の接続を外します。この端末のAIは決裁箱を使えなくなります。`)) return;
+    if (!confirm(`「${c.label}」の接続を外します。この端末のAIはApproval Boxを使えなくなります。`)) return;
     try { await api("DELETE", `/connections/${c.id}`); bump(); } catch (e) { alert((e as Error).message); }
   }
 
@@ -60,7 +60,7 @@ export function Connections() {
           <input class="code-input" value={code} onInput={(e) => setCode((e.target as HTMLInputElement).value)} placeholder="ABCD-EFGH" autocomplete="off" autocapitalize="characters" />
           <button class="primary" type="submit">次へ</button>
         </form>
-        <p class="muted">PCで <code>kessaibako setup</code> を実行すると出るコードです。QRコードはスマホのカメラで読めます。</p>
+        <p class="muted">PCで <code>approval-box setup</code> を実行すると出るコードです。QRコードはスマホのカメラで読めます。</p>
       </div>
 
       {conns.data && !conns.data.length && <SetupGuide />}
@@ -79,7 +79,7 @@ export function Connections() {
               <button class="ghost danger" onClick={() => revoke(c)}>外す</button>
             </div>
             {testing === c.id && (
-              <p class="notice">テストしたいAIを開いて「<strong>決裁箱のテストをして</strong>」と言ってください。テストの申請が受信一覧に届くので、答えるとAIへ届き、ここが「確認済み」になります。</p>
+              <p class="notice">テストしたいAIを開いて「<strong>Approval Boxのテストをして</strong>」と言ってください。テストの申請が受信一覧に届くので、答えるとAIへ届き、ここが「確認済み」になります。</p>
             )}
           </div>
         );
@@ -117,13 +117,13 @@ export function Pair({ code }: { code: string }) {
       {done && <><p class="notice">{done}</p><button class="ghost" onClick={() => navigate("/connections")}>接続へ</button></>}
       {info && !done && (
         <div class="panel">
-          <p>次の端末を、あなたの決裁箱に追加しますか？</p>
+          <p>次の端末を、あなたのApproval Boxに追加しますか？</p>
           <dl class="pairing">
             <dt>端末名</dt><dd>{info.device_name}</dd>
             {info.os && <><dt>OS</dt><dd>{info.os}</dd></>}
             <dt>使うAI</dt><dd>{info.clients.map(clientLabel).join("・") || "—"}</dd>
           </dl>
-          <p class="muted">自分で kessaibako setup を実行した覚えがなければ「心当たりがない」を押してください。</p>
+          <p class="muted">自分で approval-box setup を実行した覚えがなければ「心当たりがない」を押してください。</p>
           <div class="row">
             <button class="primary" onClick={() => decide(true)}>この端末を追加</button>
             <button class="ghost danger" onClick={() => decide(false)}>心当たりがない</button>
