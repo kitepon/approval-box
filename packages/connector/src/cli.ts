@@ -7,7 +7,8 @@ import QRCode from "qrcode";
 import { Api, ServerError } from "./api.ts";
 import { OFFICIAL_SERVER, readConfig, requireConfig, writeConfig } from "./config.ts";
 import { daemonStatus, ensureDaemon, runDaemon } from "./daemon.ts";
-import { CLIENT, HARNESSES, LABEL, type Target, detect, filesOf, register, registered, unregister } from "./harness.ts";
+import { CLIENT, HARNESSES, LABEL, type Target, detect, filesOf, instructionsFileOf, register, registered, unregister } from "./harness.ts";
+import { INSTRUCTION_TEXT } from "./instructions.ts";
 import { runMcp } from "./mcp.ts";
 import { home } from "./profile.ts";
 import { runtimeDir } from "./runtime.ts";
@@ -126,6 +127,14 @@ async function setup() {
   out(`・書き換える前のファイルは「${".approval-box-backup"}」を付けて控えます。元に戻すには npx approval-box uninstall。\n`);
   if (!flag("yes") && !/^y(es)?$/i.test(await ask("続けますか？ [y/N] "))) { out("やめました。"); return; }
 
+  out("\nAIが毎回読む全体の指示に、次の一節を足すと、AIがApproval Boxを使うようになります（外す時は uninstall）。");
+  out(`  「${INSTRUCTION_TEXT}」`);
+  for (const target of targets) {
+    const file = instructionsFileOf(target);
+    out(`  ${LABEL[target]}: ${file ?? "ファイルからは読まないため、登録後に貼る場所を案内します"}`);
+  }
+  const instructions = !flag("no-instructions") && (flag("yes") || !/^n(o)?$/i.test(await ask("足しますか？ [Y/n] ")));
+
   const cli = installRuntime();
   const token = option("token") ?? (config?.server === server ? config?.token : undefined);
   let connection: { token: string; connection_id?: string };
@@ -144,7 +153,7 @@ async function setup() {
 
   // ここからは複製した置き場のコードで登録する（hookに書かれるpathを固定するため）。
   const { spawnSync } = await import("node:child_process");
-  const result = spawnSync(process.execPath, [cli, "register", "--targets", targets.join(",")], { stdio: "inherit" });
+  const result = spawnSync(process.execPath, [cli, "register", "--targets", targets.join(","), ...(instructions ? ["--instructions"] : [])], { stdio: "inherit" });
   if (result.status !== 0) throw new Error("AIへの登録に失敗しました。");
   await api.call("PUT", "/connection/clients", { clients: targets.map((t) => CLIENT[t]), os: osName() });
   if (flag("no-test")) return;
@@ -155,10 +164,13 @@ async function registerTargets() {
   const targets = (option("targets") ?? "").split(",").filter(Boolean) as Target[];
   let failed = false;
   for (const target of targets) {
-    const result = await register(target);
+    const result = await register(target, { instructions: flag("instructions") });
     const extra = result.steer ? `（${STEER_LABEL[result.steer.split(":")[0] ?? ""] ?? `作業中の割り込み: ${result.steer}`}）` : "";
     out(`  ${LABEL[target]}: ${result.status === "registered" ? "登録しました" : `失敗 — ${result.detail}`}${extra}`);
     if (result.status === "failed") failed = true;
+  }
+  if (flag("instructions") && targets.includes("cursor")) {
+    out(`\nCursor は全体の指示をファイルから読みません。Cursor の Settings → Rules → User Rules に、次の一文を貼ってください。\n  ${INSTRUCTION_TEXT}`);
   }
   ensureDaemon();
   out("\n登録したAIは、開いている会話を閉じて開き直すとApproval Boxを使えます。");
@@ -196,7 +208,7 @@ async function status() {
   for (const target of HARNESSES) {
     if (!detect(target)) continue;
     const r = registered(target);
-    out(`  ${LABEL[target]}: MCP ${r.mcp ? "登録済み" : "未登録"}${r.hooks === null ? "" : ` / hook ${r.hooks ? "登録済み" : "未登録"}`}`);
+    out(`  ${LABEL[target]}: MCP ${r.mcp ? "登録済み" : "未登録"}${r.hooks === null ? "" : ` / hook ${r.hooks ? "登録済み" : "未登録"}`}${r.instructions === null ? "" : ` / 指示 ${r.instructions ? "あり" : "なし"}`}`);
   }
   const d = daemonStatus();
   out(`配送デーモン: ${d.running ? `動作中（pid ${d.pid}）` : "停止中（次の申請で起動します）"}`);
@@ -236,7 +248,7 @@ async function test() {
 function help() {
   out(`Approval Box ${VERSION}
 
-  npx approval-box setup [--server URL] [--token TOKEN] [--only claude,codex,cursor,grok] [--yes]
+  npx approval-box setup [--server URL] [--token TOKEN] [--only claude,codex,cursor,grok] [--no-instructions] [--yes]
       AIにApproval Boxを登録し、この端末をアカウントに結び、セットアップ確認まで行う
   npx approval-box test       接続テスト（AIに「Approval Boxのsetup_testを実行して」と言って確かめる）
   npx approval-box status     つながり、登録、確認の状態

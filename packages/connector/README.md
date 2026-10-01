@@ -14,6 +14,8 @@ npx -y approval-box@latest setup
 
 1. `setup` finds the agents on this machine and registers Approval Box (MCP server and hooks). It shows the files it will change and keeps a backup (`*.approval-box-backup`) before writing.
    PCにあるAIを見つけて登録します。書き換えるファイルを先に見せ、控えを残してから書き換えます。
+   It also offers to add one short paragraph to each agent's global instructions (`~/.claude/CLAUDE.md`, `$CODEX_HOME/AGENTS.md`, `~/.grok/AGENTS.md`) so the agent also files decisions with `request_decision`. Cursor reads these from Settings → Rules → User Rules, so setup shows the text to paste. Skip with `--no-instructions`.
+   AIが毎回読む全体の指示に「判断が要る時は request_decision でも申請する」という一節を足すかを聞きます。Cursor は Settings → Rules → User Rules に貼る一文を案内します。足さない時は `--no-instructions`。
 2. Scan the QR code or enter the code in “Add device” in the app or web.
    画面のQRコードかコードを、アプリかWeb版の「端末を追加」で読み取ります。
 3. Tell your agent: `Approval Boxのsetup_testを実行して` (or “run Approval Box setup_test”). Answer the test request; when the answer reaches the agent, you are ready.

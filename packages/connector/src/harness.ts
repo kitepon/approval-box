@@ -4,6 +4,7 @@ import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { writeJsonFile } from "./config.ts";
+import { hasInstructions, removeInstructions, writeInstructions } from "./instructions.ts";
 import { MCP_SERVER, PROFILE } from "./profile.ts";
 import { runtimeEntry } from "./runtime.ts";
 
@@ -24,6 +25,14 @@ export function filesOf(target: Target): string[] {
   if (target === "cursor") return [join(cursorDir(), "mcp.json"), join(cursorDir(), "hooks.json"), cursorCliConfig()];
   if (target === "codex") return [join(codexHome(), "config.toml"), join(codexHome(), "hooks.json")];
   return [join(grokDir(), "config.toml")];
+}
+
+/** AIが毎回読む全体の指示ファイル。Cursor（CLI）は全体の指示をファイルから読まないので、設定画面のUser Rulesへ貼ってもらう。 */
+export function instructionsFileOf(target: Target): string | null {
+  if (target === "claude") return join(claudeDir(), "CLAUDE.md");
+  if (target === "codex") return join(codexHome(), "AGENTS.md");
+  if (target === "grok") return join(grokDir(), "AGENTS.md");
+  return null;
 }
 
 function onPath(command: string): string | null {
@@ -91,7 +100,11 @@ async function withCodexConfig<T>(fn: (request: (method: string, params: unknown
 
 export type RegisterResult = { target: Target; status: "registered" | "removed" | "failed"; detail?: string; steer?: string };
 
-export async function register(target: Target): Promise<RegisterResult> {
+export async function register(target: Target, options: { instructions?: boolean } = {}): Promise<RegisterResult> {
+  const file = instructionsFileOf(target);
+  if (options.instructions && file) {
+    try { writeInstructions(file); } catch (error) { return { target, status: "failed", detail: `${file}: ${(error as Error).message}` }; }
+  }
   const hook = (kind: "claude" | "cursor") => ({ command: stableNode(), script: runtimeEntry(kind) });
   try {
     if (target === "claude") {
@@ -135,6 +148,8 @@ export async function register(target: Target): Promise<RegisterResult> {
 
 export async function unregister(target: Target): Promise<RegisterResult> {
   try {
+    const file = instructionsFileOf(target);
+    if (file) removeInstructions(file);
     if (target === "claude") {
       if (existsSync(claudeJson())) setMcpJson(claudeJson(), null);
       steer.removeClaudeParentHooks(PROFILE, join(claudeDir(), "settings.json"));
@@ -160,7 +175,12 @@ export async function unregister(target: Target): Promise<RegisterResult> {
 }
 
 /** 登録が今も効いているか（doctor用）。 */
-export function registered(target: Target): { mcp: boolean; hooks: boolean | null; entry?: string } {
+export function registered(target: Target): { mcp: boolean; hooks: boolean | null; instructions: boolean | null; entry?: string } {
+  const file = instructionsFileOf(target);
+  return { ...registeredTools(target), instructions: file ? hasInstructions(file) : null };
+}
+
+function registeredTools(target: Target): { mcp: boolean; hooks: boolean | null; entry?: string } {
   const entryOf = (value: unknown) => ((value as { args?: string[] } | undefined)?.args ?? [])[0];
   if (target === "claude") {
     const entry = (readJson(claudeJson()).mcpServers as Record<string, unknown> | undefined)?.[MCP_SERVER];
