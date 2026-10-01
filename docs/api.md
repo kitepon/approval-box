@@ -1,4 +1,4 @@
-# Approval Box API（アプリ・Web版向け） v0.19
+# Approval Box API（アプリ・Web版向け） v0.20
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 
@@ -41,7 +41,7 @@ v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ�
 Decision {
   id: "K-1234",
   title: string,                 // 120字まで
-  context: string,               // プレーンテキスト。20,000字まで。Markdownとして描画しない。リンクは押した時に確認を挟む
+  context: string,               // プレーンテキスト。20,000字まで。Markdownとして描画しない。http・httpsのリンクは1回のタップで標準ブラウザに開く（確認を挟まない）。長押しでコピーできる
   options: [{ id: string, label: string }],   // 2〜6
   recommendation?: option_id,    // AIの推奨
   urgency: "low" | "normal" | "high",
@@ -241,6 +241,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.20 2026-10-01 クオの実機の指示「リンクを押した時に画面を挟まず、サイトを開いてほしい」: 背景のhttp・httpsのリンクは1回のタップで標準ブラウザに開く。行き先の確認画面はやめる（アプリ・Web版とも）。
 - v0.18 2026-10-01 クオの裁定: サンドボックス（審査・TestFlight・Xcode）とPlayの試験用購入は、セットアップ確認を待たずに購入できる。本物の購入は今までどおり。
 - v0.19 2026-10-01 音なしの更新（答えた・取り下げた等）も `apns-push-type: alert`・priority 10 で送る。backgroundではiOSが後回しにして、バッジが残った（クオの実機）。アプリも、一覧を読んだ時と答えた時に、自分で pending の件数をバッジに入れる。
 - v0.17 2026-10-01 クオの裁定: ログイン用のURL・コードを廃止。ログインはAppleかGoogleだけ。結ぶ・外す操作を廃止（v0.16 の `logins`・`DELETE /me/logins` は取り消し、`login` のまま）。`/auth/link` はAndroidのAppleログインから戻る一度きりのコード専用（`code_verifier` 必須）。`/me/personal-link` 廃止。

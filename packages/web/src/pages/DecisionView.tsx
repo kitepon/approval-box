@@ -11,7 +11,7 @@ function PlainText({ text }: { text: string }) {
   return (
     <div class="context">
       {parts.map((part, i) => i % 2 === 1
-        ? <a key={i} href={part} rel="noopener noreferrer" target="_blank" onClick={(e) => { if (!confirm(`次のページを開きます。\n${part}`)) e.preventDefault(); }}>{part}</a>
+        ? <a key={i} href={part} rel="noopener noreferrer" target="_blank">{part}</a>
         : <span key={i}>{part}</span>)}
     </div>
   );
