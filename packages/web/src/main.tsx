@@ -33,9 +33,14 @@ function LinkLogin({ code, onLogin }: { code: string; onLogin: () => void }) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     history.replaceState(null, "", "/login");
+    const had = getSession();
     api<{ session: string }>("POST", "/auth/link", { code }, { idempotent: false })
       .then((r) => { setSession(r.session); navigate("/"); onLogin(); })
-      .catch((e) => setError(e instanceof ApiError ? e.message : "ログインできませんでした。"));
+      .catch((e) => {
+        // 使い終わったリンクを開いても、このブラウザでログイン済みならそのまま受信へ進む。
+        if (had) { setSession(had); navigate("/"); onLogin(); return; }
+        setError(e instanceof ApiError ? e.message : "ログインできませんでした。");
+      });
   }, [code]);
   return (
     <section class="login">

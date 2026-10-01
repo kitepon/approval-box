@@ -139,3 +139,4 @@ input, textarea, select {
 .pairing dt { color: var(--muted); }
 .pairing dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 .login { padding-top: 10vh; }
+.copyable { word-break: break-all; display: inline-block; max-width: 100%; }

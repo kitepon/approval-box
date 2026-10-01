@@ -57,7 +57,34 @@ export class Accounts {
     return { url: `${publicUrl}/login#code=${code}`, expires_at: expires };
   }
 
+  /**
+   * 利用者ごとに固定のログインURL（何度でも使える。ブックマーク用）。作り直すと前のURLは使えなくなる。
+   * URLを知っていれば誰でもログインできるので、本人だけが持つ。値は保存しない（作った時に一度だけ返す）。
+   */
+  createPersonalLink(userId: string, publicUrl: string): { url: string; created_at: string } {
+    const key = secret("kpl");
+    const created = now();
+    run(this.db, "insert into personal_links (user_id, key_hash, created_at) values (?, ?, ?) on conflict(user_id) do update set key_hash = excluded.key_hash, created_at = excluded.created_at, last_used_at = null",
+      userId, hash(key), created);
+    return { url: `${publicUrl}/login#code=${key}`, created_at: created };
+  }
+
+  personalLink(userId: string) {
+    const row = get<{ created_at: string; last_used_at: string | null }>(this.db, "select created_at, last_used_at from personal_links where user_id = ?", userId);
+    return row ? { exists: true, created_at: row.created_at, last_used_at: row.last_used_at } : { exists: false };
+  }
+
+  revokePersonalLink(userId: string) {
+    run(this.db, "delete from personal_links where user_id = ?", userId);
+  }
+
   redeemLoginLink(code: string): { session: string; expires_at: string } {
+    if (code.startsWith("kpl_")) {
+      const row = get<{ user_id: string }>(this.db, "select user_id from personal_links where key_hash = ?", hash(code));
+      if (!row) throw new ApiError("unauthorized", "このログインのURLは使えません。作り直された可能性があります。");
+      run(this.db, "update personal_links set last_used_at = ? where user_id = ?", now(), row.user_id);
+      return this.issueSession(row.user_id, "personal-link");
+    }
     return tx(this.db, () => {
       const row = get<{ user_id: string; label: string | null; expires_at: string; used_at: string | null }>(this.db, "select user_id, label, expires_at, used_at from login_links where code_hash = ?", hash(code));
       if (!row || row.used_at || row.expires_at < now()) throw new ApiError("unauthorized", "このログインのリンクは使えません。期限切れか、もう使われています。");

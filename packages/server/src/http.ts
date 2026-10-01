@@ -140,6 +140,10 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   });
   v1.get("/tokens", (c) => c.json(accounts.tokens(c.get("userId"))));
   v1.delete("/tokens/:id", (c) => idempotent(c, services, c.get("userId"), () => { accounts.revokeToken(c.get("userId"), c.req.param("id")); return { ok: true }; }));
+  v1.get("/me/personal-link", (c) => c.json(accounts.personalLink(c.get("userId"))));
+  // URLは作った時に一度だけ返す。冪等の記録（返事の本文をDBに残す）には通さない。
+  v1.post("/me/personal-link", (c) => c.json(accounts.createPersonalLink(c.get("userId"), services.publicUrl)));
+  v1.delete("/me/personal-link", (c) => { accounts.revokePersonalLink(c.get("userId")); return c.json({ ok: true }); });
   v1.post("/devices", async (c) => {
     const input = await body(c, z.object({
       platform: z.enum(["ios", "android", "web"]),

@@ -184,3 +184,16 @@ test("通知の端末を登録でき、同じtokenは同じidになり、解除�
   assert.equal((await ctx.call("DELETE", `/v1/devices/${a.json.id}`, { token: ctx.session })).status, 200);
   assert.equal((await ctx.call("DELETE", `/v1/devices/${a.json.id}`, { token: ctx.session })).status, 404);
 });
+
+test("固定のログインURLは何度でも使え、作り直すと前のURLは使えない", async () => {
+  const ctx = setup();
+  const made = await ctx.call("POST", "/v1/me/personal-link", { token: ctx.session });
+  const code = made.json.url.split("#code=")[1];
+  for (let i = 0; i < 2; i++) assert.equal((await ctx.call("POST", "/v1/auth/link", { body: { code } })).status, 200);
+  assert.equal((await ctx.call("GET", "/v1/me/personal-link", { token: ctx.session })).json.exists, true);
+  const again = await ctx.call("POST", "/v1/me/personal-link", { token: ctx.session });
+  assert.equal((await ctx.call("POST", "/v1/auth/link", { body: { code } })).status, 401);
+  assert.equal((await ctx.call("POST", "/v1/auth/link", { body: { code: again.json.url.split("#code=")[1] } })).status, 200);
+  await ctx.call("DELETE", "/v1/me/personal-link", { token: ctx.session });
+  assert.equal((await ctx.call("GET", "/v1/me/personal-link", { token: ctx.session })).json.exists, false);
+});

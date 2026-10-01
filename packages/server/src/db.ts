@@ -32,6 +32,12 @@ create table if not exists devices (
   updated_at text not null,
   unique (user_id, push_key)
 );
+create table if not exists personal_links (
+  user_id text primary key references users(id) on delete cascade,
+  key_hash text not null unique,
+  created_at text not null,
+  last_used_at text
+);
 create table if not exists login_links (
   code_hash text primary key,
   user_id text not null references users(id) on delete cascade,

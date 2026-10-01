@@ -32,10 +32,12 @@ if (command === "admin") {
   } else if (sub === "login-link") {
     const userId = value && value !== "new" ? value : accounts.createUser();
     console.log(JSON.stringify({ user_id: userId, ...accounts.createLoginLink(userId, args[2] ?? "login-link", publicUrl) }, null, 2));
+  } else if (sub === "personal-link" && value) {
+    console.log(JSON.stringify({ user_id: value, ...accounts.createPersonalLink(value, publicUrl) }, null, 2));
   } else if (sub === "session" && value) {
     console.log(JSON.stringify(accounts.issueSession(value, "admin"), null, 2));
   } else {
-    console.error("usage: approval-box-server admin create-user [label] | admin session <user_id> | admin login-link <user_id|new> [label]");
+    console.error("usage: approval-box-server admin create-user [label] | admin session <user_id> | admin login-link <user_id|new> [label] | admin personal-link <user_id>");
     process.exit(2);
   }
   process.exit(0);

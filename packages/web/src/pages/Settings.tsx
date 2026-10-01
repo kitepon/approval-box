@@ -26,6 +26,18 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
     if (prompt("確認のため「削除」と入力してください") !== "削除") return;
     try { await api("DELETE", "/me"); setSession(null); onLogout(); } catch (e) { alert((e as Error).message); }
   }
+  const personal = useResource(() => api<{ exists: boolean; created_at?: string; last_used_at?: string | null }>("GET", "/me/personal-link"));
+  const [personalUrl, setPersonalUrl] = useState<string | null>(null);
+  async function makePersonal() {
+    if (personal.data?.exists && !confirm("作り直すと、前のURLでは入れなくなります。よろしいですか？")) return;
+    try { const r = await api<{ url: string }>("POST", "/me/personal-link", undefined, { idempotent: false }); setPersonalUrl(r.url); bump(); }
+    catch (e) { alert((e as Error).message); }
+  }
+  async function revokePersonal() {
+    if (!confirm("ログイン用のURLを無効にします。よろしいですか？")) return;
+    try { await api("DELETE", "/me/personal-link"); setPersonalUrl(null); bump(); } catch (e) { alert((e as Error).message); }
+  }
+
   async function logout() {
     try { await api("POST", "/auth/logout"); } catch { /* 期限切れでも続ける */ }
     setSession(null);
@@ -36,6 +48,19 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   return (
     <section>
       <h1>設定</h1>
+      <div class="panel">
+        <h2>ログイン用のURL</h2>
+        <p class="muted">ほかのブラウザやスマホで開くと、そのままログインできるあなた専用のURLです。ブックマークしておけば何度でも使えます。URLを知っている人は誰でもログインできるので、人に見せないでください。</p>
+        {personalUrl && (
+          <p><code class="copyable">{personalUrl}</code> <button onClick={() => navigator.clipboard?.writeText(personalUrl)}>コピー</button></p>
+        )}
+        {personalUrl && <p class="muted">このURLはいま一度だけ表示しています。ブックマークかコピーをしてください。</p>}
+        {!personalUrl && personal.data?.exists && <p class="muted">作成済み{personal.data.last_used_at ? `（最後に使った日時 ${new Date(personal.data.last_used_at).toLocaleString()}）` : ""}。URLを忘れた時は作り直してください。</p>}
+        <p>
+          <button class="primary" onClick={makePersonal}>{personal.data?.exists ? "作り直す" : "URLを作る"}</button>{" "}
+          {personal.data?.exists && <button onClick={revokePersonal}>無効にする</button>}
+        </p>
+      </div>
       {m && (
         <div class="panel">
           <h2>契約</h2>
