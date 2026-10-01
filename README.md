@@ -28,14 +28,31 @@ npx -y approval-box@latest setup
 
 ## 自分でサーバーを立てる
 
+Dockerで立てる場合（Web版も入っています）:
+
+```sh
+git clone https://github.com/kitepon/approval-box && cd approval-box
+PUBLIC_URL=https://Approval Boxを置くURL docker compose up -d --build
+docker compose exec server node server/dist/main.js admin login-link new   # 一度だけ使えるログインのリンク
+```
+
+Nodeで直接動かす場合:
+
 ```sh
 npm install && npm run build
 PUBLIC_URL=https://Approval Boxを置くURL node packages/server/dist/main.js
-node packages/server/dist/main.js admin create-user   # Web版にログインするキーを発行
+node packages/server/dist/main.js admin login-link new
+```
+
+ログインした後は、Web版の「設定」→「ログイン用のURL」で、ブックマークできる自分専用のURLを作れます。PCは次の1行でつなぎます。
+
+```sh
 npx -y approval-box@latest setup --server https://Approval Boxを置くURL
 ```
 
 自分で立てたサーバーは無料で、課金の仕組みは止まっています（`BILLING=off`）。iPhone・Androidアプリは公式サーバー専用です。自分のサーバーではWeb版をホーム画面に追加して使ってください。
+
+アプリ・Web版とサーバーの取り決めは [docs/api.md](docs/api.md) にあります。
 
 ## 開発
 
@@ -46,4 +63,4 @@ npm run build -w packages/connector
 node tools/e2e/parent-e2e.mjs claude-code  # 本物のAIで配送を確かめる（codex-cli・cursor-cli・grok-cli も）
 ```
 
-`parent-e2e.mjs` は試験用のフォルダの中だけにAIを登録し、利用者の設定には触れません。`approval-box setup` を試す時は、使い捨てのHOMEに加えて `CODEX_HOME`・`GROK_HOME`・`CLAUDE_CONFIG_DIR`・`CURSOR_HOME` も使い捨て側へ向けてください。
+`parent-e2e.mjs` は試験用のフォルダの中だけにAIを登録し、利用者の設定には触れません。`npx approval-box setup` を試す時は、使い捨てのHOMEに加えて `CODEX_HOME`・`GROK_HOME`・`CLAUDE_CONFIG_DIR`・`CURSOR_HOME` も使い捨て側へ向けてください。
