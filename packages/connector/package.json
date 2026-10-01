@@ -41,5 +41,13 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kitepon/approval-box.git",
+    "directory": "packages/connector"
+  },
+  "bugs": {
+    "url": "https://github.com/kitepon/approval-box/issues"
   }
 }
