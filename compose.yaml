@@ -1,0 +1,21 @@
+# セルフホスト用。PUBLIC_URL を自分の公開URLに変える。
+# 最初の管理者: docker compose exec server node server/dist/main.js admin create-user
+services:
+  server:
+    build: .
+    image: approval-box:local
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8787}
+      BILLING: ${BILLING:-off}
+    ports:
+      - "${BIND:-127.0.0.1}:${HOST_PORT:-8787}:8787"
+    volumes:
+      - data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+volumes:
+  data:
