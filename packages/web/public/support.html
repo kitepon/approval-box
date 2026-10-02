@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>サポート | Approval Box</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/legal.css">
+</head>
+<body>
+<main>
+<h1>サポート</h1>
+<p class="muted">Approval Box</p>
+<nav class="lang"><a href="#en">English</a> · <a href="/privacy">プライバシーポリシー</a></nav>
+
+<p>Approval Box は、AI（Claude Code・Codex・Cursor・Grok）が利用者の判断・承認・操作を求める時に、その申請をスマホに集めて答えるためのアプリです。答えは、申請したAIの会話へ自動で届きます。</p>
+
+<h2>はじめかた</h2>
+<p>使うには、PC（macOS・Windows・Linux）に Node.js 20 以上と、Claude Code・Codex・Cursor・Grok のどれか1つが要ります。</p>
+<ol>
+<li>アプリを開いて、Apple（iPhone）または Google（Android）でログインします。</li>
+<li>PCで次のコマンドを実行します。<br><code>npx -y approval-box@latest setup</code></li>
+<li>PCに出るQRコードを、アプリの「接続」→「端末を追加」で読みます（コードの入力でも結べます）。</li>
+<li>PCのAIを開いて「Approval Boxのsetup_testを実行して」と言います。アプリにテストの申請が届くので、答えます。答えがAIに届けば、準備は終わりです。</li>
+</ol>
+
+<h2>よくある質問</h2>
+<h3>申請が届かない</h3>
+<p>PCで <code>npx approval-box doctor</code> を実行すると、原因と直し方を表示します。AIを開いたままだった時は、会話を開き直してください。</p>
+<h3>答えがAIに届かない</h3>
+<p>既決の一覧に「届いたか不明」と出た時は、その申請の「再開の一言」をコピーして、AIの会話に貼ってください。</p>
+<h3>使うのをやめたい</h3>
+<p>PCで <code>npx approval-box uninstall</code> を実行すると、AIへの登録を外し、端末の接続を解除します。アカウントは、アプリの「設定」から削除できます。</p>
+
+<h2>お問い合わせ</h2>
+<p>GitHubのIssues（<a href="https://github.com/kitepon/approval-box/issues">https://github.com/kitepon/approval-box/issues</a>）へお寄せください。Issuesは公開されるので、個人の情報は書かないでください。</p>
+<p class="muted">運営: kitepon.dev</p>
+
+<section lang="en" id="en">
+<h1>Support</h1>
+<p>Approval Box collects requests from AI agents (Claude Code, Codex, Cursor, Grok) that need your decision, approval or action, and lets you answer them from your phone. Your answer is delivered back to the AI's conversation automatically.</p>
+<h2>Getting started</h2>
+<p>You need a computer (macOS, Windows or Linux) with Node.js 20 or later and one of Claude Code, Codex, Cursor or Grok.</p>
+<ol>
+<li>Open the app and sign in with Apple (iPhone) or Google (Android).</li>
+<li>On your computer, run <code>npx -y approval-box@latest setup</code>.</li>
+<li>Scan the QR code shown on your computer from Connections → Add computer in the app (or enter the code).</li>
+<li>Open your AI and say "Approval Boxのsetup_testを実行して" (run Approval Box setup_test). Answer the test request that arrives in the app. Setup is complete when the answer reaches the AI.</li>
+</ol>
+<h2>FAQ</h2>
+<h3>Requests don't arrive</h3>
+<p>Run <code>npx approval-box doctor</code> on your computer to see the cause and how to fix it. If your AI was already open, start a new conversation.</p>
+<h3>Answers don't reach the AI</h3>
+<p>If a request shows "delivery unknown", copy its resume phrase and paste it into the AI's conversation.</p>
+<h3>Stop using Approval Box</h3>
+<p>Run <code>npx approval-box uninstall</code> on your computer to remove it from your AI tools and disconnect the computer. You can delete your account in Settings in the app.</p>
+<h2>Contact</h2>
+<p>Open an issue on GitHub: <a href="https://github.com/kitepon/approval-box/issues">https://github.com/kitepon/approval-box/issues</a>. Issues are public, so do not include personal information.</p>
+<p class="muted">Operated by kitepon.dev</p>
+</section>
+</main>
+</body>
+</html>
