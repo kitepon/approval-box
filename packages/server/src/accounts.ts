@@ -9,6 +9,11 @@ const SESSION_DAYS = 90;
 const PAIRING_MINUTES = 10;
 const LOGIN_LINK_MINUTES = 15;
 
+/** 期限を過ぎた契約は、更新の知らせが来るまで切れたものとして扱う。 */
+function effectivePlan(user: { plan: string; plan_expires_at: string | null }): string {
+  return user.plan === "active" && user.plan_expires_at && user.plan_expires_at <= new Date().toISOString() ? "expired" : user.plan;
+}
+
 type UserRow = { id: string; created_at: string; setup_verified_at: string | null; retention_days: number; plan: string; plan_expires_at: string | null; store: string | null };
 type ConnectionRow = { id: string; user_id: string; kind: string; label: string; os: string | null; clients: string; created_at: string; last_seen_at: string | null; revoked_at: string | null };
 type PairingRow = { id: string; code: string; poll_secret_hash: string; device_name: string; os: string | null; clients: string; status: string; user_id: string | null; connection_id: string | null; token: string | null; created_at: string; expires_at: string };
@@ -130,7 +135,7 @@ export class Accounts {
       }
     }
     // セルフホスト（課金なし）は全員を契約中として扱う。
-    const plan = this.billing === "off" ? "active" : user.plan;
+    const plan = this.billing === "off" ? "active" : effectivePlan(user);
     const login = get<{ provider: string }>(this.db, "select provider from identities where user_id = ? order by created_at", userId);
     return {
       user_id: user.id,
@@ -156,7 +161,12 @@ export class Accounts {
   assertCanUse(userId: string) {
     if (this.billing === "off") return;
     const user = get<UserRow>(this.db, "select * from users where id = ?", userId)!;
-    if (user.plan === "expired") throw new ApiError("subscription_expired", "Approval Boxの契約が切れています。アプリかWeb版の契約画面から更新してください。");
+    if (effectivePlan(user) === "expired") throw new ApiError("subscription_expired", "Approval Boxの契約が切れています。アプリかWeb版の契約画面から更新してください。");
+  }
+
+  /** ストアで照合した契約を反映する。 */
+  setPlan(userId: string, plan: "active" | "expired", expiresAt: string | null, store: "app_store" | "google_play" | "web") {
+    run(this.db, "update users set plan = ?, plan_expires_at = ?, store = ? where id = ?", plan, expiresAt, store, userId);
   }
 
   assertSetupVerified(userId: string) {

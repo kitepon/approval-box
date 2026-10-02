@@ -17,6 +17,7 @@ WORKDIR /app
 COPY --from=build /src/node_modules ./node_modules
 COPY --from=build /src/packages/server/package.json ./server/package.json
 COPY --from=build /src/packages/server/dist ./server/dist
+COPY --from=build /src/packages/server/certs ./server/certs
 COPY --from=build /src/packages/web/dist ./web
 RUN mkdir -p /data && chown node:node /data
 USER node

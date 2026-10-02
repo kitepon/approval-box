@@ -9,6 +9,7 @@ import { Accounts, type BillingMode } from "./accounts.ts";
 import { openDb } from "./db.ts";
 import { Decisions } from "./decisions.ts";
 import { EventHub } from "./events.ts";
+import { AppStore, appleRootCertificates } from "./appstore.ts";
 import { createApp } from "./http.ts";
 
 const env = process.env;
@@ -48,7 +49,9 @@ function staticHandler(c: Context) {
   const path = decodeURIComponent(new URL(c.req.url).pathname);
   const file = resolve(webRoot, `.${path}`);
   const inside = file.startsWith(resolve(webRoot) + sep);
-  const target = inside && existsSync(file) && extname(file) ? file : join(webRoot, "index.html");
+  // /privacy・/support のような公開ページは、同じ名前の .html を返す（ログインもJSも要らない）。
+  const page = inside && !extname(file) && existsSync(`${file}.html`) ? `${file}.html` : null;
+  const target = page ?? (inside && existsSync(file) && extname(file) ? file : join(webRoot, "index.html"));
   const headers: Record<string, string> = { "content-type": types[extname(target)] ?? "application/octet-stream" };
   if (target.includes(`${sep}assets${sep}`)) headers["cache-control"] = "public, max-age=31536000, immutable";
   else headers["cache-control"] = "no-cache";
@@ -72,7 +75,15 @@ if (apnsKey && env.APNS_KEY_ID && env.APNS_TEAM_ID) {
   console.log(`approval-box-server: iPhoneへの通知を送ります（key ${env.APNS_KEY_ID}）`);
   new Notifier(db, events, apns.send);
 }
-const app = createApp({ db, accounts, decisions, events, publicUrl, appleAudiences, googleAudiences, webLogin }, { staticHandler });
+// App Storeの購入の照合。商品IDが無ければ受け付けない。本番の購入にはアプリのApple ID（数字）が要る。
+const appStoreProducts = (env.APPSTORE_PRODUCT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const appStore = appStoreProducts.length ? new AppStore(db, accounts, {
+  bundleId: env.APPSTORE_BUNDLE_ID ?? "dev.kitepon.approvalbox",
+  ...(env.APPSTORE_APP_APPLE_ID ? { appAppleId: Number(env.APPSTORE_APP_APPLE_ID) } : {}),
+  productIds: appStoreProducts,
+  rootCertificates: appleRootCertificates(env.APPLE_ROOT_CERTS ?? join(here, "..", "certs")),
+}) : undefined;
+const app = createApp({ db, accounts, decisions, events, publicUrl, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}) }, { staticHandler });
 
 setInterval(() => {
   decisions.purgeExpired();

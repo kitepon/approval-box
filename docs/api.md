@@ -1,4 +1,4 @@
-# Approval Box API（アプリ・Web版向け） v0.20
+# Approval Box API（アプリ・Web版向け） v0.21
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 
@@ -195,6 +195,9 @@ setup: {
 - 契約はアカウントに1つ。`/me` の `store` が契約した窓口を表す。`plan=active` で別の窓口の購入画面は出さない（「App Storeで契約中」のように出す）。
 - 購入に使う `appAccountToken`（iOS）・`obfuscatedAccountId`（Android）には `/me` の `user_id` を入れる。
 - 決済の検証はサーバーが行う。検証の窓口ができるまで `/me` は `trial` を返す。
+- `/billing/appstore/verify`（v0.21 実装）: 署名をAppleのルート証明書まで確かめ、商品（`dev.kitepon.approvalbox.monthly`）・Bundle ID・本番はアプリのApple IDを照らす。期限内で返金されていなければ `plan=active`・`expires_at`・`store=app_store`。断る時: 署名・商品・環境が違う → 400 `validation_failed`、`appAccountToken` が自分の `user_id` でない・同じ購入が別のアカウントに結ばれている → 409 `conflict`、本番の購入で確認前 → 409 `setup_not_verified`。
+  - 受け付ける環境は `Sandbox`（審査・TestFlight）と `Production` だけ。Xcodeの StoreKit 設定ファイルでの購入（`Xcode`）はAppleの署名でないので、サーバーは 400 で断る。Xcodeでの試しは画面までにする。
+  - 通知V2の受け口は `POST /v1/appstore/notifications`（ASCの本番・Sandboxの両方に登録）。更新・返金をここで反映する。期限を過ぎて更新の知らせが無ければ `/me` は `expired` を返す。
 
 ## エラー
 
@@ -241,6 +244,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.21 2026-10-02 `/billing/appstore/verify` と通知V2の受け口を実装（契約は変えていない）。断る時のエラーと、Xcode環境の購入はサーバーが受け付けないことを明記。
 - v0.20 2026-10-01 クオの実機の指示「リンクを押した時に画面を挟まず、サイトを開いてほしい」: 背景のhttp・httpsのリンクは1回のタップで標準ブラウザに開く。行き先の確認画面はやめる（アプリ・Web版とも）。
 - v0.18 2026-10-01 クオの裁定: サンドボックス（審査・TestFlight・Xcode）とPlayの試験用購入は、セットアップ確認を待たずに購入できる。本物の購入は今までどおり。
 - v0.19 2026-10-01 音なしの更新（答えた・取り下げた等）も `apns-push-type: alert`・priority 10 で送る。backgroundではiOSが後回しにして、バッジが残った（クオの実機）。アプリも、一覧を読んだ時と答えた時に、自分で pending の件数をバッジに入れる。

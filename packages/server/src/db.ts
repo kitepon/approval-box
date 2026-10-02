@@ -131,6 +131,15 @@ create table if not exists idempotency (
   created_at text not null,
   primary key (user_id, key)
 );
+create table if not exists appstore_subscriptions (
+  original_transaction_id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  environment text not null,
+  product_id text not null,
+  expires_at text,
+  revoked integer not null default 0,
+  updated_at text not null
+);
 create table if not exists request_checks (
   token_hash text primary key,
   connection_id text not null,

@@ -4,13 +4,14 @@ import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z, ZodError } from "zod";
 import type { Accounts } from "./accounts.ts";
+import type { AppStore } from "./appstore.ts";
 import { type Db, get, run } from "./db.ts";
 import { ApiError } from "./errors.ts";
 import type { EventHub, UserEvent } from "./events.ts";
 import { Decisions, amendSchema, answerSchema, createSchema } from "./decisions.ts";
 import { now } from "./ids.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string } };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; appStore?: AppStore; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string } };
 
 const STATUSES = ["pending", "held", "answered", "cancelled"] as const;
 /** アプリへ戻すURLのscheme（AndroidのCustom Tabsから戻る先）。 */
@@ -119,6 +120,13 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   });
   app.post("/v1/auth/google", signIn("google", services.googleAudiences ?? []));
 
+  // App Store Server Notifications V2（Appleのサーバーから。ログインは無く、署名で確かめる）。
+  app.post("/v1/appstore/notifications", async (c) => {
+    if (!services.appStore) throw new ApiError("not_found", "App Storeの照合は設定されていません。");
+    const input = await body(c, z.object({ signedPayload: z.string().min(1).max(100_000) }));
+    return c.json(await services.appStore.notification(input.signedPayload));
+  });
+
   // ブラウザで始めたAppleのログインから戻ったアプリが、一度きりのコードを session に替える（code_verifier 必須）。
   app.post("/v1/auth/link", async (c) => {
     const input = await body(c, z.object({ code: z.string().min(10).max(200), code_verifier: z.string().min(43).max(128) }));
@@ -211,7 +219,13 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   });
   v1.post("/auth/logout", (c) => { accounts.revokeSession(bearer(c)!); return c.json({ ok: true }); });
 
-  // 課金の窓口。ストアとStripeの照合はまだ無い。セットアップ確認の関門だけ先に効かせる。
+  v1.post("/billing/appstore/verify", async (c) => {
+    if (!services.appStore) throw new ApiError("internal", "App Storeの照合は設定されていません。");
+    const input = await body(c, z.object({ jws: z.string().min(1).max(100_000) }));
+    return c.json(await services.appStore.verifyPurchase(c.get("userId"), input.jws));
+  });
+
+  // Google Play・Stripeの照合はまだ無い。セットアップ確認の関門だけ先に効かせる。
   v1.post("/billing/:store/:action", (c) => {
     accounts.assertSetupVerified(c.get("userId"));
     throw new ApiError("internal", "課金の受付はまだ準備中です。");
