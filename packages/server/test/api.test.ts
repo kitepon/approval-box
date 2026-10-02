@@ -308,3 +308,12 @@ test("ブラウザで始めるAppleのログイン: callbackで確かめ、code_
   const s3 = await startAs();
   assert.equal((await callback({ state: s3.state, error: "user_cancelled_authorize" })).searchParams.get("error"), "cancelled");
 });
+
+test("確認を求める文に札と一覧が入る（0.1.6までのコネクタは文だけをAIに見せる）", async () => {
+  const ctx = setup();
+  const token = await paired(ctx);
+  const created = (await submit(ctx, token, request)).json.decision_id;
+  const first = await ctx.call("POST", "/connector/v1/decisions", { token, body: { ...request, title: "別の件" } });
+  assert.ok(first.json.error.message.includes(first.json.error.check_token));
+  assert.ok(first.json.error.message.includes(created));
+});

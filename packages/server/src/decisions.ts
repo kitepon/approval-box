@@ -292,9 +292,14 @@ export class Decisions {
     run(this.db, "insert into request_checks (token_hash, connection_id, created_at, expires_at) values (?, ?, ?, ?)",
       hash(token), conn.id, at.toISOString(), new Date(at.getTime() + CHECK_TTL_MS).toISOString());
     const head = input.check_token ? "確認の札が古いか、もう使われています。もう一度確かめてください。\n" : "";
+    const decisions = this.listMine(conn, input.route?.channel_id);
+    // 0.1.6までのコネクタは message だけをAIに見せる。一覧と札も message に入れ、古いコネクタのAIも出し直せるようにする。
+    const list = decisions.length
+      ? decisions.map((d) => `- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version}${d.answer ? " 答えあり" : ""}`).join("\n")
+      : "（この端末から出した申請はありません）";
     throw new ApiError("confirm_required",
-      `${head}申請はまだ受け付けていません。下はこの端末から出した申請の一覧です。直す申請があれば amend_decision、要らなくなった申請があれば cancel_decision を先に済ませてください。答えが出ている申請は、その答えに従ってください。問題が無ければ、同じ申請に check_token を付けて出し直してください。`,
-      { check_token: token, decisions: this.listMine(conn, input.route?.channel_id) });
+      `${head}申請はまだ受け付けていません。下はこの端末から出した申請の一覧です。直す申請があれば amend_decision、要らなくなった申請があれば cancel_decision を先に済ませてください。答えが出ている申請は、その答えに従ってください。問題が無ければ、同じ申請に check_token: "${token}" を付けて出し直してください。\n${list}`,
+      { check_token: token, decisions });
   }
 
   private checkUsable(conn: Connection, token: string) {
