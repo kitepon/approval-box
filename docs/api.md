@@ -1,10 +1,10 @@
-# Approval Box API（アプリ・Web版向け） v0.21
+# Approval Box API（アプリ・Web版向け） v0.22
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 
 2026-10-01 ラプラス起案。iPhone・Androidアプリ（ベル）とWeb版（ラプラス）が同じAPIを使う。正本はこのファイルで、変更はラプラスが行いベルへ知らせる。
 
-- 基点: `https://<host>/v1`。検証用は `https://approval-box.kitepon.dev/v1`（2026-10-01 公開。BILLING=off、ログインは開発用sessionだけ）
+- 基点: `https://<host>/v1`。公式サーバーは `https://approval-box.kitepon.dev/v1`（2026-10-01 公開。今はこの1台だけで、本番用は別に立てていない。2026-10-02 から BILLING=store、ログインはAppleとGoogle）
 - アプリは公式サーバー専用。接続先は焼き込み（検証用・本番の切り替えはビルド設定だけ）。利用者が接続先を変える設定は作らない。
 - 本文はJSON（UTF-8）、時刻はISO 8601（UTC、例 `2026-10-01T03:00:00Z`）。
 - 未知のフィールドは無視すること（サーバーは後方互換でフィールドを足す）。enumに未知の値が来たら「その他」として表示する。
@@ -31,7 +31,7 @@ v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ�
     4. Appleは結果を `https://<host>/auth/apple/callback` へform_postする。サーバーはid_token（aud はServices ID、nonce はサーバーが入れた値）を確かめ、`approvalbox://auth/apple?code=kll_…&state=…` へ303で戻す。失敗は `approvalbox://auth/apple?error=<code>&state=…`。`<code>` は `cancelled`（利用者が取り消した）・`apple_error`・`unauthorized`（期限切れ・照合失敗）。
     5. アプリは戻った `state` が覚えたものと同じか確かめる。そのうえで `POST /auth/link` `{ code, code_verifier }`（両方必須）で session に替える。この code は、始めたアプリの `code_verifier` と合う時だけ、一度だけ使える（15分）。利用者が手で入れるものではない。
     - Androidの戻り先 `approvalbox://auth/apple` は、アプリのintent filterで受ける。
-- 検証期間は、ラプラスが発行する開発用sessionをそのまま使ってよい（ログイン画面は後から差し込める作りにする）。
+- 開発用session（`admin create-user`）は試験用。アプリの画面からは使わない。
 - 401 `unauthorized` を受けたらsessionを捨ててログインへ戻す。
 - `POST /auth/logout`（Bearer必須）→ `{ ok: true }`。そのsessionを失効させる。端末の通知を止めるなら、先に `DELETE /devices/{id}`。
 
@@ -194,7 +194,8 @@ setup: {
 
 - 契約はアカウントに1つ。`/me` の `store` が契約した窓口を表す。`plan=active` で別の窓口の購入画面は出さない（「App Storeで契約中」のように出す）。
 - 購入に使う `appAccountToken`（iOS）・`obfuscatedAccountId`（Android）には `/me` の `user_id` を入れる。
-- 決済の検証はサーバーが行う。検証の窓口ができるまで `/me` は `trial` を返す。
+- 決済の検証はサーバーが行う。App Storeは `/billing/appstore/verify` と通知V2で実装済み。Google Play（`/billing/play/verify`）とStripeは未実装で、呼ぶと404 `not_found`。
+- `trial` には今は期限が無い（`expires_at` を返さない）。無料体験の長さ・数え方はクオの裁定待ちで、決まったら `/me` に `trial_ends_at` を足す（フィールド追加なので、今のアプリは壊れない）。
 - `/billing/appstore/verify`（v0.21 実装）: 署名をAppleのルート証明書まで確かめ、商品（`dev.kitepon.approvalbox.monthly`）・Bundle ID・本番はアプリのApple IDを照らす。期限内で返金されていなければ `plan=active`・`expires_at`・`store=app_store`。断る時: 署名・商品・環境が違う → 400 `validation_failed`、`appAccountToken` が自分の `user_id` でない・同じ購入が別のアカウントに結ばれている → 409 `conflict`、本番の購入で確認前 → 409 `setup_not_verified`。
   - 受け付ける環境は `Sandbox`（審査・TestFlight）と `Production` だけ。Xcodeの StoreKit 設定ファイルでの購入（`Xcode`）はAppleの署名でないので、サーバーは 400 で断る。Xcodeでの試しは画面までにする。
   - 通知V2の受け口は `POST /v1/appstore/notifications`（ASCの本番・Sandboxの両方に登録）。更新・返金をここで反映する。期限を過ぎて更新の知らせが無ければ `/me` は `expired` を返す。
@@ -244,6 +245,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.22 2026-10-02 記述だけ直す（契約は変えていない）: 公式サーバーは1台で BILLING=store・Apple/Googleログイン。開発用sessionはアプリで使わない。`trial` は期限なし、体験の形が決まったら `trial_ends_at` を足す。
 - v0.21 2026-10-02 `/billing/appstore/verify` と通知V2の受け口を実装（契約は変えていない）。断る時のエラーと、Xcode環境の購入はサーバーが受け付けないことを明記。
 - v0.20 2026-10-01 クオの実機の指示「リンクを押した時に画面を挟まず、サイトを開いてほしい」: 背景のhttp・httpsのリンクは1回のタップで標準ブラウザに開く。行き先の確認画面はやめる（アプリ・Web版とも）。
 - v0.18 2026-10-01 クオの裁定: サンドボックス（審査・TestFlight・Xcode）とPlayの試験用購入は、セットアップ確認を待たずに購入できる。本物の購入は今までどおり。
