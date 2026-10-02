@@ -78,7 +78,7 @@ if (apnsKey && env.APNS_KEY_ID && env.APNS_TEAM_ID) {
 // App Storeの購入の照合。商品IDが無ければ受け付けない。本番の購入にはアプリのApple ID（数字）が要る。
 const appStoreProducts = (env.APPSTORE_PRODUCT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const appStore = appStoreProducts.length ? new AppStore(db, accounts, {
-  bundleId: env.APPSTORE_BUNDLE_ID ?? "dev.kitepon.approvalbox",
+  bundleId: env.APPSTORE_BUNDLE_ID || "dev.kitepon.approvalbox", // compose は未設定を空文字で渡す
   ...(env.APPSTORE_APP_APPLE_ID ? { appAppleId: Number(env.APPSTORE_APP_APPLE_ID) } : {}),
   productIds: appStoreProducts,
   rootCertificates: appleRootCertificates(env.APPLE_ROOT_CERTS ?? join(here, "..", "certs")),
