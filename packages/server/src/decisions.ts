@@ -7,6 +7,8 @@ import { decisionId, hash, normalizeTitle, now, secret, testCode, uuid } from ".
 export const URGENCIES = ["low", "normal", "high"] as const;
 export const AMEND_FIELDS = ["title", "context", "options", "recommendation", "urgency", "deadline"] as const;
 const OPEN = ["pending", "held"];
+/** サーバーが自分で答えを届ける道（GrokBotなど、call-bridge の通話で届ける）。 */
+export const SERVER_HARNESS = "callbridge";
 const CREATE_LIMIT_PER_HOUR = 60;
 const AMEND_LIMIT = 20;
 
@@ -247,7 +249,7 @@ export class Decisions {
     return rows.map((row) => this.toAi(row, routeChannel));
   }
 
-  create(conn: Connection, input: z.infer<typeof createSchema>, options: { test?: boolean } = {}) {
+  create(conn: Connection, input: z.infer<typeof createSchema>, options: { test?: boolean; via?: "connector" | "remote" } = {}) {
     if (!options.test) this.requireCheck(conn, input);
     return tx(this.db, () => {
       if (!options.test) this.useCheck(conn, input.check_token!);
@@ -268,10 +270,10 @@ export class Decisions {
       const at = now();
       run(this.db, `insert into decisions (id, user_id, connection_id, route, title, norm_title, context, options, recommendation, urgency, deadline,
           client, session_label, via, test, status, resume_phrase, distinct_reason, created_at, updated_at, version)
-          values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'connector', ?, 'pending', ?, ?, ?, ?, 1)`,
+          values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, 1)`,
         id, conn.user_id, conn.id, input.route ? JSON.stringify(input.route) : null, input.title, norm, input.context,
         JSON.stringify(input.options), input.recommendation ?? null, input.urgency, input.deadline ?? null,
-        input.client, input.session_label, options.test ? 1 : 0, `Approval Box ${id} の答えを確認して続けて`, input.distinct_reason ?? null, at, at);
+        input.client, input.session_label, options.via ?? "connector", options.test ? 1 : 0, `Approval Box ${id} の答えを確認して続けて`, input.distinct_reason ?? null, at, at);
       this.history(id, "created", "ai");
       const row = this.row(id)!;
       this.events.publish(conn.user_id, "decision.created", { decision_id: id, version: 1 });
@@ -362,7 +364,26 @@ export class Decisions {
 
   pendingDeliveries(conn: Connection) {
     return all<Row>(this.db, "select * from decisions where connection_id = ? and status = 'answered' and delivery = 'waiting' and route is not null order by updated_at", conn.id)
-      .map((row) => ({ decision_id: row.id, delivery_id: row.delivery_id!, route: JSON.parse(row.route!) as Route, text: row.delivery_text! }));
+      .map((row) => ({ decision_id: row.id, delivery_id: row.delivery_id!, route: JSON.parse(row.route!) as Route, text: row.delivery_text! }))
+      // サーバーが自分で届ける道（call-bridge）は、コネクタのデーモンへ渡さない。
+      .filter((item) => item.route.harness !== SERVER_HARNESS);
+  }
+
+  /** サーバーが自分で届ける配送待ち（route.harness = callbridge）。送り始めた印（sending）が付いたものは含めない。 */
+  serverDeliveries(connectionId: string) {
+    return all<Row>(this.db, "select * from decisions where connection_id = ? and status = 'answered' and delivery = 'waiting' and route is not null and delivery_detail is null order by updated_at", connectionId)
+      .map((row) => ({ decision_id: row.id, route: JSON.parse(row.route!) as Route, text: row.delivery_text! }))
+      .filter((item) => item.route.harness === SERVER_HARNESS);
+  }
+
+  /** 送り始めた印。送信の途中でサーバーが止まったら、届いたか分からないので送り直さない。 */
+  markSending(id: string) {
+    run(this.db, "update decisions set delivery_detail = 'sending' where id = ? and delivery = 'waiting'", id);
+  }
+
+  /** 前回の送信の途中で止まった配送。 */
+  interruptedServerDeliveries(connectionId: string) {
+    return all<{ id: string }>(this.db, "select id from decisions where connection_id = ? and status = 'answered' and delivery = 'waiting' and delivery_detail = 'sending'", connectionId).map((r) => r.id);
   }
 
   reportDelivery(conn: Connection, id: string, state: "delivered" | "unknown" | "failed", detail?: string) {

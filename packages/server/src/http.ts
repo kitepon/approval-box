@@ -10,8 +10,9 @@ import { ApiError } from "./errors.ts";
 import type { EventHub, UserEvent } from "./events.ts";
 import { Decisions, amendSchema, answerSchema, createSchema } from "./decisions.ts";
 import { now } from "./ids.ts";
+import { type RemoteMcpOptions, remoteMcpHandler } from "./remote-mcp.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; appStore?: AppStore; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string } };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; appStore?: AppStore; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions };
 
 const STATUSES = ["pending", "held", "answered", "cancelled"] as const;
 /** アプリへ戻すURLのscheme（AndroidのCustom Tabsから戻る先）。 */
@@ -322,6 +323,10 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   });
   conn.all("*", () => { throw new ApiError("not_found", "そのAPIはありません。"); });
   app.route("/connector/v1", conn);
+
+  // ================= リモートMCP（端末にコネクタを置けないAI）=================
+  app.post("/mcp", remoteMcpHandler(accounts, decisions, services.remoteMcp));
+  app.on(["GET", "DELETE"], "/mcp", (c) => c.json({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null }, 405, { allow: "POST" }));
 
   if (options.staticHandler) app.get("*", options.staticHandler);
   return app;

@@ -11,6 +11,7 @@ import { Decisions } from "./decisions.ts";
 import { EventHub } from "./events.ts";
 import { AppStore, appleRootCertificates } from "./appstore.ts";
 import { createApp } from "./http.ts";
+import { CallBridgeDeliverer, callBridgeSender, readHeaderFile } from "./callbridge.ts";
 
 const env = process.env;
 const dataDir = resolve(env.APPROVAL_BOX_DATA ?? "data");
@@ -83,7 +84,29 @@ const appStore = appStoreProducts.length ? new AppStore(db, accounts, {
   productIds: appStoreProducts,
   rootCertificates: appleRootCertificates(env.APPLE_ROOT_CERTS ?? join(here, "..", "certs")),
 }) : undefined;
-const app = createApp({ db, accounts, decisions, events, publicUrl, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}) }, { staticHandler });
+// 答えを call-bridge の通話で届ける接続（GrokBotなど）。ヘッダーのファイル（Authorization など）が読めなければ使わない。
+const callBridgeIds = (env.CALL_BRIDGE_CONNECTIONS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+let callBridgeConnections: Set<string> | undefined;
+if (callBridgeIds.length) {
+  const file = env.CALL_BRIDGE_HEADERS_FILE ?? "";
+  if (!file || !existsSync(file)) {
+    console.error(`approval-box-server: CALL_BRIDGE_HEADERS_FILE（${file || "未設定"}）が読めません。call-bridge での配送は使いません。`);
+  } else {
+    const send = callBridgeSender({
+      url: env.CALL_BRIDGE_URL || "https://call.kitepon.dev/mcp",
+      headers: readHeaderFile(file),
+      localId: env.CALL_BRIDGE_LOCAL_ID || "approval-box",
+      localLabel: env.CALL_BRIDGE_LOCAL_LABEL || "Approval Box",
+      memberSystem: env.CALL_BRIDGE_MEMBER_SYSTEM || "grokbot",
+    });
+    callBridgeConnections = new Set(callBridgeIds);
+    const deliverer = new CallBridgeDeliverer(db, decisions, events, send, callBridgeConnections);
+    setInterval(() => { void deliverer.sync(); }, 60_000).unref();
+    void deliverer.sync();
+    console.log(`approval-box-server: call-bridge で答えを届けます（接続 ${callBridgeIds.length}）`);
+  }
+}
+const app = createApp({ db, accounts, decisions, events, publicUrl, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(callBridgeConnections ? { remoteMcp: { callBridgeConnections } } : {}) }, { staticHandler });
 
 setInterval(() => {
   decisions.purgeExpired();
