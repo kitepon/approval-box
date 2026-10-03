@@ -39,7 +39,14 @@ export class Api {
       throw new ServerError(0, "network", `Approval Boxサーバー（${this.server}）につながりません: ${(error as Error).message}`, {});
     }
     const text = await response.text();
-    const json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    let json: Record<string, unknown>;
+    try {
+      json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    } catch {
+      // 前段（Cloudflare・リバースプロキシ）のエラーページなど。サーバーの応答ではないので、届かなかったものとして伝える。
+      throw new ServerError(response.status, "unreachable",
+        `Approval Boxサーバーから正しい応答がありませんでした（HTTP ${response.status}）。サーバーが一時的に止まっている可能性があります。少し待ってから同じ操作をやり直してください。申請が作られたか気になる時は list_my_decisions で確かめられます。`, {});
+    }
     if (!response.ok) {
       const error = (json.error ?? {}) as { code?: string; message?: string };
       throw new ServerError(response.status, error.code ?? "internal", error.message ?? `HTTP ${response.status}`, error as Record<string, unknown>);
