@@ -95,6 +95,7 @@ if (callBridgeIds.length) {
     const send = callBridgeSender({
       url: env.CALL_BRIDGE_URL || "https://call.kitepon.dev/mcp",
       headers: readHeaderFile(file),
+      localSystem: env.CALL_BRIDGE_LOCAL_SYSTEM || "local",
       localId: env.CALL_BRIDGE_LOCAL_ID || "approval-box",
       localLabel: env.CALL_BRIDGE_LOCAL_LABEL || "Approval Box",
       memberSystem: env.CALL_BRIDGE_MEMBER_SYSTEM || "grokbot",

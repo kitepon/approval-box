@@ -16,6 +16,8 @@ export type CallBridgeConfig = {
   url: string;
   /** 送るHTTPヘッダー（Authorization など）。 */
   headers: Record<string, string>;
+  /** 発信元の所属（call-bridge のトークンに結び付いた system。Approval Box は local）。 */
+  localSystem: string;
   localId: string;
   localLabel: string;
   memberSystem: string;
@@ -49,7 +51,7 @@ export function callBridgeSender(config: CallBridgeConfig): CallSender {
       await client.connect(transport);
       const opened = await client.callTool({
         name: "call_open",
-        arguments: { local_id: config.localId, local_label: config.localLabel, member_name: memberId, member_system: config.memberSystem, purpose: `Approval Box ${decisionId} の答え` },
+        arguments: { local_system: config.localSystem, local_id: config.localId, local_label: config.localLabel, member_name: memberId, member_system: config.memberSystem, purpose: `Approval Box ${decisionId} の答え` },
       }) as ToolResult;
       const open = payload(opened);
       const sessionId = typeof open.session_id === "string" ? open.session_id : undefined;
