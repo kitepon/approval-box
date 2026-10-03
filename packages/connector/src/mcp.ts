@@ -5,6 +5,7 @@ import * as steer from "aiterm-steer-delivery";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { Api, ServerError } from "./api.ts";
+import { type AttachmentMeta, saveAttachment } from "./attachments.ts";
 import { requireConfig, writeJsonFile } from "./config.ts";
 import { ensureDaemon } from "./daemon.ts";
 import { runtimeEntry } from "./runtime.ts";
@@ -91,6 +92,11 @@ const TOOLS = [
     inputSchema: { type: "object", properties: { decision_id: { type: "string" } }, required: ["decision_id"], additionalProperties: false },
   },
   {
+    name: "get_attachment",
+    description: "利用者が答えに付けた添付（画像・書類）を取る。この端末に保存して場所を返し、画像はそのまま見られる形でも返す。attachment_id は届いた答えか get_decision の answer.attachments にある。",
+    inputSchema: { type: "object", properties: { decision_id: { type: "string" }, attachment_id: { type: "string" } }, required: ["decision_id", "attachment_id"], additionalProperties: false },
+  },
+  {
     name: "setup_test",
     description: "Approval Boxの接続テスト（セットアップ確認）を始める。利用者に「Approval Boxのsetup_testを実行して」「Approval Boxのテストをして」「接続テストをして」と言われたら、他の方法を調べずにこのtoolを呼ぶ。Start the Approval Box connection test when the user says \"test Approval Box\". テストの申請が利用者に届き、答えがこの会話へ届く。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
@@ -101,6 +107,9 @@ const TOOLS = [
     inputSchema: { type: "object", properties: { decision_id: { type: "string" }, code: { type: "string" } }, required: ["decision_id", "code"], additionalProperties: false },
   },
 ];
+
+const VIEWABLE_IMAGES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const MAX_INLINE_IMAGE = 5 * 1024 * 1024;
 
 // ---- 親の会話ごとのchannel ----
 
@@ -261,6 +270,22 @@ export async function runMcp() {
         if (decision.status === "answered" && decision.delivery === "waiting") decision = await api.call("POST", `/decisions/${id}/fetched`);
         const head = decision.answer_text ? String(decision.answer_text) : `${decision.decision_id}「${decision.title}」 status=${decision.status}（まだ答えはありません。届くまで待って呼び直さないでください）`;
         return text(`${head}\n\n${JSON.stringify(decision)}`, decision);
+      }
+      if (name === "get_attachment") {
+        const decisionId = String(args.decision_id);
+        const decision = await api.call("GET", `/decisions/${encodeURIComponent(decisionId)}`);
+        const list = ((decision.answer as { attachments?: AttachmentMeta[] } | undefined)?.attachments) ?? [];
+        const index = list.findIndex((a) => a.id === args.attachment_id);
+        if (index < 0) return text(`Approval Box: ${decisionId} の答えに、その添付はありません。get_decision の answer.attachments を確かめてください。`, { error: "not_found" }, true);
+        const meta = list[index]!;
+        const path = await saveAttachment(api, decisionId, meta, index);
+        const head = `${decisionId} の添付 ${index + 1}: ${meta.name}（${meta.content_type}、${meta.size}バイト）を保存しました: ${path}`;
+        const structured = { decision_id: decisionId, attachment: meta, path };
+        // モデルがそのまま見られる画像は、中身も返す（大きすぎる画像は場所だけ）。
+        if (VIEWABLE_IMAGES.includes(meta.content_type) && meta.size <= MAX_INLINE_IMAGE) {
+          return { content: [{ type: "text" as const, text: head }, { type: "image" as const, data: readFileSync(path).toString("base64"), mimeType: meta.content_type }], structuredContent: structured };
+        }
+        return text(head, structured);
       }
       if (name === "setup_test") {
         const channelId = await channelFor(harness, clientName, request.params._meta);

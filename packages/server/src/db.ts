@@ -140,6 +140,21 @@ create table if not exists appstore_subscriptions (
   revoked integer not null default 0,
   updated_at text not null
 );
+create table if not exists attachments (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  decision_id text not null references decisions(id) on delete cascade,
+  name text not null,
+  content_type text not null,
+  kind text not null,
+  size integer not null,
+  sha256 text not null,
+  idem_key text,
+  position integer,
+  created_at text not null,
+  unique (user_id, idem_key)
+);
+create index if not exists attachments_decision on attachments(decision_id, position);
 create table if not exists request_checks (
   token_hash text primary key,
   connection_id text not null,

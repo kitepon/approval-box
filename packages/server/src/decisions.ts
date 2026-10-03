@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { type Attachment, MAX_ANSWER_BYTES, MAX_PER_ANSWER, formatBytes } from "./attachments.ts";
 import { type Db, all, get, run, tx } from "./db.ts";
 import { ApiError } from "./errors.ts";
 import type { EventHub } from "./events.ts";
@@ -14,7 +15,7 @@ const AMEND_LIMIT = 20;
 
 export type Option = { id: string; label: string };
 export type Route = { channel_id: string; harness: string };
-export type Answer = { option_id?: string; text?: string; answered_at: string };
+export type Answer = { option_id?: string; text?: string; attachments?: Attachment[]; answered_at: string };
 
 type Row = {
   id: string; user_id: string; connection_id: string | null; route: string | null;
@@ -61,8 +62,9 @@ export const amendSchema = z.object({
 export const answerSchema = z.object({
   option_id: z.string().optional(),
   text: z.string().trim().max(5000).optional(),
+  attachment_ids: z.array(z.string().min(1).max(100)).max(MAX_PER_ANSWER, `添付は${MAX_PER_ANSWER}ファイルまでです`).optional(),
   version: z.number().int().positive(),
-}).refine((body) => body.option_id || body.text, "選択肢か文のどちらかが必要です");
+}).refine((body) => body.option_id || body.text || body.attachment_ids?.length, "選択肢・文・添付のどれかが必要です");
 
 const CHECK_TTL_MS = 30 * 60_000;
 
@@ -174,7 +176,8 @@ export class Decisions {
       const options = JSON.parse(row.options) as Option[];
       const option = body.option_id ? options.find((o) => o.id === body.option_id) : undefined;
       if (body.option_id && !option) throw new ApiError("validation_failed", "その選択肢はありません。");
-      const answer: Answer = { ...(option ? { option_id: option.id } : {}), ...(body.text ? { text: body.text } : {}), answered_at: now() };
+      const attachments = this.bindAttachments(row, body.attachment_ids ?? []);
+      const answer: Answer = { ...(option ? { option_id: option.id } : {}), ...(body.text ? { text: body.text } : {}), ...(attachments.length ? { attachments } : {}), answered_at: now() };
       const check = row.test ? get<{ code: string }>(this.db, "select code from setup_checks where decision_id = ?", row.id) : undefined;
       const text = deliveryText(row, answer, option, check?.code);
       run(this.db, "update decisions set status = 'answered', answer = ?, delivery = 'waiting', delivery_id = ?, delivery_text = ?, delivery_detail = null, updated_at = ?, version = version + 1 where id = ?",
@@ -187,6 +190,22 @@ export class Decisions {
       if (updated.connection_id) this.events.notifyConnection(updated.connection_id);
       return this.toApi(updated);
     });
+  }
+
+  /**
+   * 下書きの添付を答えに結ぶ（answer と同じ取引の中で呼ぶ）。全部がこの申請の、まだ結ばれていない下書きの時だけ結ぶ。
+   * 結ばなかった下書きは消す（ファイルは Attachments.gc が消す）。
+   */
+  private bindAttachments(row: Row, ids: string[]): Attachment[] {
+    if (new Set(ids).size !== ids.length) throw new ApiError("validation_failed", "同じ添付が2回並んでいます。");
+    const found = ids.map((aid) => get<Attachment & { position: number | null }>(this.db,
+      "select id, name, content_type, kind, size, sha256, created_at, position from attachments where id = ? and decision_id = ? and user_id = ?", aid, row.id, row.user_id));
+    if (found.some((a) => !a || a.position !== null)) throw new ApiError("validation_failed", "使えない添付があります。もう一度付け直してください。");
+    const list = found.map((a) => { const { position: _, ...rest } = a!; return rest; });
+    if (list.reduce((n, a) => n + a.size, 0) > MAX_ANSWER_BYTES) throw new ApiError("too_large", `1つの答えの添付は合計${formatBytes(MAX_ANSWER_BYTES)}までです。`);
+    list.forEach((a, i) => run(this.db, "update attachments set position = ? where id = ?", i, a.id));
+    run(this.db, "delete from attachments where decision_id = ? and position is null", row.id);
+    return list;
   }
 
   setHold(userId: string, id: string, hold: boolean) {
@@ -341,6 +360,7 @@ export class Decisions {
       const row = this.forConnection(conn, id);
       this.assertOpen(row, "ai");
       run(this.db, "update decisions set status = 'cancelled', cancel_reason = ?, updated_at = ?, version = version + 1 where id = ?", reason, now(), row.id);
+      run(this.db, "delete from attachments where decision_id = ? and position is null", row.id);
       this.history(row.id, "cancelled", "ai", reason);
       if (row.test) run(this.db, "update setup_checks set status = 'untested', decision_id = null where decision_id = ?", row.id);
       const updated = this.row(row.id)!;
@@ -364,7 +384,11 @@ export class Decisions {
 
   pendingDeliveries(conn: Connection) {
     return all<Row>(this.db, "select * from decisions where connection_id = ? and status = 'answered' and delivery = 'waiting' and route is not null order by updated_at", conn.id)
-      .map((row) => ({ decision_id: row.id, delivery_id: row.delivery_id!, route: JSON.parse(row.route!) as Route, text: row.delivery_text! }))
+      .map((row) => {
+        // 0.1.9からのコネクタは、配送の前に添付を端末へ保存し、その場所を文に書き足す。
+        const attachments = (JSON.parse(row.answer!) as Answer).attachments;
+        return { decision_id: row.id, delivery_id: row.delivery_id!, route: JSON.parse(row.route!) as Route, text: row.delivery_text!, ...(attachments?.length ? { attachments } : {}) };
+      })
       // サーバーが自分で届ける道（call-bridge）は、コネクタのデーモンへ渡さない。
       .filter((item) => item.route.harness !== SERVER_HARNESS);
   }
@@ -411,6 +435,7 @@ export class Decisions {
         const old = this.row(previous.decision_id);
         if (old && OPEN.includes(old.status)) {
           run(this.db, "update decisions set status = 'cancelled', cancel_reason = ?, updated_at = ?, version = version + 1 where id = ?", "新しいテストに置き換えた", now(), old.id);
+          run(this.db, "delete from attachments where decision_id = ? and position is null", old.id);
           this.history(old.id, "cancelled", "ai", "新しいテストに置き換えた");
           this.changed(this.row(old.id)!, "cancelled");
         }
@@ -464,11 +489,16 @@ function deliveryText(row: Row, answer: Answer, option: Option | undefined, code
   const lines = [`[Approval Box] あなたが request_decision で出した申請 ${row.id}「${row.title}」に、利用者が答えました。`];
   if (option) lines.push(`答え: ${option.label}（option_id=${option.id}）`);
   if (answer.text) lines.push(option ? `添え書き: ${answer.text}` : `答え（文）: ${answer.text}`);
+  if (answer.attachments?.length) {
+    lines.push(`添付 ${answer.attachments.length}件（Approval Boxの get_attachment に decision_id="${row.id}" と attachment_id を渡すと取れます）:`);
+    answer.attachments.forEach((a, i) => lines.push(`${i + 1}. ${a.name}（${a.content_type}、${formatBytes(a.size)}） attachment_id=${a.id}`));
+  }
   if (code) {
     lines.push("", `これはあなたが setup_test で始めた接続テストです。確認コード: ${code}`,
       `Approval Boxの confirm_setup_test を decision_id="${row.id}", code="${code}" で呼んでください。それでセットアップ確認が終わります。`);
   } else {
-    lines.push("", option || !answer.text ? "この答えに従って作業を続けてください。" : "この指示に従って作業を続けてください。");
+    const next = option ? "この答えに従って作業を続けてください。" : answer.text ? "この指示に従って作業を続けてください。" : "添付を確かめて作業を続けてください。";
+    lines.push("", next);
   }
   return lines.join("\n");
 }

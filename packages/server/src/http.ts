@@ -5,6 +5,7 @@ import { streamSSE } from "hono/streaming";
 import { z, ZodError } from "zod";
 import type { Accounts } from "./accounts.ts";
 import type { AppStore } from "./appstore.ts";
+import { type Attachment, type Attachments, MAX_FILE_BYTES, contentDisposition, mediaType, readLimited } from "./attachments.ts";
 import { type Db, get, run } from "./db.ts";
 import { ApiError } from "./errors.ts";
 import type { EventHub, UserEvent } from "./events.ts";
@@ -12,7 +13,7 @@ import { Decisions, amendSchema, answerSchema, createSchema } from "./decisions.
 import { now } from "./ids.ts";
 import { type RemoteMcpOptions, remoteMcpHandler } from "./remote-mcp.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; appStore?: AppStore; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; attachments?: Attachments; appStore?: AppStore; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions };
 
 const STATUSES = ["pending", "held", "answered", "cancelled"] as const;
 /** アプリへ戻すURLのscheme（AndroidのCustom Tabsから戻る先）。 */
@@ -58,8 +59,27 @@ async function idempotent(c: Context, services: Services, userId: string, fn: ()
   return c.body(text, status as 200, { "content-type": "application/json" });
 }
 
+/** 添付の中身を返す。ブラウザで開かれても実行されないよう、ダウンロード扱いにして中身の推測を止める。 */
+function fileResponse(c: Context, meta: Attachment, data: Buffer) {
+  return c.body(new Uint8Array(data), 200, {
+    "content-type": meta.content_type,
+    "content-length": String(data.length),
+    "content-disposition": contentDisposition(meta.name),
+    "etag": `"${meta.sha256}"`,
+    "cache-control": "private, no-store",
+    "x-content-type-options": "nosniff",
+    "content-security-policy": "default-src 'none'; sandbox",
+  });
+}
+
 export function createApp(services: Services, options: { staticHandler?: (c: Context) => Response | Promise<Response> } = {}) {
   const { accounts, decisions, events } = services;
+  const files = () => {
+    if (!services.attachments) throw new ApiError("not_found", "このサーバーでは添付を使えません。");
+    return services.attachments;
+  };
+  /** 消した行のファイルを片付ける。失敗しても操作そのものは済んでいるので、記録だけ残す。 */
+  const sweep = () => { try { services.attachments?.gc(); } catch (error) { console.error(error); } };
   const app = new Hono();
 
   app.onError((error, c) => {
@@ -147,15 +167,32 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     const cursor = Math.max(Number(c.req.query("cursor") ?? 0) || 0, 0);
     return c.json(decisions.list(c.get("userId"), statuses, limit, cursor));
   });
-  v1.delete("/decisions", (c) => {
+  v1.delete("/decisions", async (c) => {
     const statuses = (c.req.query("status") ?? "").split(",").sort().join(",");
     if (statuses !== "answered,cancelled") throw new ApiError("validation_failed", "消せるのは既決だけです（status=answered,cancelled）。");
-    return idempotent(c, services, c.get("userId"), () => decisions.deleteClosed(c.get("userId")));
+    const res = await idempotent(c, services, c.get("userId"), () => decisions.deleteClosed(c.get("userId")));
+    sweep();
+    return res;
   });
   v1.get("/decisions/:id", (c) => c.json(decisions.toApi(decisions.forUser(c.get("userId"), c.req.param("id")))));
   v1.post("/decisions/:id/answer", async (c) => {
     const input = await body(c, answerSchema);
-    return idempotent(c, services, c.get("userId"), () => decisions.answer(c.get("userId"), c.req.param("id"), input));
+    const res = await idempotent(c, services, c.get("userId"), () => decisions.answer(c.get("userId"), c.req.param("id"), input));
+    sweep();
+    return res;
+  });
+  // 添付（api.md「添付（v0.23）」）。本文はファイルの中身そのまま。
+  v1.post("/decisions/:id/attachments", async (c) => {
+    const key = c.req.header("idempotency-key");
+    if (!key || key.length > 200) throw new ApiError("validation_failed", "Idempotency-Key が要ります。");
+    const data = await readLimited(c.req.raw.body, MAX_FILE_BYTES);
+    return c.json(files().upload(c.get("userId"), c.req.param("id"), { name: c.req.query("name") ?? "", contentType: mediaType(c.req.header("content-type")), idempotencyKey: key, data }));
+  });
+  v1.get("/decisions/:id/attachments", (c) => c.json(files().staged(c.get("userId"), c.req.param("id"))));
+  v1.delete("/decisions/:id/attachments/:aid", (c) => c.json(files().removeStaged(c.get("userId"), c.req.param("id"), c.req.param("aid"))));
+  v1.get("/decisions/:id/attachments/:aid", (c) => {
+    const file = files().readForUser(c.get("userId"), c.req.param("id"), c.req.param("aid"));
+    return fileResponse(c, file.meta, file.data);
   });
   v1.post("/decisions/:id/hold", (c) => idempotent(c, services, c.get("userId"), () => decisions.setHold(c.get("userId"), c.req.param("id"), true)));
   v1.post("/decisions/:id/unhold", (c) => idempotent(c, services, c.get("userId"), () => decisions.setHold(c.get("userId"), c.req.param("id"), false)));
@@ -212,7 +249,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   v1.post("/pairing/:id/reject", (c) => idempotent(c, services, c.get("userId"), () => { accounts.rejectPairing(c.get("userId"), c.req.param("id")); return { ok: true }; }));
 
   v1.get("/me", (c) => c.json(accounts.me(c.get("userId"))));
-  v1.delete("/me", (c) => { accounts.deleteUser(c.get("userId")); return c.json({ ok: true }); });
+  v1.delete("/me", (c) => { accounts.deleteUser(c.get("userId")); sweep(); return c.json({ ok: true }); });
   v1.get("/me/settings", (c) => c.json(accounts.settings(c.get("userId"))));
   v1.patch("/me/settings", async (c) => {
     const input = await body(c, z.object({ retention_days: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(365)]) }));
@@ -284,7 +321,14 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   conn.post("/decisions/:id/amend", async (c) => c.json(decisions.amend(c.get("conn"), c.req.param("id"), await body(c, amendSchema))));
   conn.post("/decisions/:id/cancel", async (c) => {
     const input = await body(c, z.object({ reason: z.string().trim().min(1).max(500) }));
-    return c.json(decisions.cancel(c.get("conn"), c.req.param("id"), input.reason));
+    const res = decisions.cancel(c.get("conn"), c.req.param("id"), input.reason);
+    sweep();
+    return c.json(res);
+  });
+  conn.get("/decisions/:id/attachments/:aid", (c) => {
+    const row = decisions.forConnection(c.get("conn"), c.req.param("id"));
+    const file = files().readForAi(row.id, c.req.param("aid"));
+    return fileResponse(c, file.meta, file.data);
   });
   conn.post("/setup-test", async (c) => {
     const input = await body(c, z.object({

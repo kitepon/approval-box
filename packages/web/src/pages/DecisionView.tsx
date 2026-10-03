@@ -4,6 +4,7 @@ import { navigate } from "../router";
 import { bump, useBump } from "../store";
 import { ago, clientLabel, dateTime, deadlineText, DELIVERY_LABEL, FIELD_LABEL, URGENCY_LABEL } from "../format";
 import type { Decision } from "../types";
+import { ACCEPT, AttachmentList, MAX_COUNT, useDraftAttachments } from "./Attachments";
 
 /** 背景はプレーンテキストで出す。リンクは押した時に確かめてから開く（AI経由で混じった文面への備え）。 */
 function PlainText({ text }: { text: string }) {
@@ -26,6 +27,7 @@ export function DecisionView({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const shown = useRef<Decision | null>(null);
+  const drafts = useDraftAttachments(id, decision?.status === "pending" || decision?.status === "held");
 
   useEffect(() => {
     let alive = true;
@@ -48,6 +50,7 @@ export function DecisionView({ id }: { id: string }) {
   const d = decision;
   const open = d.status === "pending" || d.status === "held";
   const last = d.history.at(-1);
+  const attached = drafts.items.length ? { attachment_ids: drafts.items.map((a) => a.id) } : {};
 
   async function act(path: string, body?: unknown) {
     setBusy(true);
@@ -103,8 +106,8 @@ export function DecisionView({ id }: { id: string }) {
         <div class="answer">
           <div class="options">
             {d.options.map((o) => (
-              <button key={o.id} class={`option ${d.recommendation === o.id ? "recommended" : ""}`} disabled={busy}
-                onClick={() => act("answer", { option_id: o.id, ...(text.trim() ? { text: text.trim() } : {}), version: d.version })}>
+              <button key={o.id} class={`option ${d.recommendation === o.id ? "recommended" : ""}`} disabled={busy || drafts.uploading > 0}
+                onClick={() => act("answer", { option_id: o.id, ...(text.trim() ? { text: text.trim() } : {}), ...attached, version: d.version })}>
                 {o.label}
                 {d.recommendation === o.id && <span class="badge">AIの推奨</span>}
               </button>
@@ -114,8 +117,23 @@ export function DecisionView({ id }: { id: string }) {
             <span>添え書き・別の指示（任意）</span>
             <textarea rows={3} value={text} onInput={(e) => setText((e.target as HTMLTextAreaElement).value)} placeholder="選択肢を選ばずに、文だけで指示し直すこともできます" />
           </label>
+          <div class="field">
+            <span>添付（画像・書類、{MAX_COUNT}ファイル・合計50MBまで。任意）</span>
+            <AttachmentList decisionId={d.id} items={drafts.items} onRemove={drafts.remove} />
+            {drafts.uploading > 0 && <p class="muted">アップロード中…</p>}
+            {drafts.error && <p class="error">{drafts.error}</p>}
+            {drafts.items.length < MAX_COUNT && (
+              <label class="file-pick">
+                ファイルを追加
+                <input type="file" multiple accept={ACCEPT} disabled={busy} onChange={(e) => { const input = e.target as HTMLInputElement; void drafts.add(input.files).then(() => { input.value = ""; }); }} />
+              </label>
+            )}
+          </div>
           <div class="row">
-            <button class="primary" disabled={busy || !text.trim()} onClick={() => act("answer", { text: text.trim(), version: d.version })}>文だけで答える</button>
+            <button class="primary" disabled={busy || drafts.uploading > 0 || (!text.trim() && !drafts.items.length)}
+              onClick={() => act("answer", { ...(text.trim() ? { text: text.trim() } : {}), ...attached, version: d.version })}>
+              {drafts.items.length ? (text.trim() ? "文と添付で答える" : "添付だけで答える") : "文だけで答える"}
+            </button>
             {d.status === "held"
               ? <button class="ghost" disabled={busy} onClick={() => act("unhold")}>保留を戻す</button>
               : <button class="ghost" disabled={busy} onClick={() => act("hold")}>保留にする</button>}
@@ -125,8 +143,9 @@ export function DecisionView({ id }: { id: string }) {
 
       {d.status === "answered" && d.answer && (
         <div class="result">
-          <div><strong>答え:</strong> {d.answer.option_id ? d.options.find((o) => o.id === d.answer!.option_id)?.label : "（文で回答）"}</div>
+          <div><strong>答え:</strong> {d.answer.option_id ? d.options.find((o) => o.id === d.answer!.option_id)?.label : d.answer.text ? "（文で回答）" : "（添付で回答）"}</div>
           {d.answer.text && <div class="answer-text">{d.answer.text}</div>}
+          {d.answer.attachments?.length ? <AttachmentList decisionId={d.id} items={d.answer.attachments} /> : null}
           <div class={`delivery delivery-${d.delivery}`}>{DELIVERY_LABEL[d.delivery ?? ""] ?? d.delivery}</div>
           {d.delivery === "unknown" && <p class="muted">AIへ届いたか確かめられませんでした。元の会話に下の一言を送ると、AIが答えを取りに来ます。</p>}
           {d.delivery === "waiting" && d.source.via === "remote" && <p class="muted">チャットへ戻った時に、AIが答えを受け取ります。</p>}

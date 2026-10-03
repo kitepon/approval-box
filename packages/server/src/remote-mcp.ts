@@ -7,12 +7,15 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import type { Context } from "hono";
 import { z, ZodError } from "zod";
 import type { Accounts } from "./accounts.ts";
+import { type Attachments, formatBytes } from "./attachments.ts";
 import { type Connection, Decisions, SERVER_HARNESS, amendSchema, createSchema } from "./decisions.ts";
 import { ApiError } from "./errors.ts";
 
 export type RemoteMcpOptions = {
   /** 答えを call-bridge の通話で届ける接続のid。この接続の申請には、申請したメンバーのIDが要る。 */
   callBridgeConnections?: ReadonlySet<string>;
+  /** 答えの添付を get_attachment で返すための置き場。 */
+  attachments?: Attachments;
 };
 
 const INSTRUCTIONS = [
@@ -88,8 +91,17 @@ function tools(callBridge: boolean) {
       description: "申請の今の状態と答えを見る。答えが届かなかった時や、利用者に「答えた」と言われた時に使う。",
       inputSchema: { type: "object", properties: { decision_id: { type: "string" } }, required: ["decision_id"], additionalProperties: false },
     },
+    {
+      name: "get_attachment",
+      description: "利用者が答えに付けた添付（画像・書類）の中身を取る。attachment_id は答えの文か get_decision の answer.attachments にある。画像は画像として、書類はファイルとして返す。",
+      inputSchema: { type: "object", properties: { decision_id: { type: "string" }, attachment_id: { type: "string" } }, required: ["decision_id", "attachment_id"], additionalProperties: false },
+    },
   ];
 }
+
+/** モデルがそのまま見られる画像の形式。HEICなどはファイルとして渡す。 */
+const VIEWABLE_IMAGES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const TEXT_TYPES = ["text/plain", "text/markdown", "text/csv", "application/json"];
 
 type AiDecision = ReturnType<Decisions["toAi"]>;
 
@@ -112,7 +124,7 @@ const requesterSchema = z.object({
   requester_name: z.string().trim().min(1).max(60),
 });
 
-function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions, callBridge: boolean) {
+function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions, callBridge: boolean, attachments?: Attachments) {
   const server = new Server({ name: "approval-box", version: "remote" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools(callBridge) }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -171,6 +183,19 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
         const head = decision.answer_text ? String(decision.answer_text) : `${decision.decision_id}「${decision.title}」 status=${decision.status}（まだ答えはありません）`;
         return result(`${head}\n\n${JSON.stringify(decision)}`, decision);
       }
+      if (name === "get_attachment") {
+        const row = decisions.forConnection(conn, String(args.decision_id));
+        if (!attachments) throw new ApiError("not_found", "このサーバーでは添付を使えません。");
+        const { meta, data } = attachments.readForAi(row.id, String(args.attachment_id));
+        const head = { type: "text" as const, text: `${row.id} の添付: ${meta.name}（${meta.content_type}、${formatBytes(meta.size)}） attachment_id=${meta.id} sha256=${meta.sha256}` };
+        const uri = `approval-box://decisions/${row.id}/attachments/${meta.id}`;
+        const body = VIEWABLE_IMAGES.includes(meta.content_type)
+          ? { type: "image" as const, data: data.toString("base64"), mimeType: meta.content_type }
+          : TEXT_TYPES.includes(meta.content_type)
+            ? { type: "resource" as const, resource: { uri, mimeType: meta.content_type, text: data.toString("utf8") } }
+            : { type: "resource" as const, resource: { uri, mimeType: meta.content_type, blob: data.toString("base64") } };
+        return { content: [head, body], structuredContent: { decision_id: row.id, attachment: meta } };
+      }
       return result(`知らないツールです: ${name}`, undefined, true);
     } catch (error) {
       if (error instanceof ApiError) return result(`Approval Box: ${error.message}\n\n${JSON.stringify(error.body())}`, error.body() as Record<string, unknown>, true);
@@ -197,7 +222,7 @@ export function remoteMcpHandler(accounts: Accounts, decisions: Decisions, optio
       if (error instanceof ApiError) return c.json(error.body(), 401, { "www-authenticate": 'Bearer realm="approval-box"' });
       throw error;
     }
-    const server = buildServer(conn, accounts, decisions, options.callBridgeConnections?.has(conn.id) ?? false);
+    const server = buildServer(conn, accounts, decisions, options.callBridgeConnections?.has(conn.id) ?? false, options.attachments);
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);
     try {

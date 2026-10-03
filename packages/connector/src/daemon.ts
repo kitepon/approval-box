@@ -3,11 +3,12 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Api } from "./api.ts";
+import { type AttachmentMeta, pruneAttachments, saveAll } from "./attachments.ts";
 import { readConfig, requireConfig, writeJsonFile } from "./config.ts";
 import { PROFILE, stateRoot } from "./profile.ts";
 import { runtimeEntry } from "./runtime.ts";
 
-type Delivery = { decision_id: string; delivery_id: string; route: { channel_id: string; harness: string }; text: string };
+type Delivery = { decision_id: string; delivery_id: string; route: { channel_id: string; harness: string }; text: string; attachments?: AttachmentMeta[] };
 type Entry = {
   delivery_id: string; channel_id: string; harness: string;
   state: "sending" | "queued" | "report"; result?: "delivered" | "unknown" | "failed"; detail?: string; at: string;
@@ -65,6 +66,7 @@ export async function runDaemon() {
     journal[id] = entry;
   }
   save();
+  try { pruneAttachments(); } catch (error) { log(`古い添付の片付けに失敗: ${(error as Error).message}`); }
 
   async function report(id: string) {
     const entry = journal[id]!;
@@ -80,12 +82,14 @@ export async function runDaemon() {
   async function deliver(item: Delivery) {
     const existing = journal[item.decision_id];
     if (existing) return;
+    // 添付は届ける前に端末へ保存し、場所を書き足す（AIがすぐ開けるように）。保存に失敗しても答えは届ける。
+    const text = item.attachments?.length ? item.text + await saveAll(api, item.decision_id, item.attachments) : item.text;
     journal[item.decision_id] = { delivery_id: item.delivery_id, channel_id: item.route.channel_id, harness: item.route.harness, state: "sending", at: new Date().toISOString() };
     save();
     const entry = journal[item.decision_id]!;
     try {
       if (steer.channelClosed(PROFILE, item.route.channel_id)) throw Object.assign(new Error("申請を出したAIの会話が終わっています"), { closed: true });
-      const result = await steer.sendToChannel(PROFILE, item.route.channel_id, item.delivery_id, item.text);
+      const result = await steer.sendToChannel(PROFILE, item.route.channel_id, item.delivery_id, text);
       if (result.state === "submitted") Object.assign(entry, { state: "report", result: "delivered" });
       else entry.state = "queued";
     } catch (error) {

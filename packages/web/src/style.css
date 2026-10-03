@@ -145,3 +145,13 @@ input, textarea, select {
 @media (prefers-color-scheme: dark) { .apple-button { background: #fff; color: #000; border-color: #fff; } }
 .error { color: #c0392b; }
 button.link { background: none; border: none; color: inherit; text-decoration: underline; padding: 0; cursor: pointer; }
+
+.attachments { list-style: none; padding: 0; margin: 6px 0; display: flex; flex-direction: column; gap: 6px; }
+.attachment { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.attachment img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; cursor: pointer; flex: none; }
+.attachment-icon { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 6px; font-size: 0.75rem; flex: none; }
+.attachment-name { flex: 1; min-height: 0; min-width: 0; text-align: left; background: none; border: none; padding: 0; color: inherit; cursor: pointer; overflow-wrap: anywhere; display: flex; flex-direction: column; }
+.attachment-name .muted { font-size: 0.8rem; }
+.attachment-remove { flex: none; }
+.file-pick { display: inline-flex; align-items: center; align-self: flex-start; cursor: pointer; border-radius: 10px; padding: 10px 14px; min-height: 44px; border: 1px solid var(--line); color: var(--ink); }
+.file-pick input { display: none; }

@@ -6,6 +6,7 @@ import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Context } from "hono";
 import { Accounts, type BillingMode } from "./accounts.ts";
+import { Attachments } from "./attachments.ts";
 import { openDb } from "./db.ts";
 import { Decisions } from "./decisions.ts";
 import { EventHub } from "./events.ts";
@@ -23,6 +24,7 @@ const db = openDb(join(dataDir, "approval-box.db"));
 const events = new EventHub(db);
 const accounts = new Accounts(db, events, billing);
 const decisions = new Decisions(db, events);
+const attachments = new Attachments(db, join(dataDir, "attachments"));
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -107,10 +109,11 @@ if (callBridgeIds.length) {
     console.log(`approval-box-server: call-bridge で答えを届けます（接続 ${callBridgeIds.length}）`);
   }
 }
-const app = createApp({ db, accounts, decisions, events, publicUrl, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(callBridgeConnections ? { remoteMcp: { callBridgeConnections } } : {}) }, { staticHandler });
+const app = createApp({ db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) } }, { staticHandler });
 
 setInterval(() => {
   decisions.purgeExpired();
+  attachments.gc();
   accounts.prunePairings();
   events.prune(7);
 }, 3600_000).unref();

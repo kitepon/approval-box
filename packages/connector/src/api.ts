@@ -59,6 +59,19 @@ export class Api {
     return json as T;
   }
 
+  /** ファイルを取る（添付）。誤りはJSONの本文から読む。 */
+  async download(path: string): Promise<Buffer> {
+    let response: Response;
+    try {
+      response = await fetch(this.url(path), { headers: this.token ? { authorization: `Bearer ${this.token}` } : {} });
+    } catch (error) {
+      throw new ServerError(0, "network", `Approval Boxサーバー（${this.server}）につながりません: ${(error as Error).message}`, {});
+    }
+    if (response.ok) return Buffer.from(await response.arrayBuffer());
+    const json = (await response.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
+    throw new ServerError(response.status, json.error?.code ?? "internal", json.error?.message ?? `HTTP ${response.status}`, (json.error ?? {}) as Record<string, unknown>);
+  }
+
   /** コネクタ用SSE。届いたイベント名ごとに onEvent を呼ぶ。切れたら戻る。 */
   async stream(onEvent: (event: string) => void, signal: AbortSignal) {
     const response = await fetch(this.url("/stream"), { headers: { authorization: `Bearer ${this.token}`, accept: "text/event-stream" }, signal });

@@ -59,7 +59,7 @@ export function stableNode(): string {
 }
 
 /** CursorでApproval Boxのtoolを使うたびに許可を聞かれないよう、cli-config.json の許可リストへ足すtool。 */
-const CURSOR_TOOLS = ["list_my_decisions", "request_decision", "amend_decision", "cancel_decision", "get_decision", "setup_test", "confirm_setup_test"];
+const CURSOR_TOOLS = ["list_my_decisions", "request_decision", "amend_decision", "cancel_decision", "get_decision", "get_attachment", "setup_test", "confirm_setup_test"];
 const cursorCliConfig = () => join(cursorDir(), "cli-config.json");
 function setCursorPermissions(enable: boolean) {
   const file = cursorCliConfig();

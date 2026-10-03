@@ -1,11 +1,12 @@
 export type Option = { id: string; label: string };
+export type Attachment = { id: string; name: string; content_type: string; kind: "image" | "document" | string; size: number; sha256: string; created_at: string };
 export type HistoryEntry = { at: string; kind: string; by: "ai" | "user"; note?: string; fields?: string[] };
 export type Decision = {
   id: string; title: string; context: string; options: Option[]; recommendation?: string;
   urgency: "low" | "normal" | "high" | string; deadline?: string;
   source: { client: string; session_label: string; via: string; test?: boolean };
   status: "pending" | "held" | "answered" | "cancelled" | string;
-  answer?: { option_id?: string; text?: string; answered_at: string };
+  answer?: { option_id?: string; text?: string; attachments?: Attachment[]; answered_at: string };
   delivery?: "waiting" | "delivered" | "unknown" | "fetched" | string;
   resume_phrase: string; cancel_reason?: string; distinct_reason?: string;
   history: HistoryEntry[]; created_at: string; updated_at: string; version: number;

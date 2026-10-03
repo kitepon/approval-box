@@ -1,4 +1,4 @@
-import type { ApiErrorBody } from "./types";
+import type { ApiErrorBody, Attachment } from "./types";
 
 const SESSION_KEY = "approval-box.session";
 
@@ -45,6 +45,43 @@ export async function api<T>(method: string, path: string, body?: unknown, optio
     if (response.status >= 500 && attempt === 0 && key) continue;
     throw new ApiError(response.status, err);
   }
+}
+
+async function failure(response: Response): Promise<ApiError> {
+  const json = await response.json().catch(() => ({}));
+  if (response.status === 401) { setSession(null); onUnauthorized(); }
+  return new ApiError(response.status, (json.error ?? { code: "internal", message: `HTTP ${response.status}` }) as ApiErrorBody);
+}
+
+/** 添付を1つ上げる（本文はファイルそのまま）。通信が切れたら同じ冪等キーで1回だけ送り直す。 */
+export async function uploadAttachment(decisionId: string, file: Blob, name: string, contentType: string): Promise<Attachment> {
+  const key = crypto.randomUUID();
+  for (let attempt = 0; ; attempt++) {
+    let response: Response;
+    try {
+      response = await fetch(`/v1/decisions/${encodeURIComponent(decisionId)}/attachments?name=${encodeURIComponent(name)}`, {
+        method: "POST", headers: { authorization: `Bearer ${getSession() ?? ""}`, "content-type": contentType, "idempotency-key": key }, body: file,
+      });
+    } catch {
+      if (attempt === 0) continue;
+      throw new ApiError(0, { code: "network", message: "サーバーにつながりません。通信を確かめてください。" });
+    }
+    if (response.ok) return (await response.json()) as Attachment;
+    if (response.status >= 500 && attempt === 0) continue;
+    throw await failure(response);
+  }
+}
+
+/** 添付の中身を取る。img や a はヘッダーを付けられないので、fetch で取って Blob にする。 */
+export async function fetchAttachment(decisionId: string, attachmentId: string): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(`/v1/decisions/${encodeURIComponent(decisionId)}/attachments/${encodeURIComponent(attachmentId)}`, { headers: { authorization: `Bearer ${getSession() ?? ""}` } });
+  } catch {
+    throw new ApiError(0, { code: "network", message: "サーバーにつながりません。通信を確かめてください。" });
+  }
+  if (!response.ok) throw await failure(response);
+  return response.blob();
 }
 
 /** /v1/events を読む。EventSourceはヘッダーを付けられないので fetch で読む。切れたら間隔を延ばして張り直す。 */

@@ -8,6 +8,8 @@ export type ErrorCode =
   | "duplicate_suspected"
   | "confirm_required"
   | "rate_limited"
+  | "too_large"
+  | "unsupported_type"
   | "internal";
 
 const statusOf: Record<ErrorCode, number> = {
@@ -20,6 +22,8 @@ const statusOf: Record<ErrorCode, number> = {
   duplicate_suspected: 409,
   confirm_required: 409,
   rate_limited: 429,
+  too_large: 413,
+  unsupported_type: 415,
   internal: 500,
 };
 
