@@ -3,7 +3,7 @@ import { lstatSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { INSTRUCTION_TEXT, hasInstructions, managedElsewhere, removeInstructions, writeInstructions } from "../src/instructions.ts";
+import { INSTRUCTION_TEXT, hasInstructions, hasInstructionsInDir, managedElsewhere, removeInstructions, writeInstructions } from "../src/instructions.ts";
 
 test("全体の指示へ一節を足し、二度書いても一つ、外すと元に戻る", () => {
   const file = join(mkdtempSync(join(tmpdir(), "ab-inst-")), "AGENTS.md");
@@ -58,4 +58,13 @@ test("Claude Code の @取り込みを1段たどって、管理元の文を見�
   assert.ok(hasInstructions(join(dir, "CLAUDE.md")));
   writeFileSync(join(dir, "AGENTS.md"), "- 別の話\n");
   assert.ok(!hasInstructions(join(dir, "CLAUDE.md")));
+});
+
+test("規範の置き場（rules）にある同じ趣旨の文を見つける", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ab-inst-"));
+  assert.ok(!hasInstructionsInDir(join(dir, "none")));
+  writeFileSync(join(dir, "other.md"), "- 別の話\n");
+  assert.ok(!hasInstructionsInDir(dir));
+  writeFileSync(join(dir, "factory.mdc"), "- 承認が必要なときは Approval Box の request_decision でも申請する。\n");
+  assert.ok(hasInstructionsInDir(dir));
 });

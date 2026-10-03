@@ -4,7 +4,7 @@ import { copyFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { writeJsonFile } from "./config.ts";
-import { hasInstructions, managedElsewhere, removeInstructions, writeInstructions } from "./instructions.ts";
+import { hasInstructions, hasInstructionsInDir, managedElsewhere, removeInstructions, writeInstructions } from "./instructions.ts";
 import { MCP_SERVER, PROFILE } from "./profile.ts";
 import { runtimeEntry } from "./runtime.ts";
 
@@ -207,7 +207,11 @@ export async function unregister(target: Target): Promise<RegisterResult> {
 /** 登録が今も効いているか（doctor用）。 */
 export function registered(target: Target): { mcp: boolean; hooks: boolean | null; instructions: boolean | null; entry?: string } {
   const file = instructionsFileOf(target);
-  return { ...registeredTools(target), instructions: file ? hasInstructions(file) : target === "cursor" ? cursorContextRegistered() : null };
+  // 一文は、自分が書いた所のほか、管理元（dotagents・BellTeam）が配る規範から届くこともある。
+  const instructions = target === "cursor"
+    ? cursorContextRegistered() || hasInstructions(join(cursorDir(), "AGENTS.md")) || hasInstructionsInDir(join(cursorDir(), "rules"))
+    : file ? hasInstructions(file) || (target === "grok" && hasInstructionsInDir(join(grokDir(), "rules"))) : null;
+  return { ...registeredTools(target), instructions };
 }
 
 function registeredTools(target: Target): { mcp: boolean; hooks: boolean | null; entry?: string } {

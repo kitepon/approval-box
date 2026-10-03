@@ -31,12 +31,31 @@ export function daemonStatus(): { running: boolean; pid?: number; entry?: string
   } catch { return { running: false }; }
 }
 
+/** 置き場のpath（…/runtime/<版>/cli.mjs）から版を読む。ビルドしたままの dist などは null。 */
+export function versionOfEntry(entry: string): number[] | null {
+  const match = /[\\/]runtime[\\/](\d+)\.(\d+)\.(\d+)[\\/]/.exec(entry);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+/**
+ * 動いているデーモンを自分の版に入れ替えるか。同じ置き場なら入れ替えない。
+ * 相手のほうが新しい版なら入れ替えない（開いたままの古い会話のMCPが、新しいデーモンを古い版へ戻さないように）。
+ */
+export function shouldReplaceDaemon(runningEntry: string | undefined, myEntry: string): boolean {
+  if (runningEntry === myEntry) return false;
+  const running = runningEntry ? versionOfEntry(runningEntry) : null;
+  const mine = versionOfEntry(myEntry);
+  if (!running || !mine) return true;
+  for (let i = 0; i < 3; i++) if (running[i] !== mine[i]) return running[i]! < mine[i]!;
+  return true;
+}
+
 /** 配送デーモンが動いていなければ起動する。利用者ごとに1つ。 */
 export function ensureDaemon() {
   try {
     if (!readConfig()?.token) return;
     const status = daemonStatus();
-    if (status.running && status.entry === runtimeEntry("cli")) return;
+    if (status.running && !shouldReplaceDaemon(status.entry, runtimeEntry("cli"))) return;
     if (status.running && status.pid) { try { process.kill(status.pid); } catch { /* 既に終わっている */ } }
     mkdirSync(stateRoot(), { recursive: true, mode: 0o700 });
     const log = openSync(join(stateRoot(), "daemon.log"), "a", 0o600);
@@ -49,6 +68,13 @@ export function ensureDaemon() {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function runDaemon() {
+  // 版の入れ替えでは、止められた前のデーモンが終わるまで数秒かかる。待たずに「もう動いている」と見て終わると、
+  // 前のデーモンも終わってデーモンがいなくなり、次にMCPが起こすまで答えが届かない（2026-10-03 の実測）。
+  for (let i = 0; i < 50; i++) {
+    const other = daemonStatus();
+    if (!other.running || other.pid === process.pid) break;
+    await sleep(200);
+  }
   const status = daemonStatus();
   if (status.running && status.pid !== process.pid) return;
   writeJsonFile(lockFile(), { pid: process.pid, entry: runtimeEntry("cli"), started_at: new Date().toISOString() });
@@ -141,7 +167,15 @@ export async function runDaemon() {
 
   const controller = new AbortController();
   let stopping = false;
-  const stop = () => { stopping = true; controller.abort(); };
+  const releaseLock = () => {
+    try {
+      const lock = JSON.parse(readFileSync(lockFile(), "utf8")) as { pid: number };
+      if (lock.pid === process.pid) rmSync(lockFile(), { force: true });
+    } catch { /* 無ければよい */ }
+  };
+  // 止められたら、すぐ席（lock）を空ける。終わるまでの数秒の間に起こされた次のデーモン（待たない古い版も含む）が、
+  // 「もう動いている」と見て終わってしまわないように。
+  const stop = () => { stopping = true; releaseLock(); controller.abort(); };
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
 
@@ -175,9 +209,6 @@ export async function runDaemon() {
       } catch { idleSince = Date.now(); }
     }
   }
-  try {
-    const lock = JSON.parse(readFileSync(lockFile(), "utf8")) as { pid: number };
-    if (lock.pid === process.pid) rmSync(lockFile(), { force: true });
-  } catch { /* 無ければよい */ }
+  releaseLock();
   process.exit(0);
 }

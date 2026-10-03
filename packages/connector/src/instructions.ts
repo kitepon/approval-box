@@ -1,6 +1,6 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 /**
  * AIが毎回読む全体の指示へ足す一節。MCPの説明文だけでは、AIはチャットで聞く癖を優先する。
@@ -27,6 +27,17 @@ export function hasInstructions(file: string): boolean {
     if (existsSync(target) && SAME_MEANING.test(readFileSync(target, "utf8"))) return true;
   }
   return false;
+}
+
+/** 管理元が配る規範の置き場（~/.grok/rules、~/.cursor/rules など）のどれかに、同じ趣旨の文があるか。 */
+export function hasInstructionsInDir(dir: string): boolean {
+  try {
+    return readdirSync(dir).some((name) => {
+      try { return SAME_MEANING.test(readFileSync(join(dir, name), "utf8")); } catch { return false; }
+    });
+  } catch {
+    return false;
+  }
 }
 
 /**
