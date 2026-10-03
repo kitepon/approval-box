@@ -1,4 +1,4 @@
-# Approval Box API（アプリ・Web版向け） v0.22
+# Approval Box API（アプリ・Web版向け） v0.23
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 
@@ -52,7 +52,7 @@ Decision {
     via: "connector" | "remote"
   },
   status: "pending" | "held" | "answered" | "cancelled",
-  answer?: { option_id?: string, text?: string, answered_at: time },
+  answer?: { option_id?: string, text?: string, attachments?: Attachment[], answered_at: time },
   delivery?: "waiting" | "delivered" | "unknown" | "fetched",
   resume_phrase: string,         // 例「Approval Box K-1234 の答えを確認して続けて」
   created_at: time,
@@ -70,7 +70,7 @@ Decision {
 }
 ```
 
-- 添付: v1では無し。背景は文字だけ。将来 `attachments` を足す時はフィールド追加で行う。
+- 添付: AIの背景（context）は文字だけ。利用者の答えには画像・書類を添付できる（v0.23、下の「添付」）。
 - 差戻し: 専用の操作は持たない。選択肢を選ばず `text` だけで答えれば、それが差戻し・指示し直しとしてAIへ届く。
 - `delivery`（answered の時だけ意味を持つ）:
   - `waiting` まだAIへ渡していない
@@ -83,7 +83,7 @@ Decision {
 |---|---|---|
 | GET | `/decisions?status=pending,held&limit=50&cursor=…` | 一覧 `{ items: Decision[], next_cursor?: string }` |
 | GET | `/decisions/{id}` | 1件 |
-| POST | `/decisions/{id}/answer` | `{ option_id?, text?, version }`。option_idかtextのどちらか必須。versionは必須。pending・heldの時だけ。応答は更新後のDecision |
+| POST | `/decisions/{id}/answer` | `{ option_id?, text?, attachment_ids?: string[], version }`。option_id・text・attachment_ids（1件以上）のどれか1つは必須（添付だけの答えも可）。versionは必須。pending・heldの時だけ。応答は更新後のDecision |
 | POST | `/decisions/{id}/hold` | 保留にする。応答はDecision |
 | POST | `/decisions/{id}/unhold` | 保留を戻す。応答はDecision |
 | GET | `/events` | SSE（下記） |
@@ -95,6 +95,60 @@ Decision {
 - AIの修正: 同じ申請が直される。history の最後が `amended` なら、カードと決裁画面に「修正あり」と note・直した項目を出す。
 - AIの取り下げ: 一覧から消え、既決側に `cancel_reason` 付きで残る。
 - 決裁画面を開いている間に `decision.updated` が来たら、取り直して差し替え、「AIが内容を直した」「AIが取り下げた」と知らせる。
+
+## 添付（v0.23）
+
+**状態: 取り決めを先に公開。サーバー・Web版・コネクタは実装中（本番未配備）。配備したらこの行を消し、ベルへ知らせる。**
+
+利用者の答え（自由回答）に、画像と書類を混ぜて複数付けられる。添付だけの答えもよい。流れは「先に1ファイルずつ上げる → answer に id を並べて確定する」。
+
+```
+Attachment {
+  id: "att_…",                   // サーバーが付ける。推測できないランダムな値
+  name: string,                  // ファイル名（サーバーが整えた後の値。表示とAIへの案内に使う）
+  content_type: string,          // 下の許容形式のどれか
+  kind: "image" | "document",
+  size: int,                     // バイト
+  sha256: string,                // 中身のSHA-256（16進、小文字）
+  created_at: time
+}
+```
+
+| メソッド | パス | 内容 |
+|---|---|---|
+| POST | `/decisions/{id}/attachments?name=<ファイル名>` | 本文はファイルの中身そのまま（multipartにしない）。`Content-Type` にファイルの形式。`Idempotency-Key` 必須。pending・heldの時だけ。→ `Attachment`（まだ答えに結ばれていない「下書き」） |
+| GET | `/decisions/{id}/attachments` | その申請に自分が上げた下書きの一覧 `{ items: Attachment[] }`（アプリが落ちて作り直す時用。答えに結ばれた添付は `answer.attachments` を見る） |
+| DELETE | `/decisions/{id}/attachments/{attachment_id}` | 下書きを1件消す（個別削除）→ `{ ok: true }`。答えに結んだ後は消せない（409 `conflict`） |
+| GET | `/decisions/{id}/attachments/{attachment_id}` | 中身を取る（下書き・答えに結んだ後のどちらも）。`Content-Type`・`Content-Length`・`Content-Disposition: attachment; filename*=UTF-8''…`・`ETag: "<sha256>"`。`Range` は使えない |
+
+- `name` はURLエンコードしたファイル名（日本語可）。サーバーは改行・制御文字・`/`・`\` を取り除き、200字に切る。空なら `file`。同じ名前が重なってもよい（区別は id）。
+- 許容形式（`Content-Type`）。中身の先頭も確かめ、宣言と合わなければ415。
+  - 画像（kind=image）: `image/jpeg`・`image/png`・`image/heic`・`image/heif`・`image/gif`・`image/webp`
+  - 書類（kind=document）: `application/pdf`、`text/plain`・`text/markdown`・`text/csv`・`application/json`（UTF-8であること）、Office（`application/vnd.openxmlformats-officedocument.wordprocessingml.document`・`…spreadsheetml.sheet`・`…presentationml.presentation`）
+  - `Content-Type` の `; charset=…` などの引数は無視する。上に無い形式（動画・zip・実行ファイル等）は415。
+- 上限: 1ファイル 20MB（20,971,520バイト）、1つの答えに10ファイル・合計50MB。1つの申請の下書きも同時に10ファイルまで。アカウント全体の保存は1GBまで（既決の自動削除・データ削除で空く）。
+- 下書きは上げた本人（同じアカウント）の、その申請にだけ使える。他のアカウントの添付は、どのAPIでも404 `not_found`（あるかどうかも見せない）。
+- answer の確定: `attachment_ids` の全部が「この申請の、まだ結ばれていない下書き」の時だけ受け付け、答えと同じ取引で結ぶ（一部だけ結ばれることは無い）。1つでも違えば答え全体を400 `validation_failed` で断り、何も変えない。重ねて並べるのも400。並び順は送った順のまま `answer.attachments` に入る。
+- 409 `conflict`（version違い）の時、下書きは消えない。最新のDecisionを見せて、同じ `attachment_ids` のまま答え直せる。
+- 答えた時、`attachment_ids` に入れなかった下書きは消す。AIが取り下げた時（cancelled）も、その申請の下書きは消す。上げてから24時間結ばれなかった下書きも消す。
+- 結ばれた添付は答えの一部で、決裁と一緒に消える: 設定の「データ削除」（`DELETE /decisions?status=answered,cancelled`）、保存日数（`retention_days`）での自動削除、アカウント削除（`DELETE /me`）。消した後のGETは404。
+- 送り直し: 上げる時の通信が切れたら、同じ `Idempotency-Key` で同じ中身を送り直す。初回が済んでいれば同じ `Attachment` が返り、二重には保存しない。同じキーで中身が違えば400 `validation_failed`。answer も今までどおり `Idempotency-Key` で二重にならない。
+- 下書きの段階では、決裁の `version` も変わらず、イベントも出さない（AIからは見えない）。答えた時に `decision.updated`（change=answered）が1回出る。
+- アプリは上げる前に、HEICをそのまま送ってよい（変換は要らない）。AIが読めない形式でも、ファイルとしては渡る。
+
+### AIへの渡り方
+
+- AIへ届く答えの文に、添付の一覧（番号・ファイル名・形式・大きさ）と取り方を書く。
+- 端末のコネクタ（0.1.9〜）: 配送の前に、コネクタが添付を端末の `~/.approval-box/attachments/<決裁ID>/` に保存し、保存した場所も答えの文に書く。AIは `get_attachment` ツールでも取り直せる（画像はそのまま見られる形でも返す）。
+- リモートMCP（GrokBotなど）: `get_attachment` ツールが中身を返す（画像は image、書類は埋め込みのファイル）。
+- `get_decision` の `answer.attachments` に同じ一覧が入る。
+
+### エラー（追加）
+
+| HTTP | code | アプリの扱い |
+|---|---|---|
+| 413 | `too_large` | 大きすぎる・数が多すぎる・アカウントの保存の上限。message を出す |
+| 415 | `unsupported_type` | その形式は付けられない。message を出す |
 
 ## 更新の知らせ
 
@@ -214,6 +268,8 @@ setup: {
 | 404 | `not_found` | 一覧から消す |
 | 409 | `setup_not_verified` | セットアップ確認の画面へ |
 | 409 | `conflict` | 既に答え済み・取り下げ済み・version違い。`error.decision` で差し替える |
+| 413 | `too_large` | 添付が大きすぎる・多すぎる（v0.23） |
+| 415 | `unsupported_type` | 添付できない形式（v0.23） |
 | 429 | `rate_limited` | `Retry-After` 秒待つ |
 | 5xx | `internal` | 時間を置いて送り直す（Idempotency-Key は同じものを使う） |
 
@@ -245,6 +301,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.23 2026-10-03 クオの依頼（ベル経由）: 答えに画像・書類を複数添付できる。`POST/GET/DELETE /decisions/{id}/attachments`、answer の `attachment_ids`、`answer.attachments`、エラー 413 `too_large`・415 `unsupported_type`。添付だけの答えも可。添付は決裁と一緒に消える。
 - v0.22 2026-10-02 記述だけ直す（契約は変えていない）: 公式サーバーは1台で BILLING=store・Apple/Googleログイン。開発用sessionはアプリで使わない。`trial` は期限なし、体験の形が決まったら `trial_ends_at` を足す。
 - v0.21 2026-10-02 `/billing/appstore/verify` と通知V2の受け口を実装（契約は変えていない）。断る時のエラーと、Xcode環境の購入はサーバーが受け付けないことを明記。
 - v0.20 2026-10-01 クオの実機の指示「リンクを押した時に画面を挟まず、サイトを開いてほしい」: 背景のhttp・httpsのリンクは1回のタップで標準ブラウザに開く。行き先の確認画面はやめる（アプリ・Web版とも）。
