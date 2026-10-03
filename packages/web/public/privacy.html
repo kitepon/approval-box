@@ -10,7 +10,7 @@
 <body>
 <main>
 <h1>プライバシーポリシー</h1>
-<p class="muted">Approval Box（iPhone・Androidアプリ、Web版、公式サーバー）／制定 2026年10月2日</p>
+<p class="muted">Approval Box（iPhone・Androidアプリ、Web版、公式サーバー）／制定 2026年10月2日・改定 2026年10月3日（答えへの添付）</p>
 <nav class="lang"><a href="#en">English</a> · <a href="/support">サポート</a></nav>
 
 <p>Approval Box は、AI（Claude Code・Codex・Cursor・Grok など）が利用者の判断・承認・操作を求める時に、その申請を集めて利用者が答えるためのサービスです。運営者は kitepon.dev です。このポリシーは、公式サーバー（approval-box.kitepon.dev）を使う場合の情報の扱いを定めます。利用者が自分で立てたサーバーの情報は、運営者は扱いません。</p>
@@ -19,6 +19,7 @@
 <ul>
 <li><strong>アカウント</strong>: Sign in with Apple または Sign in with Google から受け取る利用者の識別子と、提供された場合のメールアドレス（Appleの「メールを非公開」を選んだ場合は中継用のアドレス）。</li>
 <li><strong>申請と答え</strong>: AIが送る件名・背景・選択肢・AIの推奨・急ぎ度・期限・作業名・AIの種類、利用者の答え（選んだ選択肢と書いた文）、修正・取り下げなどの履歴。背景には、AIが扱っているコードや業務の内容が含まれることがあります。</li>
+<li><strong>答えへの添付</strong>: 利用者が答えに付けた画像と書類（写真・スクリーンショット・PDF・文書など）のファイルの中身、ファイル名、形式、大きさ、改ざんを確かめるための値（SHA-256）。ファイルは受け取ったままの形で保存します。写真に撮影場所などの情報（Exif）が含まれる場合、それも消さずに残るので、気になる時は付ける前に取り除いてください。</li>
 <li><strong>接続した端末</strong>: 端末名、OS、使うAIの種類、接続テストの結果。端末の接続トークンは、元に戻せない形（ハッシュ）でだけ保存します。</li>
 <li><strong>通知</strong>: 通知を送るための端末の識別子（Apple Push Notification service のトークン）。</li>
 <li><strong>購入履歴</strong>: App Store で契約した時の元の取引ID、商品ID、契約の期限、返金・取り消しの有無、購入の環境（本番か試験か）。価格や国などは保存しません。支払い方法やカードの情報は、運営者には届きません。</li>
@@ -27,7 +28,7 @@
 
 <h2>使い方</h2>
 <ul>
-<li>申請を利用者に届け、利用者の答えを申請したAIへ届けるため。</li>
+<li>申請を利用者に届け、利用者の答え（添付を含む）を申請したAIへ届けるため。</li>
 <li>新しい申請や更新を通知するため。</li>
 <li>契約の状態（期限・更新・返金）を確かめるため。</li>
 <li>ログインと、端末の接続を確かめるため。</li>
@@ -43,19 +44,22 @@
 <li>Cloudflare（公式サーバーへの通信の中継）</li>
 </ul>
 <p>通知の本文には申請の件名だけを入れ、背景は入れません。</p>
+<p>答えと添付は、申請したAIへ届けます。AIがそれを読むと、内容はそのAIのサービス（利用者が自分で選んで使っているもの）へ渡り、そのサービスの規約に従って扱われます。</p>
 
 <h2>保存場所と保存期間</h2>
 <ul>
 <li>情報は、運営者が管理するサーバー（日本）に保存します。通信はHTTPSで暗号化します。</li>
 <li>答えた申請と取り下げられた申請は、既定で30日後に自動で削除します。期間は設定で7日・30日・90日・365日から選べます。</li>
 <li>答えを待っている申請と保留中の申請は、答えるか、AIが取り下げるまで残ります。</li>
+<li>答えへの添付は、その申請と一緒に、同じ期間で削除します。上げたけれど答えに使わなかった添付は、24時間で削除します。</li>
+<li>接続したパソコンのコネクタは、AIへ届ける前に添付をそのパソコンの <code>~/.approval-box/attachments/</code> に保存し、30日後に削除します。このファイルは利用者のパソコンの中にあり、運営者は扱いません。</li>
 <li>購入履歴は、契約の状態を保つため、アカウントを削除するまで残ります。</li>
 </ul>
 
 <h2>削除</h2>
 <ul>
-<li>アプリまたはWeb版の「設定」から、答えた申請と取り下げられた申請（既決の履歴）をすぐに削除できます。</li>
-<li>同じく「設定」から、アカウントと、申請・答え・接続した端末・通知の登録を含むすべての情報を削除できます。</li>
+<li>アプリまたはWeb版の「設定」から、答えた申請と取り下げられた申請（既決の履歴）を、添付も含めてすぐに削除できます。</li>
+<li>同じく「設定」から、アカウントと、申請・答え・添付・接続した端末・通知の登録を含むすべての情報を削除できます。</li>
 <li>端末の接続は、アプリの「接続」または端末の <code>npx approval-box uninstall</code> で解除できます。</li>
 </ul>
 
@@ -67,25 +71,26 @@
 
 <section lang="en" id="en">
 <h1>Privacy Policy</h1>
-<p class="muted">Approval Box (iPhone and Android apps, web app, and official server) — Effective October 2, 2026</p>
+<p class="muted">Approval Box (iPhone and Android apps, web app, and official server) — Effective October 2, 2026; updated October 3, 2026 (answer attachments)</p>
 <p>Approval Box collects requests from AI agents (such as Claude Code, Codex, Cursor and Grok) that need your decision, approval or action, and lets you answer them. It is operated by kitepon.dev. This policy covers the official server (approval-box.kitepon.dev). The operator does not handle data on servers you host yourself.</p>
 <h2>Information we collect</h2>
 <ul>
 <li><strong>Account</strong>: the user identifier from Sign in with Apple or Sign in with Google, and your email address if provided (a relay address if you choose Hide My Email).</li>
 <li><strong>Requests and answers</strong>: the title, context, options, recommendation, urgency, deadline, session label and AI type sent by your AI, your answers (the option you chose and any text), and the history of changes and cancellations. The context may include code or work content your AI is handling.</li>
+<li><strong>Answer attachments</strong>: images and documents you attach to an answer (such as photos, screenshots, PDFs and text files), including the file contents, file name, type, size and a SHA-256 checksum. Files are stored as received. If a photo contains metadata such as its location (Exif), it is kept, so remove it before attaching if you prefer.</li>
 <li><strong>Connected computers</strong>: device name, OS, the AI tools in use, and connection test results. Connection tokens are stored only as one-way hashes.</li>
 <li><strong>Notifications</strong>: your device's Apple Push Notification service token.</li>
 <li><strong>Purchase history</strong>: for App Store subscriptions, the original transaction ID, product ID, expiration date, whether it was refunded or revoked, and the environment (production or test). We do not store prices or storefronts, and payment methods and card details never reach us.</li>
 </ul>
 <p>We do not collect information for advertising, tracking or analytics, and we do not include third-party SDKs for those purposes.</p>
 <h2>How we use it</h2>
-<p>To deliver requests to you and your answers back to the AI that asked, to send notifications, to check your subscription status, to sign you in and verify connected computers, and to prevent abuse. We never use your data to train AI models, and we do not sell it or use it for advertising.</p>
+<p>To deliver requests to you and your answers (including attachments) back to the AI that asked, to send notifications, to check your subscription status, to sign you in and verify connected computers, and to prevent abuse. We never use your data to train AI models, and we do not sell it or use it for advertising.</p>
 <h2>Sharing</h2>
-<p>We do not share your data with third parties except as required by law. We rely on Apple (Sign in with Apple, push notifications, App Store purchases), Google (Sign in with Google) and Cloudflare (network delivery to the official server). Notifications contain only the request title, never its context.</p>
+<p>We do not share your data with third parties except as required by law. We rely on Apple (Sign in with Apple, push notifications, App Store purchases), Google (Sign in with Google) and Cloudflare (network delivery to the official server). Notifications contain only the request title, never its context. Answers and attachments are delivered to the AI that asked; when the AI reads them, they are passed to that AI service (which you chose to use) and handled under its terms.</p>
 <h2>Storage and retention</h2>
-<p>Data is stored on a server managed by the operator in Japan and transmitted over HTTPS. Answered and cancelled requests are deleted automatically after 30 days by default; you can choose 7, 30, 90 or 365 days in Settings. Pending and held requests remain until you answer them or the AI cancels them. Purchase history is kept until you delete your account, to maintain your subscription status.</p>
+<p>Data is stored on a server managed by the operator in Japan and transmitted over HTTPS. Answered and cancelled requests are deleted automatically after 30 days by default; you can choose 7, 30, 90 or 365 days in Settings. Pending and held requests remain until you answer them or the AI cancels them. Attachments are deleted together with their request, on the same schedule; uploaded files that are not used in an answer are deleted after 24 hours. The connector on your computer saves attachments to <code>~/.approval-box/attachments/</code> before handing them to the AI and deletes them after 30 days; those files stay on your computer and are not handled by the operator. Purchase history is kept until you delete your account, to maintain your subscription status.</p>
 <h2>Deletion</h2>
-<p>In Settings, you can delete answered and cancelled requests immediately, or delete your account, which removes all associated data, including requests, answers, connected computers and notification registrations. You can disconnect a computer from the Connections screen or by running <code>npx approval-box uninstall</code> on it.</p>
+<p>In Settings, you can delete answered and cancelled requests (including their attachments) immediately, or delete your account, which removes all associated data, including requests, answers, attachments, connected computers and notification registrations. You can disconnect a computer from the Connections screen or by running <code>npx approval-box uninstall</code> on it.</p>
 <h2>Contact</h2>
 <p>For questions about this policy, open an issue on GitHub (<a href="https://github.com/kitepon/approval-box/issues">https://github.com/kitepon/approval-box/issues</a>). Issues are public, so do not include personal information. You can delete your account and data in Settings in the app.</p>
 <h2>Changes</h2>
