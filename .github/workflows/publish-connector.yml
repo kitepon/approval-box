@@ -1,0 +1,42 @@
+# コネクタ（npm の approval-box）を公開する。タグ connector-v<版> を push すると動く。
+# npm の Trusted Publishing（OIDC）で公開するので、トークンも、公開のたびの承認も要らない。
+# npm 側の登録: npm trust github approval-box --file publish-connector.yml --repository kitepon/approval-box
+name: publish-connector
+
+on:
+  push:
+    tags:
+      - "connector-v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-connector
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted Publishing は npm 11.5.1 以上が要る
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - name: タグと package.json の版が同じか確かめる
+        run: |
+          version=$(node -p "require('./packages/connector/package.json').version")
+          if [ "connector-v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "タグ $GITHUB_REF_NAME と package.json の版 $version が合いません" >&2
+            exit 1
+          fi
+      - run: npm run typecheck -w packages/connector
+      - run: npm test -w packages/connector
+      - run: npm run build -w packages/connector
+      - run: npm publish --access public
+        working-directory: packages/connector
