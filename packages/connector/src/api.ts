@@ -43,9 +43,14 @@ export class Api {
     try {
       json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
     } catch {
-      // 前段（Cloudflare・リバースプロキシ）のエラーページなど。サーバーの応答ではないので、届かなかったものとして伝える。
-      throw new ServerError(response.status, "unreachable",
-        `Approval Boxサーバーから正しい応答がありませんでした（HTTP ${response.status}）。サーバーが一時的に止まっている可能性があります。少し待ってから同じ操作をやり直してください。申請が作られたか気になる時は list_my_decisions で確かめられます。`, {});
+      // 前段（Cloudflare・リバースプロキシ）のエラーページなど、サーバーのJSONでない応答。
+      // 要求がサーバーまで届いたかは分からない。書き込みなら「作られた／作られていない」と言い切らず、一覧で確かめさせる。
+      const contentType = response.headers.get("content-type") ?? "";
+      const head = `Approval Boxサーバーから、JSONでない応答が返りました（HTTP ${response.status}、Content-Type: ${contentType || "なし"}）。前段（Cloudflareなど）のエラーページで、サーバーが一時的に止まっていた可能性があります。`;
+      const tail = method === "GET"
+        ? "少し待ってから、同じ操作をやり直してください。"
+        : "この操作がサーバーで行われたかは分かりません。やり直す前に list_my_decisions で確かめてください。申請なら、一覧に無ければ出し直し、あればそれを使ってください。";
+      throw new ServerError(response.status, "non_json_response", `${head}${tail}`, { http_status: response.status, content_type: contentType, outcome: method === "GET" ? "not_applied" : "unknown" });
     }
     if (!response.ok) {
       const error = (json.error ?? {}) as { code?: string; message?: string };

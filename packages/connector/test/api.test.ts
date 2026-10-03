@@ -16,9 +16,27 @@ test("前段のHTMLのエラーページは、JSONの例外ではなく「届か
     await assert.rejects(new Api({ server: url, token: "t" }).call("POST", "/decisions", { title: "x" }), (error: unknown) => {
       assert.ok(error instanceof ServerError);
       assert.equal(error.status, 502);
-      assert.equal(error.code, "unreachable");
-      assert.match(error.message, /HTTP 502/);
+      assert.equal(error.code, "non_json_response");
+      assert.match(error.message, /HTTP 502、Content-Type: text\/html/);
+      assert.match(error.message, /行われたかは分かりません/);
       assert.match(error.message, /list_my_decisions/);
+      assert.doesNotMatch(error.message, /作られていません|届いていません/);
+      assert.equal(error.body.outcome, "unknown");
+      assert.equal(error.body.content_type, "text/html");
+      return true;
+    });
+  } finally { server.close(); }
+});
+
+test("読み取り（GET）のJSONでない応答は、やり直しを案内する（一覧の確認は求めない）", async () => {
+  const { server, url } = await serve(200, "text/html", "<html>login</html>");
+  try {
+    await assert.rejects(new Api({ server: url, token: "t" }).call("GET", "/decisions"), (error: unknown) => {
+      assert.ok(error instanceof ServerError);
+      assert.equal(error.status, 200);
+      assert.match(error.message, /HTTP 200、Content-Type: text\/html/);
+      assert.match(error.message, /やり直してください/);
+      assert.equal(error.body.outcome, "not_applied");
       return true;
     });
   } finally { server.close(); }
