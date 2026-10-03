@@ -8,7 +8,7 @@ import { Api, ServerError } from "./api.ts";
 import { OFFICIAL_SERVER, readConfig, requireConfig, writeConfig } from "./config.ts";
 import { daemonStatus, ensureDaemon, runDaemon } from "./daemon.ts";
 import { CLIENT, HARNESSES, LABEL, type Target, detect, filesOf, instructionsFileOf, register, registered, unregister } from "./harness.ts";
-import { INSTRUCTION_TEXT } from "./instructions.ts";
+import { INSTRUCTION_TEXT, managedElsewhere } from "./instructions.ts";
 import { runMcp } from "./mcp.ts";
 import { home } from "./profile.ts";
 import { runtimeDir } from "./runtime.ts";
@@ -131,7 +131,8 @@ async function setup() {
   out(`  「${INSTRUCTION_TEXT}」`);
   for (const target of targets) {
     const file = instructionsFileOf(target);
-    out(`  ${LABEL[target]}: ${file ?? "会話の始まりのhook（hooks.json の sessionStart）で渡します"}`);
+    const link = file ? managedElsewhere(file) : null;
+    out(`  ${LABEL[target]}: ${!file ? "会話の始まりのhook（hooks.json の sessionStart）で渡します" : link ? `${file} は ${link} への参照で、別の所で管理されているので書きません（管理元の規範に一節を足してください）` : file}`);
   }
   const instructions = !flag("no-instructions") && (flag("yes") || !/^n(o)?$/i.test(await ask("足しますか？ [Y/n] ")));
 
@@ -167,6 +168,7 @@ async function registerTargets() {
     const result = await register(target, { instructions: flag("instructions") });
     const extra = result.steer ? `（${STEER_LABEL[result.steer.split(":")[0] ?? ""] ?? `作業中の割り込み: ${result.steer}`}）` : "";
     out(`  ${LABEL[target]}: ${result.status === "registered" ? "登録しました" : `失敗 — ${result.detail}`}${extra}`);
+    if (result.note) out(`    ・${result.note}`);
     if (result.status === "failed") failed = true;
   }
   ensureDaemon();
@@ -230,7 +232,13 @@ async function doctor() {
     if (r.hooks === false) problems.push(`${LABEL[target]}: hookが登録されていません → npx approval-box setup --only ${target}`);
     if (r.entry && !existsSync(r.entry)) problems.push(`${LABEL[target]}: 登録先のファイルがありません（${r.entry}）。node やApproval Boxを入れ直した時に起きます → npx approval-box setup`);
     // 足さないと選んだ人もいるので、問題ではなく案内にする
-    if (r.mcp && r.instructions === false) hints.push(`${LABEL[target]}: 全体の指示にApproval Boxの一節がありません。AIが申請を出さない時は → npx approval-box setup --only ${target}`);
+    if (r.mcp && r.instructions === false) {
+      const file = instructionsFileOf(target);
+      const link = file ? managedElsewhere(file) : null;
+      hints.push(link
+        ? `${LABEL[target]}: 全体の指示（${file} → ${link}）にApproval Boxの一節がありません。別の所で管理されているので、管理元の規範に「${INSTRUCTION_TEXT}」を足してください`
+        : `${LABEL[target]}: 全体の指示にApproval Boxの一節がありません。AIが申請を出さない時は → npx approval-box setup --only ${target}`);
+    }
   }
   for (const hint of hints) out(`・${hint}`);
   if (!problems.length) out("問題は見つかりませんでした。届かない時は、AIに「Approval Boxのsetup_testを実行して」と言って、どこで止まるかを確かめてください。");

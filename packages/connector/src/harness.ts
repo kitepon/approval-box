@@ -4,7 +4,7 @@ import { copyFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { writeJsonFile } from "./config.ts";
-import { hasInstructions, removeInstructions, writeInstructions } from "./instructions.ts";
+import { hasInstructions, managedElsewhere, removeInstructions, writeInstructions } from "./instructions.ts";
 import { MCP_SERVER, PROFILE } from "./profile.ts";
 import { runtimeEntry } from "./runtime.ts";
 
@@ -118,13 +118,21 @@ async function withCodexConfig<T>(fn: (request: (method: string, params: unknown
   return steer.withCodexReceiver(PROFILE, { thread_id: "00000000-0000-4000-8000-000000000000", codex_home: codexHome() }, fn);
 }
 
-export type RegisterResult = { target: Target; status: "registered" | "removed" | "failed"; detail?: string; steer?: string };
+export type RegisterResult = { target: Target; status: "registered" | "removed" | "failed"; detail?: string; steer?: string; note?: string };
 
 export async function register(target: Target, options: { instructions?: boolean } = {}): Promise<RegisterResult> {
   const file = instructionsFileOf(target);
+  let note: string | undefined;
   if (options.instructions && file) {
-    try { writeInstructions(file); } catch (error) { return { target, status: "failed", detail: `${file}: ${(error as Error).message}` }; }
+    try {
+      if (writeInstructions(file) === "managed_elsewhere") note = `全体の指示（${file} → ${managedElsewhere(file)}）は別の所で管理されているので書きませんでした。管理元の規範に一節を足してください`;
+    } catch (error) { return { target, status: "failed", detail: `${file}: ${(error as Error).message}` }; }
   }
+  const result = await registerTools(target, options);
+  return note && result.status === "registered" ? { ...result, note } : result;
+}
+
+async function registerTools(target: Target, options: { instructions?: boolean }): Promise<RegisterResult> {
   const hook = (kind: "claude" | "cursor") => ({ command: stableNode(), script: runtimeEntry(kind) });
   try {
     if (target === "claude") {
