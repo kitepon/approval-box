@@ -26,7 +26,7 @@ export const diagnosticSchema = z.strictObject({
     user_visible: z.boolean(), cancellation: z.enum(["system","user","unexpected"]).optional(),
     signal: integer.optional(), exception_type: integer.optional(), exception_code: integer.optional(),
     hang_duration_ms: z.number().finite().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
-    stack_frames: z.array(z.strictObject({binary_uuid: z.uuid(),offset:nonnegative,sample_count:nonnegative})).max(32).optional(),
+    stack_frames: z.array(z.strictObject({binary_uuid: z.uuid(),offset:nonnegative,sample_count:nonnegative.optional()})).max(32).optional(),
   }),
 });
 type Diagnostic = z.infer<typeof diagnosticSchema>;

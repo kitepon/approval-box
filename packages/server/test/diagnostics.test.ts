@@ -72,3 +72,11 @@ test("receipts, severity and aggregate survive database reopen",()=>{
   run(db,"delete from users where id=?",user);assert.equal(all(db,"select * from diagnostic_receipts").length,0);assert.equal(all(db,"select * from diagnostics").length,0);db.close();
  } finally {rmSync(directory,{recursive:true,force:true});}
 });
+
+test("crash frames accept absent sample_count without discarding UUID/offset",async()=>{
+ const x=setup(), binary_uuid=randomUUID();
+ const event={...x.event(),code:"crash",module:"metrickit",diagnostic_log:{operation:"app.crash",user_visible:false,exception_type:1,stack_frames:[{binary_uuid,offset:123},{binary_uuid,offset:456,sample_count:3}]}};
+ const response=await x.send(event);assert.equal(response.status,202);
+ const row=(await (await x.admin("/logs")).json())[0];
+ const log=JSON.parse(row.diagnostic_log);assert.deepEqual(log.stack_frames,event.diagnostic_log.stack_frames);assert.equal(row.severity,"fatal");
+});
