@@ -10,7 +10,7 @@
 <body>
 <main>
 <h1>プライバシーポリシー</h1>
-<p class="muted">Approval Box（iPhone・Androidアプリ、Web版、公式サーバー）／制定 2026年10月2日・改定 2026年10月3日（答えへの添付）</p>
+<p class="muted">Approval Box（iPhone・Androidアプリ、Web版、公式サーバー）／制定 2026年10月2日・改定 2026年10月4日（アプリの障害診断）</p>
 <nav class="lang"><a href="#en">English</a> · <a href="/support">サポート</a></nav>
 
 <p>Approval Box は、AI（Claude Code・Codex・Cursor・Grok など）が利用者の判断・承認・操作を求める時に、その申請を集めて利用者が答えるためのサービスです。運営者は kitepon.dev です。このポリシーは、公式サーバー（approval-box.kitepon.dev）を使う場合の情報の扱いを定めます。利用者が自分で立てたサーバーの情報は、運営者は扱いません。</p>
@@ -22,6 +22,7 @@
 <li><strong>答えへの添付</strong>: 利用者が答えに付けた画像と書類（写真・スクリーンショット・PDF・文書など）のファイルの中身、ファイル名、形式、大きさ、改ざんを確かめるための値（SHA-256）。ファイルは受け取ったままの形で保存します。写真に撮影場所などの情報（Exif）が含まれる場合、それも消さずに残るので、気になる時は付ける前に取り除いてください。</li>
 <li><strong>接続した端末</strong>: 端末名、OS、使うAIの種類、接続テストの結果。端末の接続トークンは、元に戻せない形（ハッシュ）でだけ保存します。</li>
 <li><strong>通知</strong>: 通知を送るための端末の識別子（Apple Push Notification service のトークン）。</li>
+<li><strong>アプリの障害診断</strong>: 発生時刻、端末の種類（iPhone・iPad・Mac）、OSとアプリの版、固定の処理名、エラーの数値・種類、応答の形式、デコードで問題が起きた既知の項目名、クラッシュやハングの数値情報とバイナリの識別子・位置。ログイン後に送信し、同じイベントの再送を数えないための識別子を保存します。認証トークン、申請や応答の本文、生のURL、添付の中身は診断として送信しません。</li>
 <li><strong>購入履歴</strong>: App Store で契約した時の元の取引ID、商品ID、契約の期限、返金・取り消しの有無、購入の環境（本番か試験か）。価格や国などは保存しません。支払い方法やカードの情報は、運営者には届きません。</li>
 </ul>
 <p>広告、トラッキング、行動の解析のための情報は集めません。そのための外部のSDKも使っていません。</p>
@@ -33,6 +34,7 @@
 <li>契約の状態（期限・更新・返金）を確かめるため。</li>
 <li>ログインと、端末の接続を確かめるため。</li>
 <li>不正な利用を防ぐため（申請の数の上限など）。</li>
+<li>アプリの障害を調査し、修正するため。運営者が管理するBugHubへ、アカウントの識別子を含まない集約診断を連携します。</li>
 </ul>
 <p>集めた情報を、AIの学習に使うことはありません。販売も、広告への利用もしません。</p>
 
@@ -54,6 +56,7 @@
 <li>答えへの添付は、その申請と一緒に、同じ期間で削除します。上げたけれど答えに使わなかった添付は、24時間で削除します。</li>
 <li>接続したパソコンのコネクタは、AIへ届ける前に添付をそのパソコンの <code>~/.approval-box/attachments/</code> に保存し、30日後に削除します。このファイルは利用者のパソコンの中にあり、運営者は扱いません。</li>
 <li>購入履歴は、契約の状態を保つため、アカウントを削除するまで残ります。</li>
+<li>診断イベントは30日間、または全体の最新10,000件まで保存します。アカウントを削除すると、そのイベントと重複を防ぐための受領記録も削除します。アカウントの識別子を含まない集約診断は、最後に受け取ってから120日間保存します。</li>
 </ul>
 
 <h2>削除</h2>
@@ -73,6 +76,7 @@
 <h1>Privacy Policy</h1>
 <p class="muted">Approval Box (iPhone and Android apps, web app, and official server) — Effective October 2, 2026; updated October 3, 2026 (answer attachments)</p>
 <p>Approval Box collects requests from AI agents (such as Claude Code, Codex, Cursor and Grok) that need your decision, approval or action, and lets you answer them. It is operated by kitepon.dev. This policy covers the official server (approval-box.kitepon.dev). The operator does not handle data on servers you host yourself.</p>
+<p>Diagnostics are used to investigate and fix application failures and are aggregated in the operator’s BugHub without account identifiers. Raw events are retained for 30 days or the latest 10,000 events. Account deletion removes associated events and deduplication receipts. Aggregates without account identifiers are retained for 120 days after the latest receipt.</p>
 <h2>Information we collect</h2>
 <ul>
 <li><strong>Account</strong>: the user identifier from Sign in with Apple or Sign in with Google, and your email address if provided (a relay address if you choose Hide My Email).</li>
@@ -81,6 +85,7 @@
 <li><strong>Connected computers</strong>: device name, OS, the AI tools in use, and connection test results. Connection tokens are stored only as one-way hashes.</li>
 <li><strong>Notifications</strong>: your device's Apple Push Notification service token.</li>
 <li><strong>Purchase history</strong>: for App Store subscriptions, the original transaction ID, product ID, expiration date, whether it was refunded or revoked, and the environment (production or test). We do not store prices or storefronts, and payment methods and card details never reach us.</li>
+<li><strong>Application diagnostics</strong>: occurrence time, device type, OS/app versions, allowlisted operation names, numeric errors and crash/hang information, response format, known decoding keys, and binary UUID/offsets. Diagnostics are uploaded after login. Authentication tokens, raw URLs, request/response bodies and attachment contents are excluded.</li>
 </ul>
 <p>We do not collect information for advertising, tracking or analytics, and we do not include third-party SDKs for those purposes.</p>
 <h2>How we use it</h2>

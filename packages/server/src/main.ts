@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { Diagnostics } from "./diagnostics.ts";
 import { Apns, Notifier } from "./push.ts";
 import { serve } from "@hono/node-server";
 import { existsSync, readFileSync } from "node:fs";
@@ -109,9 +110,11 @@ if (callBridgeIds.length) {
     console.log(`approval-box-server: call-bridge で答えを届けます（接続 ${callBridgeIds.length}）`);
   }
 }
-const app = createApp({ db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) } }, { staticHandler });
+const diagnosticsAdminToken = env.DIAGNOSTICS_ADMIN_KEY_FILE ? readFileSync(env.DIAGNOSTICS_ADMIN_KEY_FILE,"utf8").trim() : env.DIAGNOSTICS_ADMIN_KEY;
+const app = createApp({ diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) } }, { staticHandler });
 
 setInterval(() => {
+  new Diagnostics(db).prune();
   decisions.purgeExpired();
   attachments.gc();
   accounts.prunePairings();

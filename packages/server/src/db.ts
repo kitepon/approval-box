@@ -4,6 +4,28 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 const schema = `
+create table if not exists diagnostics (
+ id integer primary key autoincrement,
+ user_id text not null references users(id) on delete cascade,
+ event_id text not null, received_at text not null, payload text not null,
+ payload_hash text not null, fingerprint text not null, severity text not null,
+ resolved_at text, unique(user_id,event_id)
+);
+create index if not exists diagnostics_received on diagnostics(received_at);
+create index if not exists diagnostics_fingerprint on diagnostics(fingerprint);
+create table if not exists diagnostic_groups (
+ fingerprint text primary key, severity text not null, message_template text not null,
+ occurrence_count integer not null, first_seen text not null, last_seen text not null,
+ status text not null, payload text not null, resolved_at text, resolution_note text
+);
+create table if not exists diagnostic_receipts (
+ user_id text not null references users(id) on delete cascade, event_id text not null,
+ payload_hash text not null, created_at text not null, primary key(user_id,event_id)
+);
+create table if not exists diagnostic_rate (
+ bucket text not null, scope text not null, count integer not null, primary key(bucket,scope)
+);
+
 create table if not exists users (
   id text primary key,
   created_at text not null,

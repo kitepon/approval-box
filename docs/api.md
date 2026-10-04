@@ -323,3 +323,7 @@ message は利用者にそのまま見せてよい日本語の文。
 - v0.4 2026-10-01 クオの裁定で、AIが自分の申請を一覧・修正・取り下げできるようにした。Decision に history・cancel_reason・distinct_reason を追加。answer の version を必須に。通知に change を追加。
 - v0.3 2026-10-01 設定の「データ削除」を、DELETE /me（アカウント削除）とは別の操作として確定。既決だけを消す。保存日数の設定を追加。
 - v0.2 2026-10-01 ベルの問い合わせを受けて、Android、エラー、並び順、冪等キー、version、更新の知らせ、添付なし、差戻しの扱いを確定。
+
+## アプリ診断（2026-10-04）
+
+`POST /v1/diagnostics` はアプリのBearer sessionで診断イベントを受け取ります。未ログイン時は端末内outboxへ保存し、ログイン後に送ります。項目・列挙・重複排除・上限・MetricKit・BugHub管理APIの契約は [diagnostics.md](diagnostics.md) と `packages/server/src/diagnostics.ts` を参照してください。初回も同一イベントの再送も202で受領を返します。診断POSTの失敗は診断として再送信しません。

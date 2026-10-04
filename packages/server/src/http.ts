@@ -1,3 +1,4 @@
+import { Diagnostics, diagnosticsAdmin, readDiagnostic } from "./diagnostics.ts";
 import { type KeySource, type Provider, verifyIdToken } from "./oidc.ts";
 import { onboarding } from "./onboarding.ts";
 import { Hono, type Context } from "hono";
@@ -13,7 +14,7 @@ import { Decisions, amendSchema, answerSchema, createSchema } from "./decisions.
 import { now } from "./ids.ts";
 import { type RemoteMcpOptions, remoteMcpHandler } from "./remote-mcp.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; attachments?: Attachments; appStore?: AppStore; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions };
 
 const STATUSES = ["pending", "held", "answered", "cancelled"] as const;
 /** アプリへ戻すURLのscheme（AndroidのCustom Tabsから戻る先）。 */
@@ -96,6 +97,9 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(new ApiError("internal", "サーバーで問題が起きました。時間を置いて試してください。").body(), 500);
   });
 
+  const diagnostics = new Diagnostics(services.db);
+  app.route("/api/admin",diagnosticsAdmin(diagnostics,services.diagnosticsAdminToken));
+
   app.get("/healthz", (c) => c.json({ ok: true }));
 
   // ================= アプリ・Web版 =================
@@ -159,6 +163,8 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     c.set("userId", accounts.userBySession(bearer(c)));
     await next();
   });
+
+  v1.post("/diagnostics",async c=>c.json(diagnostics.accept(c.get("userId"),await readDiagnostic(c.req.raw),c.req.header("idempotency-key")),202));
 
   v1.get("/decisions", (c) => {
     const statuses = (c.req.query("status") ?? "pending,held").split(",").map((s) => s.trim()).filter(Boolean);
