@@ -117,7 +117,7 @@ export function diagnosticsAdmin(diagnostics: Diagnostics, token?: string) {
     const rows = all<{fingerprint:string;severity:string;message_template:string;occurrence_count:number;last_seen:string;status:string;payload:string}>(diagnostics.db,`select * from diagnostic_groups ${status === "all" ? "" : "where status=?"} order by last_seen desc,fingerprint limit ?`,...(status === "all" ? [limit] : [status,limit]));
     return c.json(rows.map(r=>{
       const p = JSON.parse(r.payload) as Diagnostic;
-      return {fingerprint:r.fingerprint,severity:r.severity,message_template:r.message_template,occurrence_count:r.occurrence_count,last_seen:r.last_seen,status:r.status,module:`${p.module}.${p.device_type}`,category:p.code,app_version:p.app_version,diagnostic_log:JSON.stringify(p.diagnostic_log),diagnostic_log_version:"1",diagnostic_log_received_at:r.last_seen,diagnostic_context:{device_type:p.device_type,os_version:p.os_version,occurred_at:p.occurred_at,event_id:p.event_id,...p.diagnostic_log}};
+      return {fingerprint:r.fingerprint,severity:r.severity,message_template:r.message_template,occurrence_count:r.occurrence_count,last_seen:r.last_seen,status:r.status,module:`${p.module}.${p.device_type}`,category:p.code,app_version:p.app_version,diagnostic_log:JSON.stringify(p.diagnostic_log),diagnostic_log_version:p.app_version,diagnostic_log_received_at:r.last_seen,diagnostic_context:{diagnostic_schema_version:1,device_type:p.device_type,os_version:p.os_version,occurred_at:p.occurred_at,event_id:p.event_id,...p.diagnostic_log}};
     }));
   });
   for (const action of ["resolve","reopen"] as const) app.post(`/logs/${action}`,async c=>{

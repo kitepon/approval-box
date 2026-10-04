@@ -26,5 +26,7 @@ if action != 'inspect':
     request = urllib.request.Request(base+'/'+action,data=json.dumps(body).encode(),headers=headers,method='POST')
     with urllib.request.urlopen(request,timeout=10) as response:
         print('mutation',response.status,json.dumps(json.load(response)))
+    with urllib.request.urlopen(urllib.request.Request(base+'?status=all&limit=500',headers=headers),timeout=10) as response:
+        row = next(r for r in json.load(response) if r['fingerprint'] == row['fingerprint'])
 # These fields are allowlisted metadata, no user/session/admin key.
 print(json.dumps({name:row.get(name) for name in ('fingerprint','severity','message_template','occurrence_count','last_seen','status','module','category','app_version','diagnostic_log','diagnostic_context')},ensure_ascii=False))

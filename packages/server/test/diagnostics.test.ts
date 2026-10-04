@@ -37,7 +37,7 @@ test("LAN socket and host required: reject proxy paths, spoofing, wrong/missing 
 test("BugHub aggregation, resolve idempotency, duplicate stays resolved, new occurrence reopens",async()=>{
  const x=setup(), event=x.event();await x.send(event);
  const rows=await (await x.admin("/logs?status=all&limit=500")).json();assert.equal(rows.length,1);
- const row=rows[0];assert.equal(row.severity,"info");assert.equal(row.module,"processing.iPhone");assert.equal(row.occurrence_count,1);assert.equal(typeof row.diagnostic_log,"string");assert.equal(row.diagnostic_context.os_version,"27.0.0");assert.match(row.last_seen,/Z$/);
+ const row=rows[0];assert.equal(row.severity,"info");assert.equal(row.module,"processing.iPhone");assert.equal(row.occurrence_count,1);assert.equal(typeof row.diagnostic_log,"string");assert.equal(row.diagnostic_log_version,"0.1.0(14)");assert.equal(row.diagnostic_context.diagnostic_schema_version,1);assert.equal(row.diagnostic_context.os_version,"27.0.0");assert.match(row.last_seen,/Z$/);
  await x.admin("/logs/resolve",{fingerprint:row.fingerprint,note:"test"});await x.admin("/logs/resolve",{fingerprint:row.fingerprint,note:"test"});await x.send(event);
  let current=(await (await x.admin("/logs")).json())[0];assert.equal(current.status,"resolved");assert.equal(current.occurrence_count,1);
  await x.send({...event,event_id:randomUUID(),app_version:"0.1.0(15)"});current=(await (await x.admin("/logs")).json())[0];assert.equal(current.status,"open");assert.equal(current.occurrence_count,2);assert.equal(current.app_version,"0.1.0(15)");
