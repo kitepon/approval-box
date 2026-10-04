@@ -4,6 +4,8 @@ AIが人間の判断・承認・操作を求める時に、Approval Boxへも申
 
 対応するAI: Claude Code・Codex・Cursor・Grok（macOS・Windows・Linux）
 
+Cursor・Grokでは、申請道具が返すコマンドで背景の受信処理を起動します。Cursorのhookは受信口と会話を結び付け、答えは背景受信が届けます。受信処理が答えを返すまで動かしておきます。
+
 ## 使い方
 
 ```sh

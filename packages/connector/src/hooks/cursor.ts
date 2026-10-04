@@ -1,4 +1,13 @@
-// Cursorの公式hook。tool結果の印で会話へ結び、作業中は次のtool返りへ答えを差し込む。本体はaiterm-steer-delivery。
-import { runCursorHookMain } from "aiterm-steer-delivery";
+// hookは会話のbindだけ。回答は背景receiveがstdoutへ出して消費する。
+import { bindCursorResult } from "../cursor-binding.ts";
 import { PROFILE } from "../profile.ts";
-await runCursorHookMain(PROFILE);
+try {
+  let raw = "";
+  process.stdin.setEncoding("utf8");
+  for await (const chunk of process.stdin) raw += chunk;
+  await bindCursorResult(PROFILE, raw);
+  process.stdout.write("{}\n");
+} catch (error) {
+  process.stderr.write(`${error instanceof Error ? error.message : "CURSOR_PARENT_HOOK_FAILED"}\n`);
+  process.exitCode = 2;
+}
