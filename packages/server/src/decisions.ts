@@ -46,7 +46,10 @@ export const createSchema = z.object({
   check_token: z.string().max(200).optional(),
 });
 
+export const routeSchema = z.object({ channel_id: z.string().min(1).max(100), harness: z.string().min(1).max(20) });
+
 export const amendSchema = z.object({
+  route: routeSchema.optional(),
   version: z.number().int().positive(),
   note: z.string().trim().min(1).max(500),
   changes: z.object({
@@ -345,13 +348,28 @@ export class Decisions {
       if (recommendation && !options.some((o) => o.id === recommendation)) throw new ApiError("validation_failed", "recommendation が選択肢のidにありません。");
       const fields = AMEND_FIELDS.filter((f) => c[f] !== undefined);
       run(this.db, `update decisions set title = ?, norm_title = ?, context = ?, options = ?, recommendation = ?, urgency = ?, deadline = ?,
-          amend_count = amend_count + 1, updated_at = ?, version = version + 1 where id = ?`,
+          route = ?, amend_count = amend_count + 1, updated_at = ?, version = version + 1 where id = ?`,
         c.title ?? row.title, normalizeTitle(c.title ?? row.title), c.context ?? row.context, JSON.stringify(options), recommendation ?? null,
-        c.urgency ?? row.urgency, c.deadline === undefined ? row.deadline : c.deadline, now(), row.id);
-      this.history(row.id, "amended", "ai", body.note, [...fields]);
+        c.urgency ?? row.urgency, c.deadline === undefined ? row.deadline : c.deadline, body.route ? JSON.stringify(body.route) : row.route, now(), row.id);
+      this.history(row.id, "amended", "ai", body.note, [...fields, ...(body.route && JSON.stringify(body.route) !== row.route ? ["route"] : [])]);
       const updated = this.row(row.id)!;
       this.changed(updated, "amended");
       return this.toAi(updated);
+    });
+  }
+
+  resume(conn: Connection, id: string, route: Route) {
+    return tx(this.db, () => {
+      const row = this.forConnection(conn, id);
+      if (row.status === "answered") {
+        this.markFetched(row);
+      } else {
+        this.assertOpen(row, "ai");
+        run(this.db, "update decisions set route = ?, updated_at = ?, version = version + 1 where id = ?", JSON.stringify(route), now(), row.id);
+        this.history(row.id, "amended", "ai", "答えの配送先を再開した会話へ変更", ["route"]);
+        this.changed(this.row(row.id)!, "amended");
+      }
+      return this.aiView(conn, id, route.channel_id);
     });
   }
 

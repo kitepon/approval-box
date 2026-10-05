@@ -35,3 +35,14 @@ npx approval-box uninstall   # remove everything and unlink this device / 全部
 Self-hosted server: `npx -y approval-box@latest setup --server https://your-server`.
 
 Requires Node.js 20 or later. License: MIT.
+
+### 会話を開き直した時
+
+`list_my_decisions` で、自分が引き継ぐ申請を確かめ、対象ごとに
+`resume_decision({decision_id: "K-…"})` を呼びます。未決・保留なら今の会話へ
+配送先を移し、回答済みなら答えを直接返します。同じ端末にある他の作業の申請は、
+引き継ぐ対象に含めないでください。`amend_decision` も、修正が成功した時に配送先を
+呼び出した会話へ更新します。Cursor・Grokでは、返る案内に従って背景の受信を起動します。
+
+この機能はコネクタ0.1.13以降と対応サーバーを使います。会話を開き直しても、
+再開を指定するまでは元の会話が配送先です。答えは `get_decision` でも取得できます。

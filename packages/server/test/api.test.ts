@@ -317,3 +317,35 @@ test("確認を求める文に札と一覧が入る（0.1.6までのコネクタ
   assert.ok(first.json.error.message.includes(first.json.error.check_token));
   assert.ok(first.json.error.message.includes(created));
 });
+
+test("会話切替: amendは配送先も更新し、古い版の競合では更新しない", async () => {
+  const ctx = setup(); const token = await paired(ctx);
+  const created = await submit(ctx, token, request); const id = created.json.decision_id;
+  const route = { channel_id: "new-session", harness: "claude" };
+  const amended = await ctx.call("POST", `/connector/v1/decisions/${id}/amend`, { token, body: { version: 1, note: "会話を再開", changes: { context: "更新" }, route } });
+  assert.equal(amended.status, 200);
+  const stale = await ctx.call("POST", `/connector/v1/decisions/${id}/amend`, { token, body: { version: 1, note: "古い呼出", changes: { context: "古い" }, route: request.route } });
+  assert.equal(stale.status, 409);
+  assert.equal((await ctx.call("GET", `/connector/v1/decisions/${id}?channel_id=new-session`, { token })).json.this_session, true);
+  const answered = await ctx.call("POST", `/v1/decisions/${id}/answer`, { token: ctx.session, body: { option_id: "b", version: amended.json.version } });
+  assert.equal(answered.status, 200);
+  assert.deepEqual((await ctx.call("GET", "/connector/v1/deliveries", { token })).json.items[0].route, route);
+});
+
+test("再開: 対象の申請だけ移管し、回答済みはその場で取得、他の接続と取り下げは拒否", async () => {
+  const ctx = setup(); const token = await paired(ctx); const other = await paired(ctx);
+  const first = await submit(ctx, token, request); const id = first.json.decision_id;
+  const second = await submit(ctx, token, { ...request, title: "別の席の申請" });
+  const route = { channel_id: "resumed-session", harness: "grok" };
+  assert.equal((await ctx.call("POST", `/connector/v1/decisions/${id}/resume`, { token: other, body: route })).status, 404);
+  const resumed = await ctx.call("POST", `/connector/v1/decisions/${id}/resume`, { token, body: route });
+  assert.equal(resumed.json.this_session, true);
+  assert.equal((await ctx.call("GET", `/connector/v1/decisions/${second.json.decision_id}?channel_id=ch-1`, { token })).json.this_session, true);
+  const answer = await ctx.call("POST", `/v1/decisions/${id}/answer`, { token: ctx.session, body: { option_id: "b", version: resumed.json.version } });
+  assert.equal(answer.status, 200);
+  const fetched = await ctx.call("POST", `/connector/v1/decisions/${id}/resume`, { token, body: route });
+  assert.equal(fetched.json.delivery, "fetched"); assert.match(fetched.json.answer_text, /夜間/);
+  assert.equal((await ctx.call("GET", "/connector/v1/deliveries", { token })).json.items.length, 0);
+  await ctx.call("POST", `/connector/v1/decisions/${second.json.decision_id}/cancel`, { token, body: { reason: "不要" } });
+  assert.equal((await ctx.call("POST", `/connector/v1/decisions/${second.json.decision_id}/resume`, { token, body: route })).status, 409);
+});

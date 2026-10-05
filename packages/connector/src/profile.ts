@@ -5,7 +5,7 @@ import { join } from "node:path";
 /** MCPの登録名。Claudeのhook matcherがこの名前に固定されるため、setupは必ずこの名前で登録する。 */
 export const MCP_SERVER = "approval-box";
 /** 答えが返ってくる（親の会話へ配送する）tool。 */
-export const DISPATCH_TOOLS = ["request_decision", "setup_test"] as const;
+export const DISPATCH_TOOLS = ["request_decision", "setup_test", "amend_decision", "resume_decision"] as const;
 
 /** 置き場はホーム配下に固定する（TMPDIRやXDG_RUNTIME_DIRに頼らない。Cursor CLIはMCPとhookを別の環境で起動するため）。 */
 export const home = () => process.env.APPROVAL_BOX_HOME ?? join(homedir(), ".approval-box");

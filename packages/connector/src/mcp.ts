@@ -26,6 +26,7 @@ export function harnessOf(clientName: string | undefined): Harness {
 }
 
 const INSTRUCTIONS = [
+  "会話が替わったら list_my_decisions で自分が引き継ぐ申請を確かめ、申請ごとに resume_decision を呼ぶ。未決・保留の答えは新しい会話へ届き、回答済みならその場で答えが返る。",
   "Approval Boxは、利用者（人間）の判断・承認・操作が要る時に使う。URLを開いての承認や、利用者の手で行う作業を頼む時も含む。その時は request_decision でも申請する。利用者が申請に気づきやすいので、強く推奨する。答えは利用者がスマホやWebで出し、この会話へ自動で届く。",
   "request_decision を呼ぶと、申請はすぐには受け付けられず、自分の申請の一覧と check_token が返る。一覧を見て、内容が変わった申請は amend_decision、要らなくなった申請は cancel_decision で先に済ませる。答えが出ていれば、その答えに従う。問題が無ければ、同じ申請に check_token を付けて出し直すと受け付けられる。",
   "申請したら答えを待って何度も呼ばない。答えは届くので、他の作業を続けるかターンを終えてよい。",
@@ -80,6 +81,11 @@ const TOOLS = [
       required: ["decision_id", "version", "note", "changes"],
       additionalProperties: false,
     },
+  },
+  {
+    name: "resume_decision",
+    description: "前の会話から引き継いだ自分の申請を、この会話で再開する。未決・保留なら答えの配送先をこの会話へ変更し、回答済みなら答えを直接返す。list_my_decisionsで対象を確かめ、引き継ぐ申請ごとに呼ぶ。",
+    inputSchema: { type: "object", properties: { decision_id: { type: "string" } }, required: ["decision_id"], additionalProperties: false },
   },
   {
     name: "cancel_decision",
@@ -257,8 +263,17 @@ export async function runMcp() {
       }
       if (name === "amend_decision") {
         const { decision_id, ...rest } = args;
-        const decision = await api.call("POST", `/decisions/${encodeURIComponent(String(decision_id))}/amend`, rest);
-        return text(`直しました: ${decision.decision_id} version=${decision.version}\n\n${JSON.stringify(decision)}`, decision);
+        const channelId = await channelFor(harness, clientName, request.params._meta);
+        const decision = await api.call("POST", `/decisions/${encodeURIComponent(String(decision_id))}/amend`, { ...rest, route: { channel_id: channelId, harness } });
+        lastChannel = channelId;
+        return text(`直しました: ${decision.decision_id} version=${decision.version}${receiveGuide(harness, channelId)}\n\n${JSON.stringify(decision)}`, { ...decision, steer_channel: { channel_id: channelId } });
+      }
+      if (name === "resume_decision") {
+        const channelId = await channelFor(harness, clientName, request.params._meta);
+        const decision = await api.call("POST", `/decisions/${encodeURIComponent(String(args.decision_id))}/resume`, { channel_id: channelId, harness });
+        lastChannel = channelId;
+        const head = decision.answer_text ? String(decision.answer_text) : `再開しました: ${decision.decision_id}。答えはこの会話へ届きます。`;
+        return text(`${head}${decision.answer_text ? "" : receiveGuide(harness, channelId)}\n\n${JSON.stringify(decision)}`, { ...decision, steer_channel: { channel_id: channelId } });
       }
       if (name === "cancel_decision") {
         const decision = await api.call("POST", `/decisions/${encodeURIComponent(String(args.decision_id))}/cancel`, { reason: args.reason });

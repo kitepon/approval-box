@@ -156,7 +156,29 @@ export async function runDaemon() {
         again = false;
         try {
           const { items } = await api.call<{ items: Delivery[] }>("GET", "/deliveries");
-          for (const item of items) await deliver(item);
+          const waiting = new Map(items.map(item => [item.decision_id, item]));
+          for (const [id, entry] of Object.entries(journal)) {
+            if (entry.state !== "queued") continue;
+            const item = waiting.get(id);
+            if (item && item.delivery_id === entry.delivery_id && item.route.channel_id === entry.channel_id) continue;
+            // 再開/取得で配送先が変わった。未取得の本文だけ取り下げる。
+            // 取り出しと競合した時は新しい会話へ二重に送らない。
+            const withdrawn = steer.withdrawFromChannel(PROFILE, entry.channel_id, entry.delivery_id);
+            if (withdrawn || !item) {
+              delete journal[id];
+              save();
+              log(`配送 ${id} → ${withdrawn ? "withdrawn" : "resolved"}`);
+            } else {
+              Object.assign(entry, safeState(entry) === "emitted"
+                ? { state: "report", result: "delivered" }
+                : { state: "report", result: "unknown", detail: "配送先の変更前に受け口が本文を取得しました。再送しません" });
+              save();
+              await report(id);
+              // このsyncで取得した古い待ち一覧から送り直さない。
+              waiting.delete(id);
+            }
+          }
+          for (const item of waiting.values()) await deliver(item);
         } catch (error) {
           log(`配送待ちの取得に失敗: ${(error as Error).message}`);
         }

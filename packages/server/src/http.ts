@@ -10,7 +10,7 @@ import { type Attachment, type Attachments, MAX_FILE_BYTES, contentDisposition, 
 import { type Db, get, run } from "./db.ts";
 import { ApiError } from "./errors.ts";
 import type { EventHub, UserEvent } from "./events.ts";
-import { Decisions, amendSchema, answerSchema, createSchema } from "./decisions.ts";
+import { Decisions, amendSchema, answerSchema, createSchema, routeSchema } from "./decisions.ts";
 import { now } from "./ids.ts";
 import { type RemoteMcpOptions, remoteMcpHandler } from "./remote-mcp.ts";
 
@@ -324,6 +324,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     decisions.markFetched(row);
     return c.json(decisions.aiView(c.get("conn"), row.id));
   });
+  conn.post("/decisions/:id/resume", async (c) => c.json(decisions.resume(c.get("conn"), c.req.param("id"), await body(c, routeSchema))));
   conn.post("/decisions/:id/amend", async (c) => c.json(decisions.amend(c.get("conn"), c.req.param("id"), await body(c, amendSchema))));
   conn.post("/decisions/:id/cancel", async (c) => {
     const input = await body(c, z.object({ reason: z.string().trim().min(1).max(500) }));
