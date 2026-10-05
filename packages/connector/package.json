@@ -1,6 +1,6 @@
 {
   "name": "approval-box",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Approval Box connector: lets Claude Code, Codex, Cursor and Grok ask you for a decision, and steers your answer back into the same session.",
   "license": "MIT",
   "homepage": "https://approval-box.kitepon.dev",
@@ -28,14 +28,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test 'test/**/*.test.ts'"
   },
-  "dependencies": {},
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.31.0",
     "@types/node": "^25.9.1",
-    "aiterm-steer-delivery": "^0.1.9",
+    "@types/qrcode": "^1.5.5",
+    "aiterm-steer-delivery": "^0.2.0",
     "esbuild": "^0.28.2",
     "qrcode": "^1.5.4",
-    "@types/qrcode": "^1.5.5",
     "typescript": "^6.0.3",
     "zod": "^4.4.3"
   },

@@ -218,9 +218,9 @@ function registeredTools(target: Target): { mcp: boolean; hooks: boolean | null;
   const entryOf = (value: unknown) => ((value as { args?: string[] } | undefined)?.args ?? [])[0];
   if (target === "claude") {
     const entry = (readJson(claudeJson()).mcpServers as Record<string, unknown> | undefined)?.[MCP_SERVER];
-    const settings = JSON.stringify(readJson(join(claudeDir(), "settings.json")));
+    const settings = readJson(join(claudeDir(), "settings.json"));
     const e = entryOf(entry);
-    return { mcp: !!entry, hooks: settings.includes(PROFILE.hooks.claude), ...(e ? { entry: e } : {}) };
+    return { mcp: !!entry, hooks: steer.claudeParentHooksRegistered(PROFILE, settings), ...(e ? { entry: e } : {}) };
   }
   if (target === "cursor") {
     const entry = (readJson(join(cursorDir(), "mcp.json")).mcpServers as Record<string, unknown> | undefined)?.[MCP_SERVER];
