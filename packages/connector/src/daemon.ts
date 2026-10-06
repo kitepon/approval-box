@@ -59,7 +59,7 @@ export function ensureDaemon() {
     if (status.running && status.pid) { try { process.kill(status.pid); } catch { /* 既に終わっている */ } }
     mkdirSync(stateRoot(), { recursive: true, mode: 0o700 });
     const log = openSync(join(stateRoot(), "daemon.log"), "a", 0o600);
-    spawn(process.execPath, [runtimeEntry("cli"), "daemon"], { detached: true, stdio: ["ignore", "ignore", log], windowsHide: true }).unref();
+    spawn(process.execPath, [runtimeEntry("cli"), "daemon"], { cwd: stateRoot(), detached: true, stdio: ["ignore", "ignore", log], windowsHide: true }).unref();
   } catch (error) {
     process.stderr.write(`approval-box: 配送デーモンを起動できません: ${(error as Error).message}\n`);
   }
