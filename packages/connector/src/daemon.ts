@@ -1,6 +1,6 @@
 import * as steer from "aiterm-steer-delivery";
-import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readFileSync, rmSync } from "node:fs";
+import { launchDaemon } from "./daemon-launch.ts";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Api } from "./api.ts";
 import { type AttachmentMeta, pruneAttachments, saveAll } from "./attachments.ts";
@@ -58,8 +58,7 @@ export function ensureDaemon() {
     if (status.running && !shouldReplaceDaemon(status.entry, runtimeEntry("cli"))) return;
     if (status.running && status.pid) { try { process.kill(status.pid); } catch { /* 既に終わっている */ } }
     mkdirSync(stateRoot(), { recursive: true, mode: 0o700 });
-    const log = openSync(join(stateRoot(), "daemon.log"), "a", 0o600);
-    spawn(process.execPath, [runtimeEntry("cli"), "daemon"], { cwd: stateRoot(), detached: true, stdio: ["ignore", "ignore", log], windowsHide: true }).unref();
+    launchDaemon(process.execPath, runtimeEntry("cli"), stateRoot());
   } catch (error) {
     process.stderr.write(`approval-box: 配送デーモンを起動できません: ${(error as Error).message}\n`);
   }
