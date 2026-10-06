@@ -80,3 +80,28 @@ test("crash frames accept absent sample_count without discarding UUID/offset",as
  const row=(await (await x.admin("/logs")).json())[0];
  const log=JSON.parse(row.diagnostic_log);assert.deepEqual(log.stack_frames,event.diagnostic_log.stack_frames);assert.equal(row.severity,"fatal");
 });
+
+test("optional trigger preserves grouping, exact receipts and admin/raw observation",async()=>{
+ const x=setup(), old=x.event();
+ assert.equal((await x.send(old)).status,202);
+ const fingerprint=diagnosticFingerprint(diagnosticSchema.parse(old));
+ const triggers=["initial_refresh","foreground_refresh","toolbar_refresh","pull_refresh","notification_refresh","login","answer","hold","load_more","events"];
+ for(const trigger of triggers) {
+  const event={...x.event(),diagnostic_log:{...old.diagnostic_log,trigger}};
+  assert.equal(diagnosticFingerprint(diagnosticSchema.parse(event)),fingerprint);
+  assert.equal((await x.send(event)).status,202);
+  assert.equal((await (await x.send(event)).json()).duplicate,true);
+  assert.equal((await x.send({...event,diagnostic_log:{...event.diagnostic_log,trigger:trigger==="events" ? "login":"events"}})).status,409);
+  const row=(await (await x.admin("/logs")).json())[0];
+  assert.equal(row.diagnostic_context.trigger,trigger);
+  assert.equal(JSON.parse(row.diagnostic_log).trigger,trigger);
+  const raw=get<{payload:string}>(x.db,"select payload from diagnostics where event_id=?",event.event_id);
+  assert.equal(JSON.parse(raw!.payload).diagnostic_log.trigger,trigger);
+ }
+ assert.equal((await x.send({...old,diagnostic_log:{...old.diagnostic_log,trigger:"login"}})).status,409);
+ assert.equal((await (await x.send(old)).json()).duplicate,true);
+ for(const diagnostic_log of [{...old.diagnostic_log,trigger:"unknown"},{...old.diagnostic_log,trigger:"https://secret"},{...old.diagnostic_log,trigger:null},{...old.diagnostic_log,trigger:"login",unknown:"secret"}])
+  assert.equal((await x.send({...x.event(),diagnostic_log})).status,400);
+ const rows=await (await x.admin("/logs")).json();
+ assert.equal(rows.length,1);assert.equal(rows[0].fingerprint,fingerprint);assert.equal(rows[0].occurrence_count,11);assert.equal(rows[0].severity,"info");
+});

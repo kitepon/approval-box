@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.23
+# Approval Box API（アプリ・Web版向け） v0.24
+
+v0.24（2026-10-06）: 診断に任意の固定enum `diagnostic_log.trigger` を追加。業務処理の開始入口を表し、fingerprintから除外。詳細は [diagnostics.md](diagnostics.md)。
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 

@@ -18,6 +18,7 @@ export const diagnosticSchema = z.strictObject({
   app_version: z.string().max(48).regex(/^\d+\.\d+\.\d+\(\d+\)$/),
   device_type: z.enum(["iPhone","iPad","Mac"]), os_version: z.string().max(32).regex(/^\d+\.\d+\.\d+$/),
   diagnostic_log: z.strictObject({
+    trigger: z.enum(["initial_refresh","foreground_refresh","toolbar_refresh","pull_refresh","notification_refresh","login","answer","hold","load_more","events"]).optional(),
     operation: z.enum(OPERATIONS), http_method: z.enum(["GET","POST","PATCH","DELETE"]).optional(),
     http_status: integer.min(100).max(599).optional(), response_format: z.enum(["json","html","empty","other"]).optional(),
     error_domain: z.enum(["NSURLErrorDomain","NSCocoaErrorDomain","DecodingError","HTTP","StoreKit","MetricKit","other"]).optional(),

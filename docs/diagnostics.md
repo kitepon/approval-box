@@ -47,3 +47,11 @@ Production key provisioning: stream `tools/deploy/diagnostics-config.py` to `ssh
 App code belongs to the private apps repository maintained by Bell; server changes stay in this public repository. BugHub registration and deployment belong to Fragile. Server deployment follows the existing backup/rebuild procedure and checks APNs and call-bridge startup alongside API smoke tests.
 
 The public reverse proxy also blocks `/api/admin` and `/api/admin/*` with 404 before forwarding. Stream `tools/deploy/block-public-admin.py` to `ssh main-server python3 -` to reproduce this deployment rule. It changes only the Approval Box virtual host, backs up the prior file, validates/reloads Caddy and restores the prior configuration on failure.
+
+## Optional processing trigger (2026-10-06)
+
+`diagnostic_log.trigger` is optional and identifies the entry point that started the business processing which produced the diagnosis. Allowed values: `initial_refresh`, `foreground_refresh`, `toolbar_refresh`, `pull_refresh`, `notification_refresh`, `login`, `answer`, `hold`, `load_more`, `events`. It is distinct from HTTP request purpose. Internal list and badge requests inherit the outer processing trigger; clients keep it per Task (TaskLocal), and omit it when unclassified. No free text, URL, ID, session or body is accepted. Unknown keys and enum values still return 400.
+
+Trigger is excluded from fingerprints and severity; existing groups and counts continue across trigger values and omission. Raw payloads retain it; the existing admin `diagnostic_log` and `diagnostic_context` expose it for the latest event. Admin aggregates do not provide trigger-specific counts; retained raw events are needed for distributions.
+
+Apply only to newly captured events. Never mutate existing outbox bodies or event IDs: identical retries remain duplicates, while changing a received event's trigger (including adding/removing it) returns 409. This addition does not change cancellation, retry, error display, or SSE capture exclusions.
