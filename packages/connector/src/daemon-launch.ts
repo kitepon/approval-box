@@ -17,7 +17,8 @@ export function windowsDaemonLaunchScript(executable: string, entry: string, cwd
 export function launchDaemon(executable: string, entry: string, cwd: string) {
   if (process.platform === "win32") {
     const script = windowsDaemonLaunchScript(executable, entry, cwd, { ...process.env, APPROVAL_BOX_HOME: resolve(home()) });
-    const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], { cwd, windowsHide: true, encoding: "utf8", timeout: 15_000 });
+    const result = spawnSync("pwsh.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], { cwd, windowsHide: true, encoding: "utf8", timeout: 15_000 });
+    if ((result.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") throw new Error("PowerShell 7（pwsh.exe）が見つかりません。標準PATHにPowerShell 7を導入してください。");
     if (result.error || result.status !== 0 || !/^\s*\d+\s*$/.test(result.stdout ?? "")) throw new Error(`Windowsの常駐起動に失敗しました（${result.error?.message ?? `exit ${result.status}`}）`);
     return;
   }

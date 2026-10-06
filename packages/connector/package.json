@@ -1,6 +1,6 @@
 {
   "name": "approval-box",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "Approval Box connector: lets Claude Code, Codex, Cursor and Grok ask you for a decision, and steers your answer back into the same session.",
   "license": "MIT",
   "homepage": "https://approval-box.kitepon.dev",
