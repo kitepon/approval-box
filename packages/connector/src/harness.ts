@@ -118,7 +118,7 @@ async function withCodexConfig<T>(fn: (request: (method: string, params: unknown
   return steer.withCodexReceiver(PROFILE, { thread_id: "00000000-0000-4000-8000-000000000000", codex_home: codexHome() }, fn);
 }
 
-export type RegisterResult = { target: Target; status: "registered" | "removed" | "failed"; detail?: string; steer?: string; note?: string };
+export type RegisterResult = { target: Target; status: "registered" | "removed" | "failed"; detail?: string; note?: string };
 
 export async function register(target: Target, options: { instructions?: boolean } = {}): Promise<RegisterResult> {
   const file = instructionsFileOf(target);
@@ -154,15 +154,10 @@ async function registerTools(target: Target, options: { instructions?: boolean }
       await withCodexConfig(async (request) => {
         await request("config/batchWrite", { filePath: config, edits: [{ keyPath: `mcp_servers.${MCP_SERVER}`, value: { ...registration(), env_vars: ["CODEX_HOME"] }, mergeStrategy: "replace" }] });
       });
-      // 作業中のturnへの割り込み（Steer）。有効にできなくても、公式キューでの配送（turnの区切り）は使える。
-      let steerStatus: string;
-      try {
-        const result = await steer.configureCodexSteer(PROFILE, "enable", { hook: runtimeEntry("codex"), codex_home: codexHome(), node: stableNode() });
-        steerStatus = result.status + (result.reason_code ? `:${result.reason_code}` : "");
-      } catch (error) {
-        steerStatus = `failed:${(error as { code?: string }).code ?? (error as Error).message}`;
-      }
-      return { target, status: "registered", steer: steerStatus };
+      // 旧版の専用登録と承認だけを撤去する。回答配送はAitermの共通Steerが所有する。
+      // 旧会話が保持する入口のため、旧runtimeは消さず専用設定を無効にする。
+      await steer.configureCodexSteer(PROFILE, "disable", { hook: runtimeEntry("codex"), codex_home: codexHome() });
+      return { target, status: "registered", note: "Codexの回答配送はAitermの共通Steerを使います。旧版の専用配送hookは登録しません。" };
     }
     const grok = onPath("grok");
     if (!grok) throw new Error("grok コマンドが見つかりません");

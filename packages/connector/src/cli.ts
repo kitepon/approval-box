@@ -33,14 +33,6 @@ const FAILED_HINT: Record<string, string> = {
   delivery: "答えがAIへ届きませんでした。npx approval-box doctor で原因を確かめてください。",
 };
 
-const STEER_LABEL: Record<string, string> = {
-  ready: "作業中の割り込みも使えます",
-  restart_required: "作業中の割り込みは、開いているCodexをすべて閉じて開き直すと使えます。それまでは作業の区切りで届きます",
-  disabled: "作業中の割り込みは使いません。答えは作業の区切りで届きます",
-  failed: "作業中の割り込みを有効にできませんでした。答えは作業の区切りで届きます（npx approval-box doctor で原因を確かめられます）",
-};
-
-
 async function ask(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try { return (await rl.question(question)).trim(); } finally { rl.close(); }
@@ -122,7 +114,7 @@ async function setup() {
   for (const target of targets) out(`  ${LABEL[target]}: ${filesOf(target).join(", ")}`);
   out("");
   if (targets.includes("claude")) out("・Claude Code の Stop hook は、すべての会話でターンが終わるたびに node を1回起動します（Approval Boxの申請が無ければすぐ終わります）。");
-  if (targets.includes("codex")) out("・Codex は、作業中に答えを割り込ませるため hook も登録します。登録後に Codex の再起動が要ることがあります。");
+  if (targets.includes("codex")) out("・Codex の答えは Aiterm の Steer で元の会話へ返します。旧版のApproval Box専用配送hookは撤去します。");
   if (targets.includes("cursor") || targets.includes("grok")) out("・Cursor（止まっている時）と Grok は、申請の時にAIが背景で受信を起動します。");
   out(`・書き換える前のファイルは「${".approval-box-backup"}」を付けて控えます。元に戻すには npx approval-box uninstall。\n`);
   if (!flag("yes") && !/^y(es)?$/i.test(await ask("続けますか？ [y/N] "))) { out("やめました。"); return; }
@@ -166,8 +158,7 @@ async function registerTargets() {
   let failed = false;
   for (const target of targets) {
     const result = await register(target, { instructions: flag("instructions") });
-    const extra = result.steer ? `（${STEER_LABEL[result.steer.split(":")[0] ?? ""] ?? `作業中の割り込み: ${result.steer}`}）` : "";
-    out(`  ${LABEL[target]}: ${result.status === "registered" ? "登録しました" : `失敗 — ${result.detail}`}${extra}`);
+    out(`  ${LABEL[target]}: ${result.status === "registered" ? "登録しました" : `失敗 — ${result.detail}`}`);
     if (result.note) out(`    ・${result.note}`);
     if (result.status === "failed") failed = true;
   }

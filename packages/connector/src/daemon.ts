@@ -1,5 +1,6 @@
 import * as steer from "aiterm-steer-delivery";
 import { launchDaemon } from "./daemon-launch.ts";
+import { sendChannelAnswer, channelAnswerState } from "./channel-delivery.ts";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Api } from "./api.ts";
@@ -85,7 +86,7 @@ export async function runDaemon() {
   // 前回の途中で落ちた送信は、届いたか分からない。送り直さず unknown として返す（受信箱に残っていれば待つ）。
   for (const [id, entry] of Object.entries(journal)) {
     if (entry.state !== "sending") continue;
-    const current = safeState(entry);
+    const current = await safeState(entry);
     if (current === "queued" || current === "emitted" || current === "sending") entry.state = "queued";
     else Object.assign(entry, { state: "report", result: "unknown", detail: "送信の途中で配送デーモンが止まりました" });
     journal[id] = entry;
@@ -113,8 +114,7 @@ export async function runDaemon() {
     save();
     const entry = journal[item.decision_id]!;
     try {
-      if (steer.channelClosed(PROFILE, item.route.channel_id)) throw Object.assign(new Error("申請を出したAIの会話が終わっています"), { closed: true });
-      const result = await steer.sendToChannel(PROFILE, item.route.channel_id, item.delivery_id, text);
+      const result = await sendChannelAnswer(item.route.channel_id, item.delivery_id, text);
       if (result.state === "submitted") Object.assign(entry, { state: "report", result: "delivered" });
       else entry.state = "queued";
     } catch (error) {
@@ -126,15 +126,15 @@ export async function runDaemon() {
     if (entry.state === "report") await report(item.decision_id);
   }
 
-  function safeState(entry: Entry) {
-    try { return steer.channelDeliveryState(PROFILE, entry.channel_id, entry.delivery_id); } catch { return null; }
+  async function safeState(entry: Entry) {
+    try { return await channelAnswerState(entry.channel_id, entry.delivery_id); } catch { return null; }
   }
 
   async function checkQueued() {
     for (const [id, entry] of Object.entries(journal)) {
       if (entry.state === "report") { await report(id); continue; }
       if (entry.state !== "queued") continue;
-      const current = safeState(entry);
+      const current = await safeState(entry);
       if (current === "emitted") Object.assign(entry, { state: "report", result: "delivered" });
       else if (current === "unknown") Object.assign(entry, { state: "report", result: "unknown", detail: "受け口の出力を確かめられませんでした" });
       else if (current === null || current === "withdrawn") Object.assign(entry, { state: "report", result: "failed", detail: "配送の記録が見つかりません" });
@@ -168,7 +168,7 @@ export async function runDaemon() {
               save();
               log(`配送 ${id} → ${withdrawn ? "withdrawn" : "resolved"}`);
             } else {
-              Object.assign(entry, safeState(entry) === "emitted"
+              Object.assign(entry, await safeState(entry) === "emitted"
                 ? { state: "report", result: "delivered" }
                 : { state: "report", result: "unknown", detail: "配送先の変更前に受け口が本文を取得しました。再送しません" });
               save();

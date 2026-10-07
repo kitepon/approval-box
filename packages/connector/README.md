@@ -6,6 +6,10 @@ Supported agents: Claude Code, Codex, Cursor, Grok — on macOS, Windows and Lin
 
 Cursor and Grok receive answers through the background receiver command returned by the request tool. Cursor hooks bind that receiver to the conversation; they do not consume answers. Keep the receiver running until it returns the answer. Its output includes a command to wait for the next answer.
 
+Codex answers use Aiterm's Steer delivery. Requests do not depend on Codex hook state or an application restart. Setup removes the old Approval Box delivery hooks and their registration while keeping other products' hooks.
+
+Codex answer delivery requires Aiterm 0.56.0 or later. Configure its shared Steer through `aiterm-setup --codex-steer enable` to receive answers during the current turn as well as while idle. Approval Box does not register another Codex delivery hook.
+
 AIが人間の判断・承認・操作を求める時に、Approval Boxへも申請します。アプリかWeb版で答えると、その答えが申請したAIの会話へそのまま届きます。
 
 ## Setup / 使い方

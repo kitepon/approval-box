@@ -142,8 +142,6 @@ function remember(key: ParentKey, channelId: string, persistent: boolean) {
   } else processChannels.set(key, channelId);
 }
 
-const verifiedCodexThreads = new Set<string>();
-
 /** 申請を出した会話（親）を特定し、その会話のchannelを返す。channelは会話ごとに使い回す。 */
 async function channelFor(harness: Harness, clientName: string | undefined, meta: unknown) {
   if (harness === "codex") {
@@ -152,10 +150,7 @@ async function channelFor(harness: Harness, clientName: string | undefined, meta
     const key = `codex:${parent.codex_home}:${parent.thread_id}`;
     const existing = reuse(key, true);
     if (existing) return existing;
-    if (!verifiedCodexThreads.has(key)) {
-      await steer.verifyCodexParent(PROFILE, parent);
-      verifiedCodexThreads.add(key);
-    }
+    // MCPが渡した元会話へ結ぶ。配送機構の状態や親アプリの起動時刻を、申請受付の条件にしない。
     const channel = steer.openChannel(PROFILE, parent);
     remember(key, channel.channel_id, true);
     return channel.channel_id;

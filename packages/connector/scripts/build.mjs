@@ -10,7 +10,6 @@ const result = await build({
   entryPoints: {
     "cli": "src/cli.ts",
     "approval-box-claude-hook": "src/hooks/claude.ts",
-    "approval-box-codex-hook": "src/hooks/codex.ts",
     "approval-box-cursor-hook": "src/hooks/cursor.ts",
     "approval-box-receive": "src/hooks/receive.ts",
   },

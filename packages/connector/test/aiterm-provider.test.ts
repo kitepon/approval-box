@@ -1,0 +1,36 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
+import * as steer from "aiterm-steer-delivery";
+import { PROFILE } from "../src/profile.ts";
+import { sendChannelAnswer, channelAnswerState } from "../src/channel-delivery.ts";
+import { writeJsonFile } from "../src/config.ts";
+
+test("公開ViaAiterm wrapperの実processへ旧channelを渡し、受付不明を再送しない", async t => {
+  const root = mkdtempSync(join(tmpdir(), "ab-public-provider-"));
+  const saved = { APPROVAL_BOX_HOME: process.env.APPROVAL_BOX_HOME, AITERM_PARENT_DELIVERY_CLI: process.env.AITERM_PARENT_DELIVERY_CLI };
+  t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } rmSync(root, { recursive: true, force: true }); });
+  process.env.APPROVAL_BOX_HOME = root;
+  const cli = join(root, "parent-delivery.mjs"), journal = join(root, "calls.jsonl");
+  writeFileSync(cli, `import fs from 'node:fs';
+let text='';for await(const chunk of process.stdin)text+=chunk;
+const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(journal)},JSON.stringify({args,text})+'\\n');
+const fail=text==='unknown';
+console.log(JSON.stringify({schema:'aiterm.parent-delivery.v1',ok:!fail,...(fail?{code:'SUBMIT_UNKNOWN',message:'SUBMIT_UNKNOWN: receipt lost',outcome_unknown:true}:args[1]==='state'?{state:'sending'}:{queued_submission_id:'real-wrapper-test'})}));`);
+  process.env.AITERM_PARENT_DELIVERY_CLI = cli;
+  const channelId = randomUUID(), deliveryId = randomUUID(), parent = { thread_id: randomUUID(), codex_home: join(root, "旧会話's home") };
+  const file = join(steer.channelRoot(PROFILE), channelId, "channel.json");
+  writeJsonFile(file, { schema: "aiterm-steer.channel.v1", channel_id: channelId, kind: "codex", created_at: "2026-10-06T23:00:00Z", codex: parent });
+  const before = readFileSync(file, "utf8");
+  assert.deepEqual(await sendChannelAnswer(channelId, deliveryId, "answer"), { state: "submitted", queued_submission_id: "real-wrapper-test" });
+  assert.equal(await channelAnswerState(channelId, deliveryId), "sending");
+  await assert.rejects(sendChannelAnswer(channelId, randomUUID(), "unknown"), error => error instanceof steer.CodexDeliveryError && error.delivery_code === "SUBMIT_UNKNOWN" && error.outcome_unknown && /receipt lost$/.test(error.message));
+  const calls = readFileSync(journal, "utf8").trim().split("\n").map(line => JSON.parse(line));
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls[0].args, ["codex", "submit", "--thread", parent.thread_id, "--codex-home", parent.codex_home, "--delivery", deliveryId, "--text-file", "-"]);
+  assert.equal(calls[0].text, "answer");
+  assert.equal(readFileSync(file, "utf8"), before);
+});
