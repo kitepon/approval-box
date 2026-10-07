@@ -49,7 +49,11 @@ for (const scenario of ["reroute", "fetched", "already-emitted", "claimed"] as c
       rmSync(root, { recursive: true, force: true });
     });
     const recorded = () => existsSync(journal) ? JSON.parse(readFileSync(journal, "utf8")) : {};
-    await until(() => scenario === "reroute" ? recorded()["K-TEST"]?.channel_id === next.channel_id : !recorded()["K-TEST"]);
+    await until(() => {
+      const entry = recorded()["K-TEST"];
+      // 配送先はsendingの保存時点で替わる。受信箱へ保存を終えたqueuedまで待つ。
+      return scenario === "reroute" ? entry?.channel_id === next.channel_id && entry.state === "queued" : !entry;
+    });
     if (scenario === "reroute") {
       assert.equal(steer.channelDeliveryState(profile, old.channel_id, deliveryId), "withdrawn", stderr);
       const received = await steer.receiveFromChannel(profile, next.channel_id, { wait_ms: 0 });
