@@ -59,6 +59,16 @@ export class Api {
     return json as T;
   }
 
+  /** 申請前画像をバイナリで上げる。 */
+  async uploadRequestImage(data: Buffer, name: string, contentType: string): Promise<{ id: string }> {
+    const response = await fetch(this.url(`/request-images?name=${encodeURIComponent(name)}`), {
+      method: "POST", headers: { authorization: `Bearer ${this.token}`, "content-type": contentType }, body: new Uint8Array(data),
+    });
+    const json = await response.json() as { id: string; error?: {code?: string; message?: string} };
+    if (!response.ok) throw new ServerError(response.status,json.error?.code ?? "internal",json.error?.message ?? `HTTP ${response.status}`,json);
+    return json;
+  }
+
   /** ファイルを取る（添付）。誤りはJSONの本文から読む。 */
   async download(path: string): Promise<Buffer> {
     let response: Response;

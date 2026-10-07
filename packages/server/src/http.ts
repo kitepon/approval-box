@@ -309,6 +309,12 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(accounts.connectionInfo(c.get("conn")));
   });
   conn.get("/decisions", (c) => c.json({ items: decisions.listMine(c.get("conn"), routeChannel(c)) }));
+  conn.post("/request-images", async (c) => {
+    const me = c.get("conn");
+    accounts.assertCanUse(me.user_id);
+    const data = await readLimited(c.req.raw.body, MAX_FILE_BYTES);
+    return c.json(files().uploadRequest(me, { name: c.req.query("name") ?? "image", contentType: mediaType(c.req.header("content-type")), data }));
+  });
   conn.post("/decisions", async (c) => {
     const input = await body(c, createSchema);
     accounts.assertCanUse(c.get("conn").user_id);
@@ -325,7 +331,11 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(decisions.aiView(c.get("conn"), row.id));
   });
   conn.post("/decisions/:id/resume", async (c) => c.json(decisions.resume(c.get("conn"), c.req.param("id"), await body(c, routeSchema))));
-  conn.post("/decisions/:id/amend", async (c) => c.json(decisions.amend(c.get("conn"), c.req.param("id"), await body(c, amendSchema))));
+  conn.post("/decisions/:id/amend", async (c) => {
+    const result = decisions.amend(c.get("conn"), c.req.param("id"), await body(c, amendSchema));
+    sweep();
+    return c.json(result);
+  });
   conn.post("/decisions/:id/cancel", async (c) => {
     const input = await body(c, z.object({ reason: z.string().trim().min(1).max(500) }));
     const res = decisions.cancel(c.get("conn"), c.req.param("id"), input.reason);

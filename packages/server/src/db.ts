@@ -177,6 +177,14 @@ create table if not exists attachments (
   unique (user_id, idem_key)
 );
 create index if not exists attachments_decision on attachments(decision_id, position);
+create table if not exists request_uploads (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  connection_id text not null references connections(id) on delete cascade,
+  name text not null, content_type text not null, kind text not null,
+  size integer not null, sha256 text not null, created_at text not null,
+  unique(connection_id, sha256, name)
+);
 create table if not exists request_checks (
   token_hash text primary key,
   connection_id text not null,
@@ -264,6 +272,11 @@ const MIGRATIONS: ((db: Db) => void)[] = [
       summary text not null, evidence text not null, updated_at text not null
     )`);
   },
+  // 5: 申請画像と回答添付を分離。既存行はすべて回答添付。
+  (db) => {
+    const columns = all<{ name: string }>(db, "select name from pragma_table_info('attachments')").map(c => c.name);
+    if (!columns.includes("purpose")) db.exec("alter table attachments add column purpose text not null default 'answer'");
+  },
 ];
 
 function migrate(db: Db) {
@@ -294,6 +307,12 @@ export function run(db: Db, sql: string, ...params: SQLInputValue[]) {
 }
 
 const depth = new WeakMap<Db, number>();
+const committed = new WeakMap<Db, (() => void)[]>();
+/** 通知など、外へ見える処理は外側取引のcommit後だけ実行する。 */
+export function afterCommit(db: Db, fn: () => void) {
+  const pending = committed.get(db);
+  if (pending) pending.push(fn); else fn();
+}
 
 /** 書き込みの取引。入れ子で呼ばれたら外側の取引に乗る。 */
 export function tx<T>(db: Db, fn: () => T): T {
@@ -304,14 +323,20 @@ export function tx<T>(db: Db, fn: () => T): T {
   }
   db.exec("begin immediate");
   depth.set(db, 1);
+  committed.set(db, []);
   try {
     const result = fn();
     db.exec("commit");
+    const hooks = committed.get(db)!;
+    committed.delete(db);
+    depth.delete(db);
+    for (const hook of hooks) { try { hook(); } catch (error) { console.error("Committed event listener failed", error); } }
     return result;
   } catch (error) {
     db.exec("rollback");
     throw error;
   } finally {
+    committed.delete(db);
     depth.set(db, 0);
   }
 }

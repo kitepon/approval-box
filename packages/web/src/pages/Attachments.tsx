@@ -131,3 +131,36 @@ function AttachmentItem({ decisionId, item, onRemove }: { decisionId: string; it
     </li>
   );
 }
+
+/** AI申請画像。回答下書きと分離し、認証取得/整合性確認後に拡大する。 */
+export function RequestImages({decisionId,items}:{decisionId:string;items:Attachment[]}) {
+  if (!items.length) return null;
+  return <div class="request-images"><h2>AIの添付画像</h2><ul class="attachments">{items.map(a=><RequestImage key={a.id} decisionId={decisionId} item={a}/>)}</ul></div>;
+}
+function RequestImage({decisionId,item}:{decisionId:string;item:Attachment}) {
+  const [url,setUrl]=useState<string|null>(null);
+  const [error,setError]=useState<string|null>(null);
+  const [retry,setRetry]=useState(0);
+  const [expanded,setExpanded]=useState(false);
+  useEffect(()=>{
+    let alive=true;let made:string|null=null;
+    setUrl(null);setError(null);
+    fetchAttachment(decisionId,item.id).then(async blob=>{
+      if(blob.size!==item.size) throw new Error("画像の大きさが一致しません。");
+      const digest=await crypto.subtle.digest("SHA-256",await blob.arrayBuffer());
+      const hex=[...new Uint8Array(digest)].map(n=>n.toString(16).padStart(2,"0")).join("");
+      if(hex!==item.sha256) throw new Error("画像を確認できませんでした。");
+      if(alive){made=URL.createObjectURL(blob);setUrl(made);}
+    }).catch(e=>alive&&setError((e as Error).message));
+    return ()=>{alive=false;if(made)URL.revokeObjectURL(made);};
+  },[decisionId,item.id,item.sha256,retry]);
+  return <li class="attachment">
+    {url ? <button class="ghost" onClick={()=>setExpanded(true)} aria-label={`${item.name}を拡大`}><img src={url} alt={item.name} onError={()=>setError("この画像はブラウザで表示できません。原本を保存して開いてください。")}/></button> : <span>画像を読み込み中…</span>}
+    <span>{item.name}<span class="muted"> {bytes(item.size)}</span></span>
+    {error&&<div role="alert">{error} <button onClick={()=>setRetry(n=>n+1)}>再読込</button></div>}
+    {url&&<a href={url} download={item.name}>原本を保存</a>}
+    {expanded&&url&&<div class="image-overlay" role="dialog" aria-modal="true" aria-label={item.name} onKeyDown={e=>{if(e.key==="Escape")setExpanded(false);}}>
+      <button autoFocus onClick={()=>setExpanded(false)}>閉じる</button><img src={url} alt={item.name}/>
+    </div>}
+  </li>;
+}

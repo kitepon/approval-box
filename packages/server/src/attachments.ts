@@ -18,7 +18,7 @@ const PART_TTL_MS = 3600_000;
 export type Kind = "image" | "document";
 export type Attachment = { id: string; name: string; content_type: string; kind: Kind; size: number; sha256: string; created_at: string };
 
-type Row = Attachment & { user_id: string; decision_id: string; idem_key: string | null; position: number | null };
+type Row = Attachment & { purpose: string; user_id: string; decision_id: string; idem_key: string | null; position: number | null };
 
 const OOXML = "application/vnd.openxmlformats-officedocument.";
 /** 許す形式と、中身の先頭がその形式かどうかの確かめ。 */
@@ -108,6 +108,7 @@ export class Attachments {
 
   /** 下書きを1つ上げる。同じ冪等キーで同じ中身なら、前の結果を返す。 */
   upload(userId: string, decisionId: string, input: { name: string; contentType: string; idempotencyKey: string; data: Buffer }): Attachment {
+    if (input.data.length > MAX_FILE_BYTES) throw new ApiError("too_large", "1つのファイルは20MBまでです。");
     const decision = this.open(userId, decisionId);
     const sha256 = createHash("sha256").update(input.data).digest("hex");
     const previous = get<Row>(this.db, "select * from attachments where user_id = ? and idem_key = ?", userId, input.idempotencyKey);
@@ -127,7 +128,7 @@ export class Attachments {
       const row = tx(this.db, () => {
         const staged = get<{ n: number }>(this.db, "select count(*) n from attachments where decision_id = ? and position is null", decisionId)!.n;
         if (staged >= MAX_PER_ANSWER) throw new ApiError("too_large", `1つの答えに付けられるのは${MAX_PER_ANSWER}ファイルまでです。`);
-        const used = get<{ n: number | null }>(this.db, "select sum(size) n from attachments where user_id = ?", userId)!.n ?? 0;
+        const used = get<{ n: number | null }>(this.db, "select (select coalesce(sum(size),0) from attachments where user_id = ?) + (select coalesce(sum(size),0) from request_uploads where user_id = ?) n", userId, userId)!.n ?? 0;
         if (used + input.data.length > MAX_ACCOUNT_BYTES) throw new ApiError("too_large", "添付の保存がアカウントの上限（1GB）に達しました。古い既決を消すと空きます。");
         run(this.db, `insert into attachments (id, user_id, decision_id, name, content_type, kind, size, sha256, idem_key, position, created_at)
             values (?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?)`,
@@ -142,6 +143,36 @@ export class Attachments {
     }
   }
 
+
+  /** 申請前の画像。通知/申請は作らず接続にだけ紐付ける。原本を先に確定する。 */
+  uploadRequest(conn: { id: string; user_id: string }, input: { name: string; contentType: string; data: Buffer }): Attachment {
+    const type = TYPES[input.contentType];
+    if (!type || type.kind !== "image" || !type.sniff(input.data)) throw new ApiError("unsupported_type", "申請に付けられるのはJPEG・PNG・HEIC・GIF・WebP画像です。中身と形式を確かめてください。");
+    if (!input.data.length) throw new ApiError("validation_failed", "画像が空です。");
+    if (input.data.length > MAX_FILE_BYTES) throw new ApiError("too_large", "1つの画像は20MBまでです。");
+    const sha = createHash("sha256").update(input.data).digest("hex");
+    const name = cleanName(input.name);
+    const prior = get<Attachment>(this.db, "select * from request_uploads where connection_id = ? and sha256 = ? and name = ?", conn.id, sha, name);
+    if (prior) return Attachments.toApi(prior as Row);
+    const id = `att_${randomBytes(16).toString("base64url")}`;
+    const part = join(this.dir, `${id}.part`);
+    writeFileSync(part, input.data, { mode: 0o600 });
+    try {
+      return tx(this.db, () => {
+        const used = get<{ n: number }>(this.db, "select (select coalesce(sum(size),0) from attachments where user_id=?) + (select coalesce(sum(size),0) from request_uploads where user_id=?) n", conn.user_id, conn.user_id)!.n;
+        if (used + input.data.length > MAX_ACCOUNT_BYTES) throw new ApiError("too_large", "添付の保存がアカウントの上限（1GB）に達しました。");
+        // DB公開前に原本を確定する。失敗時の孤立原本はGC対象。
+        renameSync(part, join(this.dir, id));
+        run(this.db, "insert into request_uploads (id,user_id,connection_id,name,content_type,kind,size,sha256,created_at) values (?,?,?,?,?,'image',?,?,?)", id,conn.user_id,conn.id,name,input.contentType,input.data.length,sha,now());
+        return Attachments.toApi(get<Row>(this.db, "select * from request_uploads where id=?", id)!);
+      });
+    } catch (error) {
+      try { unlinkSync(part); } catch {}
+      try { unlinkSync(join(this.dir, id)); } catch {}
+      throw error;
+    }
+  }
+
   staged(userId: string, decisionId: string) {
     this.open(userId, decisionId);
     return { items: all<Row>(this.db, "select * from attachments where decision_id = ? and position is null order by created_at, id", decisionId).map(Attachments.toApi) };
@@ -151,7 +182,7 @@ export class Attachments {
     this.open(userId, decisionId);
     const row = get<Row>(this.db, "select * from attachments where id = ? and decision_id = ?", id, decisionId);
     if (!row) throw new ApiError("not_found", "その添付は見つかりません。");
-    if (row.position !== null) throw new ApiError("conflict", "答えに付けた添付は消せません。");
+    if (row.purpose !== "answer" || row.position !== null) throw new ApiError("conflict", "答えに付けた添付は消せません。");
     run(this.db, "delete from attachments where id = ?", id);
     this.gc();
     return { ok: true };
@@ -177,8 +208,9 @@ export class Attachments {
   /** 結ばれないまま24時間たった下書きを消し、表に行の無いファイルを消す。 */
   gc() {
     const before = new Date(Date.now() - STAGED_TTL_MS).toISOString();
-    run(this.db, "delete from attachments where position is null and created_at < ?", before);
-    const ids = new Set(all<{ id: string }>(this.db, "select id from attachments").map((r) => r.id));
+    run(this.db, "delete from attachments where purpose = 'answer' and position is null and created_at < ?", before);
+    run(this.db, "delete from request_uploads where created_at < ?", before);
+    const ids = new Set(all<{ id: string }>(this.db, "select id from attachments union select id from request_uploads").map((r) => r.id));
     for (const name of readdirSync(this.dir)) {
       const file = join(this.dir, name);
       if (name.endsWith(".part")) {

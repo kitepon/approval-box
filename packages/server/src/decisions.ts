@@ -6,7 +6,7 @@ import type { EventHub } from "./events.ts";
 import { decisionId, hash, normalizeTitle, now, secret, testCode, uuid } from "./ids.ts";
 
 export const URGENCIES = ["low", "normal", "high"] as const;
-export const AMEND_FIELDS = ["title", "context", "options", "recommendation", "urgency", "deadline"] as const;
+export const AMEND_FIELDS = ["title", "context", "options", "recommendation", "urgency", "deadline", "request_attachment_ids"] as const;
 const OPEN = ["pending", "held"];
 /** サーバーが自分で答えを届ける道（GrokBotなど、call-bridge の通話で届ける）。 */
 export const SERVER_HARNESS = "callbridge";
@@ -32,6 +32,8 @@ export type Connection = { id: string; user_id: string; label: string; os: strin
 export const optionSchema = z.object({ id: z.string().trim().min(1).max(40), label: z.string().trim().min(1).max(200) });
 const optionsSchema = z.array(optionSchema).min(2).max(6).refine((options) => new Set(options.map((o) => o.id)).size === options.length, "選択肢のidが重なっています");
 
+const requestIds = z.array(z.string().min(1).max(100)).max(MAX_PER_ANSWER);
+
 export const createSchema = z.object({
   title: z.string().trim().min(1).max(120),
   context: z.string().max(20000).default(""),
@@ -44,6 +46,7 @@ export const createSchema = z.object({
   route: z.object({ channel_id: z.string().min(1).max(100), harness: z.string().min(1).max(20) }).optional(),
   distinct_reason: z.string().trim().min(1).max(500).optional(),
   check_token: z.string().max(200).optional(),
+  request_attachment_ids: requestIds.optional(),
 });
 
 export const routeSchema = z.object({ channel_id: z.string().min(1).max(100), harness: z.string().min(1).max(20) });
@@ -53,6 +56,7 @@ export const amendSchema = z.object({
   version: z.number().int().positive(),
   note: z.string().trim().min(1).max(500),
   changes: z.object({
+    request_attachment_ids: requestIds.optional(),
     title: z.string().trim().min(1).max(120).optional(),
     context: z.string().max(20000).optional(),
     options: optionsSchema.optional(),
@@ -94,6 +98,7 @@ export class Decisions {
       id: row.id,
       title: row.title,
       context: row.context,
+      request_attachments: this.requestAttachments(row.id),
       options: JSON.parse(row.options) as Option[],
       ...(row.recommendation ? { recommendation: row.recommendation } : {}),
       urgency: row.urgency,
@@ -125,6 +130,7 @@ export class Decisions {
       ...(row.recommendation ? { recommendation: row.recommendation } : {}),
       ...(row.deadline ? { deadline: row.deadline } : {}),
       context: row.context,
+      request_attachments: this.requestAttachments(row.id),
       session_label: row.session_label,
       this_session: !!routeChannel && route?.channel_id === routeChannel,
       ...(row.answer ? { answer: JSON.parse(row.answer) as Answer, answer_text: row.delivery_text } : {}),
@@ -134,6 +140,27 @@ export class Decisions {
       created_at: row.created_at,
       updated_at: row.updated_at,
     };
+  }
+
+  private requestAttachments(id: string): Attachment[] {
+    return all<Attachment>(this.db, "select id,name,content_type,kind,size,sha256,created_at from attachments where decision_id=? and purpose='request' order by position", id);
+  }
+
+  /** create/amend内で結ぶ。置換は全件検証してから、同じ取引で行う。 */
+  private bindRequest(conn: Connection, id: string, ids: string[]) {
+    if (new Set(ids).size !== ids.length) throw new ApiError("validation_failed", "同じ申請画像が2回並んでいます。");
+    const list = ids.map(aid => {
+      const staged = get<Attachment>(this.db, "select * from request_uploads where id=? and connection_id=? and user_id=?", aid, conn.id, conn.user_id);
+      const prior = get<Attachment>(this.db, "select * from attachments where id=? and decision_id=? and user_id=? and purpose='request'", aid,id,conn.user_id);
+      if (!staged && !prior) throw new ApiError("validation_failed", "使えない申請画像があります。もう一度付け直してください。");
+      return { item: (staged ?? prior)!, staged: !!staged };
+    });
+    if (list.reduce((n,a) => n+a.item.size,0) > MAX_ANSWER_BYTES) throw new ApiError("too_large", "申請画像は合計50MBまでです。");
+    run(this.db, "delete from attachments where decision_id=? and purpose='request'", id);
+    list.forEach(({item:a,staged},position) => {
+      run(this.db, "insert into attachments (id,user_id,decision_id,name,content_type,kind,size,sha256,position,created_at,purpose) values (?,?,?,?,?,?,?,?,?,?,'request')", a.id,conn.user_id,id,a.name,a.content_type,a.kind,a.size,a.sha256,position,a.created_at);
+      if (staged) run(this.db, "delete from request_uploads where id=?", a.id);
+    });
   }
 
   private row(id: string): Row | undefined {
@@ -202,7 +229,7 @@ export class Decisions {
   private bindAttachments(row: Row, ids: string[]): Attachment[] {
     if (new Set(ids).size !== ids.length) throw new ApiError("validation_failed", "同じ添付が2回並んでいます。");
     const found = ids.map((aid) => get<Attachment & { position: number | null }>(this.db,
-      "select id, name, content_type, kind, size, sha256, created_at, position from attachments where id = ? and decision_id = ? and user_id = ?", aid, row.id, row.user_id));
+      "select id, name, content_type, kind, size, sha256, created_at, position from attachments where id = ? and decision_id = ? and user_id = ? and purpose = 'answer'", aid, row.id, row.user_id));
     if (found.some((a) => !a || a.position !== null)) throw new ApiError("validation_failed", "使えない添付があります。もう一度付け直してください。");
     const list = found.map((a) => { const { position: _, ...rest } = a!; return rest; });
     if (list.reduce((n, a) => n + a.size, 0) > MAX_ANSWER_BYTES) throw new ApiError("too_large", `1つの答えの添付は合計${formatBytes(MAX_ANSWER_BYTES)}までです。`);
@@ -296,6 +323,7 @@ export class Decisions {
         id, conn.user_id, conn.id, input.route ? JSON.stringify(input.route) : null, input.title, norm, input.context,
         JSON.stringify(input.options), input.recommendation ?? null, input.urgency, input.deadline ?? null,
         input.client, input.session_label, options.via ?? "connector", options.test ? 1 : 0, `Approval Box ${id} の答えを確認して続けて`, input.distinct_reason ?? null, at, at);
+      this.bindRequest(conn, id, input.request_attachment_ids ?? []);
       this.history(id, "created", "ai");
       const row = this.row(id)!;
       this.events.publish(conn.user_id, "decision.created", { decision_id: id, version: 1 });
@@ -346,6 +374,7 @@ export class Decisions {
       const options = c.options ?? (JSON.parse(row.options) as Option[]);
       const recommendation = c.recommendation === undefined ? row.recommendation : c.recommendation;
       if (recommendation && !options.some((o) => o.id === recommendation)) throw new ApiError("validation_failed", "recommendation が選択肢のidにありません。");
+      if (c.request_attachment_ids !== undefined) this.bindRequest(conn, row.id, c.request_attachment_ids);
       const fields = AMEND_FIELDS.filter((f) => c[f] !== undefined);
       run(this.db, `update decisions set title = ?, norm_title = ?, context = ?, options = ?, recommendation = ?, urgency = ?, deadline = ?,
           route = ?, amend_count = amend_count + 1, updated_at = ?, version = version + 1 where id = ?`,

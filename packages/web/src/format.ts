@@ -10,7 +10,7 @@ export const DELIVERY_LABEL: Record<string, string> = {
 };
 
 export const FIELD_LABEL: Record<string, string> = {
-  title: "件名", context: "背景", options: "選択肢", recommendation: "推奨", urgency: "急ぎ度", deadline: "期限",
+  title: "件名", context: "背景", request_attachment_ids: "AIの添付画像", options: "選択肢", recommendation: "推奨", urgency: "急ぎ度", deadline: "期限",
 };
 
 export const CHECK_LABEL: Record<string, string> = {

@@ -6,6 +6,7 @@ export type Decision = {
   urgency: "low" | "normal" | "high" | string; deadline?: string;
   source: { client: string; session_label: string; via: string; test?: boolean };
   status: "pending" | "held" | "answered" | "cancelled" | string;
+  request_attachments?: Attachment[];
   answer?: { option_id?: string; text?: string; attachments?: Attachment[]; answered_at: string };
   delivery?: "waiting" | "delivered" | "unknown" | "fetched" | string;
   resume_phrase: string; cancel_reason?: string; distinct_reason?: string;

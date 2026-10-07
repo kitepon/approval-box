@@ -50,3 +50,7 @@ Requires Node.js 20 or later. License: MIT.
 
 この機能はコネクタ0.1.13以降と対応サーバーを使います。会話を開き直しても、
 再開を指定するまでは元の会話が配送先です。答えは `get_decision` でも取得できます。
+
+### 申請に画像を添える
+
+`request_decision` に `image_paths: ["/absolute/path/screenshot.png"]` を指定すると、AIの画像を本文下に添えて申請します。10件、単体20MiB、合計50MiBまで。全画像を上げてから申請と通知を確定します。最初の確認の札を付けた出し直しでも同じ画像パスを渡してください。`amend_decision.changes.image_paths` は全置換、空配列で削除です。回答添付とは別の欄です。リモートMCPは `upload_request_image` のIDを `request_attachment_ids` に渡します。

@@ -8,6 +8,7 @@ import { Api, ServerError } from "./api.ts";
 import { type AttachmentMeta, saveAttachment } from "./attachments.ts";
 import { requireConfig, writeJsonFile } from "./config.ts";
 import { ensureDaemon } from "./daemon.ts";
+import { uploadImagePaths } from "./request-images.ts";
 import { runtimeEntry } from "./runtime.ts";
 import { MCP_SERVER, PROFILE, stateRoot } from "./profile.ts";
 import { osName, VERSION } from "./version.ts";
@@ -54,6 +55,8 @@ const TOOLS = [
         deadline: { type: "string", description: "期限（ISO 8601）" },
         session_label: { type: "string", description: "どの作業の話か（例: リポジトリ名 / 作業名）。省略すると作業フォルダ名" },
         distinct_reason: { type: "string", description: "同じ件名の未決があるのに別件として出す時だけ、その理由" },
+        image_paths: { type: "array", items: { type: "string" }, maxItems: 10, description: "申請に添えるローカル画像パス。10件/単体20MiB/合計50MiBまで。パス自体は人へ送らない" },
+        request_attachment_ids: { type: "array", items: { type: "string" }, maxItems: 10 },
         check_token: { type: "string", description: "1回目の request_decision で返った確認の札。一覧を確かめ、直す・取り下げる申請が無いと判断した時に付ける" },
       },
       required: ["title", "options"],
@@ -72,6 +75,8 @@ const TOOLS = [
         changes: {
           type: "object",
           properties: {
+            image_paths: { type: "array", items: { type: "string" }, maxItems: 10 },
+            request_attachment_ids: { type: "array", items: { type: "string" }, maxItems: 10 },
             title: { type: "string" }, context: { type: "string" }, options: { type: "array", items: optionSchema, minItems: 2, maxItems: 6 },
             recommendation: { type: ["string", "null"] }, urgency: { type: "string", enum: ["low", "normal", "high"] }, deadline: { type: ["string", "null"] },
           },
@@ -232,8 +237,12 @@ export async function runMcp() {
       if (name === "request_decision") {
         const channelId = await channelFor(harness, clientName, request.params._meta);
         lastChannel = channelId;
+        const {image_paths, ...rest} = args;
+        if (image_paths !== undefined && rest.request_attachment_ids !== undefined) throw new Error("image_pathsとrequest_attachment_idsは片方だけ指定してください。");
+        const request_attachment_ids = image_paths !== undefined ? await uploadImagePaths(api,image_paths) : rest.request_attachment_ids;
         const body = {
-          ...args,
+          ...rest,
+          ...(request_attachment_ids !== undefined ? {request_attachment_ids} : {}),
           client: CLIENT_OF[harness],
           session_label: (args.session_label as string | undefined) || `${basename(process.cwd())} (${CLIENT_OF[harness]})`,
           route: { channel_id: channelId, harness },
@@ -258,6 +267,10 @@ export async function runMcp() {
       }
       if (name === "amend_decision") {
         const { decision_id, ...rest } = args;
+        const {image_paths, ...changes} = (rest.changes ?? {}) as Record<string,unknown>;
+        if (image_paths !== undefined && changes.request_attachment_ids !== undefined) throw new Error("image_pathsとrequest_attachment_idsは片方だけ指定してください。");
+        if(image_paths !== undefined) changes.request_attachment_ids = await uploadImagePaths(api,image_paths);
+        rest.changes = changes;
         const channelId = await channelFor(harness, clientName, request.params._meta);
         const decision = await api.call("POST", `/decisions/${encodeURIComponent(String(decision_id))}/amend`, { ...rest, route: { channel_id: channelId, harness } });
         lastChannel = channelId;
@@ -284,7 +297,7 @@ export async function runMcp() {
       if (name === "get_attachment") {
         const decisionId = String(args.decision_id);
         const decision = await api.call("GET", `/decisions/${encodeURIComponent(decisionId)}`);
-        const list = ((decision.answer as { attachments?: AttachmentMeta[] } | undefined)?.attachments) ?? [];
+        const list = [...((decision.request_attachments as AttachmentMeta[] | undefined) ?? []), ...(((decision.answer as { attachments?: AttachmentMeta[] } | undefined)?.attachments) ?? [])];
         const index = list.findIndex((a) => a.id === args.attachment_id);
         if (index < 0) return text(`Approval Box: ${decisionId} の答えに、その添付はありません。get_decision の answer.attachments を確かめてください。`, { error: "not_found" }, true);
         const meta = list[index]!;

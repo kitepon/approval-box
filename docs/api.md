@@ -1,4 +1,4 @@
-# Approval Box API（アプリ・Web版向け） v0.26
+# Approval Box API（アプリ・Web版向け） v0.27
 
 v0.26（2026-10-07）: 通信診断の任意handlingとimpact_assessmentを正式定義。根拠付きの参考診断は原本・受領記録を保持し新規修理groupに昇格しない。既存未解決を自動解決せず、送信元の重大度・評価根拠を尊重する。詳細は[diagnostics.md](diagnostics.md)。
 
@@ -334,7 +334,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 `POST /v1/diagnostics` はアプリのBearer sessionで診断イベントを受け取ります。未ログイン時は端末内outboxへ保存し、ログイン後に送ります。項目・列挙・重複排除・上限・MetricKit・BugHub管理APIの契約は [diagnostics.md](diagnostics.md) と `packages/server/src/diagnostics.ts` を参照してください。初回も同一イベントの再送も202で受領を返します。診断POSTの失敗は診断として再送信しません。
 
-## 申請画像（v0.31）
+## 申請画像（v0.27）
 
 AIが撮影・作成した画像を申請本文に添え、人が画像を見て通常の回答を出せる。利用者の回答添付とは分離する。Decision（利用者GET/list、AI create/get/list/amend）に `request_attachments: Attachment[]` を追加する。未添付は空配列、旧サーバー互換のためアプリ側は欠落も空として扱う。Attachmentは既存の `id,name,content_type,kind,size,sha256,created_at`。kindはimageのみ。
 

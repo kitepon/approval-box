@@ -4,7 +4,7 @@ import { navigate } from "../router";
 import { bump, useBump } from "../store";
 import { ago, clientLabel, dateTime, deadlineText, DELIVERY_LABEL, FIELD_LABEL, URGENCY_LABEL } from "../format";
 import type { Decision } from "../types";
-import { ACCEPT, AttachmentList, MAX_COUNT, useDraftAttachments } from "./Attachments";
+import { ACCEPT, RequestImages, AttachmentList, MAX_COUNT, useDraftAttachments } from "./Attachments";
 
 /** 背景はプレーンテキストで出す。リンクは押した時に確かめてから開く（AI経由で混じった文面への備え）。 */
 function PlainText({ text }: { text: string }) {
@@ -101,6 +101,7 @@ export function DecisionView({ id }: { id: string }) {
       )}
       {d.distinct_reason && <div class="amended"><strong>似た申請と別件である理由</strong><div>{d.distinct_reason}</div></div>}
       {d.context && <PlainText text={d.context} />}
+      <RequestImages decisionId={d.id} items={d.request_attachments ?? []} />
 
       {open && (
         <div class="answer">

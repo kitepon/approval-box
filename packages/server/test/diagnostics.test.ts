@@ -146,7 +146,7 @@ test("v3 database migration preserves diagnosis and persists independent investi
   const event=diagnosticSchema.parse({event_id:randomUUID(),occurred_at:new Date().toISOString(),code:"api_failed",module:"api",app_version:"0.1.0(18)",device_type:"Mac",os_version:"26.0.0",diagnostic_log:{operation:"events",error_domain:"NSURLErrorDomain",error_code:-1005,user_visible:true}});
   new Diagnostics(db).accept(user,event);const original={groups:all(db,"select * from diagnostic_groups"),raw:all(db,"select * from diagnostics")};
   db.exec("drop table diagnostic_investigations; pragma user_version=3");db.close();db=openDb(file);
-  assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version,4);assert.deepEqual({groups:all(db,"select * from diagnostic_groups"),raw:all(db,"select * from diagnostics")},original);
+  assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version,5);assert.deepEqual({groups:all(db,"select * from diagnostic_groups"),raw:all(db,"select * from diagnostics")},original);
   const fingerprint=diagnosticFingerprint(event);run(db,"insert into diagnostic_investigations values (?,?,?,?)",fingerprint,"未確定",JSON.stringify(["原文参照"]),"2026-10-07T03:00:00Z");db.close();db=openDb(file);
   assert.equal(get<{summary:string}>(db,"select summary from diagnostic_investigations where fingerprint=?",fingerprint)?.summary,"未確定");assert.deepEqual(all(db,"select * from diagnostics"),original.raw);
   run(db,"delete from diagnostic_groups where fingerprint=?",fingerprint);assert.equal(all(db,"select * from diagnostic_investigations").length,0);db.close();

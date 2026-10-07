@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { type Db, all, run } from "./db.ts";
+import { type Db, all, run, afterCommit } from "./db.ts";
 import { now } from "./ids.ts";
 
 export type UserEvent = { id: number; type: string; data: Record<string, unknown> };
@@ -20,8 +20,10 @@ export class EventHub {
   publish(userId: string, type: string, data: Record<string, unknown>) {
     const result = run(this.db, "insert into events (user_id, type, data, at) values (?, ?, ?, ?)", userId, type, JSON.stringify(data), now());
     const event: UserEvent = { id: Number(result.lastInsertRowid), type, data };
-    this.bus.emit(`user:${userId}`, event);
-    this.bus.emit("any", userId, event);
+    afterCommit(this.db, () => {
+      this.bus.emit(`user:${userId}`, event);
+      this.bus.emit("any", userId, event);
+    });
   }
 
   /** 全利用者のイベント（プッシュ通知用）。 */
@@ -41,7 +43,7 @@ export class EventHub {
   }
 
   notifyConnection(connectionId: string) {
-    this.bus.emit(`connection:${connectionId}`);
+    afterCommit(this.db, () => this.bus.emit(`connection:${connectionId}`));
   }
 
   subscribeConnection(connectionId: string, listener: () => void) {

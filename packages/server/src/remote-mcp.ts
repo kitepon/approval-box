@@ -7,7 +7,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import type { Context } from "hono";
 import { z, ZodError } from "zod";
 import type { Accounts } from "./accounts.ts";
-import { type Attachments, formatBytes } from "./attachments.ts";
+import { type Attachments, MAX_FILE_BYTES, formatBytes } from "./attachments.ts";
 import { type Connection, Decisions, SERVER_HARNESS, amendSchema, createSchema } from "./decisions.ts";
 import { ApiError } from "./errors.ts";
 
@@ -55,6 +55,7 @@ function tools(callBridge: boolean) {
           session_label: { type: "string", description: "どの作業の話か" },
           ...requester,
           distinct_reason: { type: "string", description: "同じ件名の未決があるのに別件として出す時だけ、その理由" },
+          request_attachment_ids: { type: "array", items: { type: "string" }, maxItems: 10, description: "upload_request_imageの返却ID。全画像が揃ってから申請する" },
           check_token: { type: "string", description: "1回目の request_decision で返った確認の札" },
         },
         required: ["title", "options", "session_label", ...(callBridge ? ["requester_id", "requester_name"] : [])],
@@ -71,6 +72,7 @@ function tools(callBridge: boolean) {
           changes: {
             type: "object",
             properties: {
+              request_attachment_ids: { type: "array", items: { type: "string" }, maxItems: 10 },
               title: { type: "string" }, context: { type: "string" }, options: { type: "array", items: optionSchema, minItems: 2, maxItems: 6 },
               recommendation: { type: ["string", "null"] }, urgency: { type: "string", enum: ["low", "normal", "high"] }, deadline: { type: ["string", "null"] },
             },
@@ -92,8 +94,13 @@ function tools(callBridge: boolean) {
       inputSchema: { type: "object", properties: { decision_id: { type: "string" } }, required: ["decision_id"], additionalProperties: false },
     },
     {
+      name: "upload_request_image",
+      description: "申請に添える画像を下書きとして上げる。申請/通知はまだ出ない。返却attachment.idをrequest_decision.request_attachment_idsへ渡す。画像単体20MiBまで。",
+      inputSchema: { type: "object", properties: { name: { type: "string" }, content_type: { type: "string", enum: ["image/jpeg","image/png","image/gif","image/webp","image/heic","image/heif"] }, data_base64: { type: "string" } }, required: ["name","content_type","data_base64"], additionalProperties: false },
+    },
+    {
       name: "get_attachment",
-      description: "利用者が答えに付けた添付（画像・書類）の中身を取る。attachment_id は答えの文か get_decision の answer.attachments にある。画像は画像として、書類はファイルとして返す。",
+      description: "申請画像または利用者の回答添付の中身を取る。attachment_id は答えの文か get_decision の answer.attachments にある。画像は画像として、書類はファイルとして返す。",
       inputSchema: { type: "object", properties: { decision_id: { type: "string" }, attachment_id: { type: "string" } }, required: ["decision_id", "attachment_id"], additionalProperties: false },
     },
   ];
@@ -168,6 +175,7 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
       if (name === "amend_decision") {
         const body = amendSchema.parse({ version: args.version, note: args.note, changes: args.changes });
         const decision = decisions.amend(conn, String(args.decision_id), body);
+        attachments?.gc();
         return result(`直しました: ${decision.decision_id} version=${decision.version}\n\n${JSON.stringify(decision)}`, decision);
       }
       if (name === "cancel_decision") {
@@ -182,6 +190,16 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
         const decision = decisions.aiView(conn, row.id);
         const head = decision.answer_text ? String(decision.answer_text) : `${decision.decision_id}「${decision.title}」 status=${decision.status}（まだ答えはありません）`;
         return result(`${head}\n\n${JSON.stringify(decision)}`, decision);
+      }
+      if (name === "upload_request_image") {
+        if (!attachments) throw new ApiError("not_found", "このサーバーでは添付を使えません。");
+        const input = z.object({name:z.string().min(1).max(200),content_type:z.string().max(100),data_base64:z.string().min(4).max(Math.ceil(MAX_FILE_BYTES / 3) * 4)}).parse(args);
+        if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(input.data_base64)) throw new ApiError("validation_failed", "画像のbase64が正しくありません。");
+        const data = Buffer.from(input.data_base64, "base64");
+        if (data.toString("base64") !== input.data_base64) throw new ApiError("validation_failed", "画像のbase64が正しくありません。");
+        accounts.assertCanUse(conn.user_id);
+        const attachment = attachments.uploadRequest(conn,{name:input.name,contentType:input.content_type,data});
+        return result(`画像を下書きに保存しました。request_attachment_idsへ ${attachment.id} を渡してください。申請はまだ作っていません。`,{attachment});
       }
       if (name === "get_attachment") {
         const row = decisions.forConnection(conn, String(args.decision_id));
