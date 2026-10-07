@@ -24,6 +24,8 @@ export const diagnosticSchema = z.strictObject({
     error_domain: z.enum(["NSURLErrorDomain","NSCocoaErrorDomain","DecodingError","HTTP","StoreKit","MetricKit","other"]).optional(),
     error_code: integer.optional(), decoding_kind: z.enum(["typeMismatch","valueNotFound","keyNotFound","dataCorrupted"]).optional(),
     decoding_path: z.array(z.union([z.enum(DECODING_KEYS),nonnegative])).max(32).optional(),
+    handling: z.enum(["normal_cancel","reconnecting","retry_available","handling_failed","unassessed"]).optional(),
+    impact_assessment: z.strictObject({severity: z.enum(["info","warn","high","fatal"]), summary: z.string().trim().min(1).max(1000), recovery: z.enum(["recovered","unrecovered","unknown"])}).optional(),
     user_visible: z.boolean(), cancellation: z.enum(["system","user","unexpected"]).optional(),
     signal: integer.optional(), exception_type: integer.optional(), exception_code: integer.optional(),
     hang_duration_ms: z.number().finite().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
@@ -50,7 +52,19 @@ export function diagnosticFingerprint(input: Diagnostic) {
   const d = input.diagnostic_log;
   return hash(canonical([input.code,input.module,input.device_type,d.operation,d.http_method ?? null,d.error_domain ?? null,d.error_code ?? null,d.http_status ?? null,d.response_format ?? null,d.decoding_kind ?? null,d.decoding_path?.map(k=>typeof k === "number" ? "[]" : k) ?? null,d.cancellation ?? null,d.user_visible,d.signal ?? null,d.exception_type ?? null,d.exception_code ?? null,d.stack_frames?.[0]?.binary_uuid.toLowerCase() ?? null,d.stack_frames?.[0]?.offset ?? null]));
 }
+function referenceOnly(input: Diagnostic) {
+  const d = input.diagnostic_log, a = d.impact_assessment;
+  if (!a || a.severity !== "info" || a.recovery !== "recovered") return false;
+  if (d.handling === "normal_cancel") return input.code === "cancelled" && (d.cancellation === "user" || d.cancellation === "system");
+  return input.code === "api_failed" && (d.handling === "reconnecting" || d.handling === "retry_available");
+}
+function assessmentNote(input: Diagnostic, at: string): DiagnosticInvestigation | undefined {
+  const d = input.diagnostic_log, a = d.impact_assessment;
+  if (!a) return undefined;
+  return {summary: `送信元の影響評価（環境原因・アプリ欠陥の断定ではありません）: ${a.summary}`, evidence: [`handling=${d.handling ?? "unassessed"}; severity=${a.severity}; recovery=${a.recovery}; event_id=${input.event_id}`], updated_at: at};
+}
 function severity(input: Diagnostic) {
+  if (input.diagnostic_log.impact_assessment) return input.diagnostic_log.impact_assessment.severity;
   if (input.code === "crash") return "fatal";
   if (input.code === "cancelled") return input.diagnostic_log.user_visible || input.diagnostic_log.cancellation === "unexpected" ? "warn" : "info";
   return "high";
@@ -85,8 +99,13 @@ export class Diagnostics {
       this.prune();
       const fingerprint = diagnosticFingerprint(input);
       const group = get<{fingerprint:string}>(this.db,"select fingerprint from diagnostic_groups where fingerprint=?",fingerprint);
-      if (!group && (get<{n:number}>(this.db,"select count(*) n from diagnostic_groups")?.n ?? 0)>=500) throw new ApiError("rate_limited","診断の種類数の上限です。",{},3600);
+      if (!referenceOnly(input) && !group && (get<{n:number}>(this.db,"select count(*) n from diagnostic_groups")?.n ?? 0)>=500) throw new ApiError("rate_limited","診断の種類数の上限です。",{},3600);
+      const reference = referenceOnly(input);
+      if (reference && group) {
+        run(this.db,"update diagnostic_groups set occurrence_count=occurrence_count+1,last_seen=?,payload=? where fingerprint=?",at,payload,fingerprint);
+      } else if (!reference) {
       run(this.db,"insert into diagnostic_groups (fingerprint,severity,message_template,occurrence_count,first_seen,last_seen,status,payload) values (?,?,?,1,?,?,'open',?) on conflict(fingerprint) do update set severity=excluded.severity,occurrence_count=occurrence_count+1,last_seen=excluded.last_seen,status='open',payload=excluded.payload,resolved_at=null,resolution_note=null",fingerprint,severity(input),`${input.module}.${input.code}: ${input.diagnostic_log.operation} (${input.device_type})`,at,at,payload);
+      }
       run(this.db,"insert into diagnostic_receipts values (?,?,?,?)",userId,input.event_id,digest,at);
       run(this.db,"insert into diagnostics (user_id,event_id,received_at,payload,payload_hash,fingerprint,severity) values (?,?,?,?,?,?,?)",userId,input.event_id,at,payload,digest,diagnosticFingerprint(input),severity(input));
       this.prune();
@@ -127,8 +146,16 @@ export function diagnosticsAdmin(diagnostics: Diagnostics, token?: string) {
     const rows = all<{fingerprint:string;severity:string;message_template:string;occurrence_count:number;last_seen:string;status:string;payload:string}>(diagnostics.db,`select * from diagnostic_groups ${status === "all" ? "" : "where status=?"} order by last_seen desc,fingerprint limit ?`,...(status === "all" ? [limit] : [status,limit]));
     return c.json(rows.map(r=>{
       const p = JSON.parse(r.payload) as Diagnostic;
-      const note = get<InvestigationRow>(diagnostics.db,"select summary,evidence,updated_at from diagnostic_investigations where fingerprint=?",r.fingerprint);
-      return {fingerprint:r.fingerprint,severity:r.severity,message_template:r.message_template,occurrence_count:r.occurrence_count,last_seen:r.last_seen,status:r.status,module:`${p.module}.${p.device_type}`,category:p.code,app_version:p.app_version,diagnostic_log:JSON.stringify(p.diagnostic_log),diagnostic_log_version:p.app_version,diagnostic_log_received_at:r.last_seen,diagnostic_context:{diagnostic_schema_version:1,device_type:p.device_type,os_version:p.os_version,occurred_at:p.occurred_at,event_id:p.event_id,...p.diagnostic_log},...(note ? {investigation: investigationOf(note)} : {})};
+      const manual = get<InvestigationRow>(diagnostics.db,"select summary,evidence,updated_at from diagnostic_investigations where fingerprint=?",r.fingerprint);
+      const source = assessmentNote(p,r.last_seen);
+      const note = manual ? investigationOf(manual) : source;
+      if (manual && source && note) {
+        if (note.summary.length + source.summary.length + 2 <= 4000) note.summary += `\n\n${source.summary}`;
+        else if (note.evidence.length < 20) note.evidence.push(p.diagnostic_log.impact_assessment!.summary);
+        if (note.evidence.length < 20) note.evidence.push(source.evidence[0]!);
+        note.updated_at = note.updated_at > source.updated_at ? note.updated_at : source.updated_at;
+      }
+      return {fingerprint:r.fingerprint,severity:r.severity,message_template:r.message_template,occurrence_count:r.occurrence_count,last_seen:r.last_seen,status:r.status,module:`${p.module}.${p.device_type}`,category:p.code,app_version:p.app_version,diagnostic_log:JSON.stringify(p.diagnostic_log),diagnostic_log_version:p.app_version,diagnostic_log_received_at:r.last_seen,diagnostic_context:{diagnostic_schema_version:1,device_type:p.device_type,os_version:p.os_version,occurred_at:p.occurred_at,event_id:p.event_id,...p.diagnostic_log},...(note ? {investigation: note} : {})};
     }));
   });
   app.patch("/logs/:fingerprint/investigation",async c=>{

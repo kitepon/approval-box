@@ -152,3 +152,43 @@ test("v3 database migration preserves diagnosis and persists independent investi
   run(db,"delete from diagnostic_groups where fingerprint=?",fingerprint);assert.equal(all(db,"select * from diagnostic_investigations").length,0);db.close();
  } finally {rmSync(directory,{recursive:true,force:true});}
 });
+
+test("assessed recovered communication stays raw-only; duplicate receipts and legacy groups remain intact",async()=>{
+ const x=setup();
+ const input={...x.event(),code:"api_failed",module:"api",diagnostic_log:{operation:"events",user_visible:false,error_domain:"NSURLErrorDomain",error_code:-1005,handling:"reconnecting",impact_assessment:{severity:"info",summary:"Reconnected; display and operations recovered, no loss or duplicate.",recovery:"recovered"}}};
+ await x.send(input);await x.send(input);
+ assert.equal(all(x.db,"select * from diagnostics").length,1);
+ assert.equal(all(x.db,"select * from diagnostic_receipts").length,1);
+ assert.equal((await (await x.admin("/logs")).json()).length,0);
+ const legacy={...input,event_id:randomUUID(),diagnostic_log:{operation:"events",user_visible:false,error_domain:"NSURLErrorDomain",error_code:-1005}};
+ assert.equal(diagnosticFingerprint(diagnosticSchema.parse(input)),diagnosticFingerprint(diagnosticSchema.parse(legacy)));
+ await x.send(legacy);let row=(await (await x.admin("/logs")).json())[0];assert.equal(row.severity,"high");
+ await x.send({...input,event_id:randomUUID()});row=(await (await x.admin("/logs")).json())[0];assert.equal(row.status,"open");assert.equal(row.severity,"high");assert.equal(row.occurrence_count,2);
+ await x.admin("/logs/resolve",{fingerprint:row.fingerprint});await x.send({...input,event_id:randomUUID()});row=(await (await x.admin("/logs")).json())[0];assert.equal(row.status,"resolved");assert.equal(row.occurrence_count,3);
+});
+test("handling alone and unknown recovery do not hide impact; source severity and evidence are projected",async()=>{
+ const x=setup();const base={...x.event(),code:"api_failed",module:"api",diagnostic_log:{operation:"decisions.answer",user_visible:true,error_domain:"NSURLErrorDomain",error_code:-1001,handling:"retry_available"}};
+ await x.send(base);let row=(await (await x.admin("/logs")).json())[0];assert.equal(row.severity,"high");
+ await x.admin(`/logs/${row.fingerprint}/investigation`,{summary:"Operator findings remain.",evidence:["existing proof"]},{method:"PATCH"});
+ await x.send({...base,event_id:randomUUID(),diagnostic_log:{...base.diagnostic_log,impact_assessment:{severity:"high",summary:"Answer outcome remained unknown; user cannot confirm completion.",recovery:"recovered"}}});
+ row=(await (await x.admin("/logs")).json())[0];assert.equal(row.severity,"high");assert.equal(row.status,"open");assert.match(row.investigation.summary,/Operator findings remain/);assert.match(row.investigation.summary,/Answer outcome/);assert.equal(row.investigation.evidence[0],"existing proof");
+ await x.send({...base,event_id:randomUUID(),diagnostic_log:{...base.diagnostic_log,handling:"handling_failed",impact_assessment:{severity:"warn",summary:"Input remained but retry action stayed disabled.",recovery:"unrecovered"}}});
+ row=(await (await x.admin("/logs")).json())[0];assert.equal(row.severity,"warn");assert.match(row.investigation.summary,/retry action/);
+ const failing={...base,event_id:randomUUID(),diagnostic_log:{...base.diagnostic_log,handling:"handling_failed",impact_assessment:{severity:"info",summary:"Handling defect confirmed despite eventual recovery.",recovery:"recovered"}}};await x.send(failing);assert.equal(all(x.db,"select * from diagnostics").length,4);assert.equal((await (await x.admin("/logs")).json())[0].occurrence_count,4);
+ for(const log of [{...base.diagnostic_log,handling:"offline"},{...base.diagnostic_log,impact_assessment:{severity:"low",summary:"proof",recovery:"recovered"}},{...base.diagnostic_log,impact_assessment:{severity:"info",summary:" ",recovery:"recovered"}},{...base.diagnostic_log,impact_assessment:{severity:"info",summary:"x".repeat(1001),recovery:"recovered"}},{...base.diagnostic_log,impact_assessment:{severity:"info",summary:"proof",recovery:"recovered",payload:"secret"}}]) assert.equal((await x.send({...base,event_id:randomUUID(),diagnostic_log:log})).status,400);
+});
+test("normal cancellation requires explicit source assessment and known cancellation",async()=>{
+ const x=setup(), input={...x.event(),diagnostic_log:{...x.event().diagnostic_log,handling:"normal_cancel",impact_assessment:{severity:"info",summary:"User cancelled normally; no outstanding operation or loss.",recovery:"recovered"}}};
+ await x.send(input);assert.equal(all(x.db,"select * from diagnostics").length,1);assert.equal((await (await x.admin("/logs")).json()).length,0);
+ await x.send({...input,event_id:randomUUID(),diagnostic_log:{...input.diagnostic_log,cancellation:"unexpected"}});assert.equal((await (await x.admin("/logs")).json()).length,1);
+});
+
+test("unknown recovery remains registered; bounded administrator notes survive assessment projection and replay",async()=>{
+ const x=setup();const input={...x.event(),code:"api_failed",module:"api",diagnostic_log:{operation:"decisions.list",user_visible:false,handling:"reconnecting",impact_assessment:{severity:"info",summary:"Temporary diagnostic, recovery is still unknown.",recovery:"unknown"}}};
+ await x.send(input);let row=(await (await x.admin("/logs")).json())[0];assert.equal(row.status,"open");assert.match(row.investigation.summary,/recovery is still unknown/);
+ const manual={summary:"m".repeat(4000),evidence:Array.from({length:20},(_,i)=>`proof ${i}`)};
+ await x.admin(`/logs/${row.fingerprint}/investigation`,manual,{method:"PATCH"});
+ row=(await (await x.admin("/logs")).json())[0];assert.equal(row.investigation.summary,manual.summary);assert.deepEqual(row.investigation.evidence,manual.evidence);
+ const changed={...input,diagnostic_log:{...input.diagnostic_log,impact_assessment:{...input.diagnostic_log.impact_assessment,summary:"Different assessment must not reuse the event ID."}}};assert.equal((await x.send(changed)).status,409);
+ assert.equal(get<{n:number}>(x.db,"select occurrence_count n from diagnostic_groups")?.n,1);
+});

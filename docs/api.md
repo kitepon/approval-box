@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.25
+# Approval Box API（アプリ・Web版向け） v0.26
+
+v0.26（2026-10-07）: 通信診断の任意handlingとimpact_assessmentを正式定義。根拠付きの参考診断は原本・受領記録を保持し新規修理groupに昇格しない。既存未解決を自動解決せず、送信元の重大度・評価根拠を尊重する。詳細は[diagnostics.md](diagnostics.md)。
 
 v0.25（2026-10-07）: 診断原本と独立した管理者の調査注記 `investigation` を追加。LAN管理PATCHと既存管理GETの任意項目だけを拡張。診断POST・fingerprint・回数・状態は不変。詳細は [diagnostics.md](diagnostics.md)。
 

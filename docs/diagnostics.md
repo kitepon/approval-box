@@ -2,7 +2,7 @@
 
 POST `/v1/diagnostics` requires a valid application Bearer session. Keep events in the application's persistent outbox before login; send them after login. Never attach authentication material to the event. Diagnostic uploads and their failures must be excluded from diagnostic capture.
 
-Send `Content-Type: application/json` and `Idempotency-Key: <event_id>`. The key may be omitted; when present it must equal the event ID. One event per request, maximum 16 KiB including JSON whitespace. The schema in `packages/server/src/diagnostics.ts` is the exact allowlist; unknown object fields and unknown enum values return 400. No message, request/response body, raw URL, raw MetricKit JSON, symbol name, session, token, attachment content, or arbitrary string is accepted.
+Send `Content-Type: application/json` and `Idempotency-Key: <event_id>`. The key may be omitted; when present it must equal the event ID. One event per request, maximum 16 KiB including JSON whitespace. The schema in `packages/server/src/diagnostics.ts` is the exact allowlist; unknown object fields and unknown enum values return 400. No message, request/response body, raw URL, raw MetricKit JSON, symbol name, session, token, attachment content, or arbitrary string is accepted outside the bounded impact assessment described below.
 
 ```json
 {
@@ -76,3 +76,33 @@ The response is `{"fingerprint":"<64hex>","investigation":{"summary":"...","evid
 `GET /api/admin/logs` includes the same optional `investigation` object on that fingerprint. It is omitted when never saved. The existing array format and all diagnostic fields remain unchanged. BugHub must store and display this separately from the raw diagnostic and retain a previously received note when an older or unset feed omits the optional object.
 
 DB migration 4 adds `diagnostic_investigations`, keyed to its diagnostic group, without altering existing diagnostic rows. PATCH does not change raw payloads/hashes, receipts, counters, first/last receipt times, severity, fingerprint, event ID, status or resolution notes. Identical event retries, new occurrences, resolve/reopen and database restarts retain the investigation; normal removal of an expired diagnostic group removes its associated note. Recording a cause candidate does not resolve the issue. Existing public-proxy admin blocking remains in force.
+
+
+## Communication handling and impact assessment (API v0.26)
+
+Optional fields inside `diagnostic_log`:
+
+```json
+{
+  "handling": "retry_available",
+  "impact_assessment": {
+    "severity": "warn",
+    "summary": "The answer outcome remains unknown. Input is preserved and retry uses the same idempotency key.",
+    "recovery": "unknown"
+  }
+}
+```
+
+`handling`: `normal_cancel | reconnecting | retry_available | handling_failed | unassessed`. `impact_assessment` is strict, with required `severity` (`info | warn | high | fatal`), nonempty trimmed plain `summary` of at most 1000 JavaScript characters, and `recovery` (`recovered | unrecovered | unknown`). The source must supply observed impact, expected versus actual application handling and unresolved parts in its summary; never send secrets, user input, response bodies, raw URLs or arbitrary exception messages. This is an assessment, not proof of an environment cause or an application defect. Missing handling means unassessed; missing assessment preserves the legacy severity rather than guessing a lower impact from visibility, error code or count. Sources must not assign info merely because impact is unknown. Severe environment impact still merits high/fatal; repair ownership is a separate decision.
+
+Only reference events with **all** of these are retained as raw diagnostics/receipts without creating a new open repair group:
+- explicit assessment severity `info`, observed absence of material harm stated in summary, and recovery `recovered`;
+- `api_failed` with handling `reconnecting` or `retry_available`, or `cancelled` with handling `normal_cancel` and known `user`/`system` cancellation.
+
+The server validates the typed conditions, while the source owns the truth of the observation. Merely catching an error, displaying a retry button, continuing reconnect attempts or having `user_visible=false` is not evidence of recovery or no harm. Initial network failures with recovery not yet known remain unassessed/investigation; assess after observed recovery. `handling_failed`, unknown cancellation/recovery and high/fatal impact remain registered even after recovery. Known normal Task cancellation can continue to be excluded by the source before upload.
+
+If a matching group already exists, a reference occurrence increments its actual occurrence count and updates its latest payload/time but preserves severity, open/resolved status and resolution fields. It does not automatically resolve, reopen or lower an existing issue. Raw-only occurrences before group creation are diagnostic references, not repair-group occurrences. Fingerprints exclude the new assessment fields. Exact receipt hashes include them: never rewrite an existing outbox event or reuse its ID with changed assessment. Legacy events/aggregates are not backfilled or reclassified.
+
+An assessed repair occurrence uses the source severity, not a fixed error-code severity. Existing admin GET fields remain compatible: source assessment appears in `diagnostic_log`/`diagnostic_context` and is projected into optional `investigation`. With no manual note, the source summary and handling/severity/recovery/event ID form the note. Existing manual findings remain stored unchanged; the source summary is appended when the 4000-character bound permits, otherwise added to evidence if space remains. Evidence remains at most 20 items. If the manual note uses all bounded space, the full source assessment remains in the original diagnostic fields; no manual evidence is dropped. Updates use the later source/manual timestamp. This projection does not alter administrator PATCH semantics or raw records.
+
+Deploy this server contract before a sender uses these keys. Android and connector currently do not upload Apple diagnostics and receive no newly invented reporting path. Historical corrections require evidence and the existing authenticated management endpoints/notes; do not fabricate raw data, fingerprints or counts, or infer resolution from disappearance from the feed.
