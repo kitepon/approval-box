@@ -48,6 +48,7 @@ test('申請画像: 置換/競合/既存再利用/取消/既決削除/期限/acc
  c.db.prepare("update decisions set updated_at='2000-01-01T00:00:00Z' where id=?").run(id);c.decisions.purgeExpired();c.attachments.gc();assert.equal(existsSync(join(c.dir,b.id)),false);
  const draft=(await c.upload('draft.png')).json;c.db.prepare("update request_uploads set created_at='2000-01-01T00:00:00Z' where id=?").run(draft.id);c.attachments.gc();assert.equal(existsSync(join(c.dir,draft.id)),false);
  const closed=(await c.upload('closed.png')).json;const closedId=(await c.create([closed.id],'既決削除')).json.decision_id;await c.call(`/connector/v1/decisions/${closedId}/cancel`,{reason:'完了'},c.token);c.decisions.deleteClosed(c.accounts.connectionByToken(c.token).user_id);c.attachments.gc();assert.equal(existsSync(join(c.dir,closed.id)),false);
+ const revokeDraft=(await c.upload('revoke.png',PNG,c.other)).json;c.accounts.revokeConnection(c.accounts.connectionByToken(c.other).user_id,c.accounts.connectionByToken(c.other).id);c.attachments.gc();assert.equal(existsSync(join(c.dir,revokeDraft.id)),false);
  const bound=(await c.upload('kept.png')).json;await c.create([bound.id],'削除確認');await c.call('/v1/me',undefined,c.session,'DELETE');assert.equal(existsSync(join(c.dir,bound.id)),false);
  }finally{c.cleanup();}
 });
@@ -68,6 +69,7 @@ test('申請画像: remote MCP schemaとbase64 uploadから正規request/get',as
  const listed=await client.listTools();assert.ok(listed.tools.some(t=>t.name==='upload_request_image'));assert.ok(listed.tools.find(t=>t.name==='request_decision')?.inputSchema.properties?.request_attachment_ids);
  const tool=async(name:string,args:any)=>(await client.callTool({name,arguments:args})) as any;
  assert.equal((await tool('upload_request_image',{name:'a.png',content_type:'image/png',data_base64:'!!!='})).isError,true);
+ const maxImage=Buffer.alloc(MAX_FILE_BYTES);PNG.copy(maxImage);const maxUpload=await tool('upload_request_image',{name:'max.png',content_type:'image/png',data_base64:maxImage.toString('base64')});assert.equal(maxUpload.isError,undefined);assert.equal(maxUpload.structuredContent.attachment.size,MAX_FILE_BYTES);
  const a=(await tool('upload_request_image',{name:'a.png',content_type:'image/png',data_base64:PNG.toString('base64')})).structuredContent.attachment;
  const args={title:ask.title,options:ask.options,session_label:'remote',request_attachment_ids:[a.id]};const first=await tool('request_decision',args);const made=await tool('request_decision',{...args,check_token:first.structuredContent.check_token});assert.equal(made.structuredContent.request_attachments[0].id,a.id);
  const raw=await tool('get_attachment',{decision_id:made.structuredContent.decision_id,attachment_id:a.id});assert.equal(raw.content[1].type,'image');assert.equal(raw.content[1].data,PNG.toString('base64'));

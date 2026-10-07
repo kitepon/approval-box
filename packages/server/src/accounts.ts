@@ -234,6 +234,7 @@ export class Accounts {
     const result = run(this.db, "update connections set revoked_at = ?, token_hash = null where id = ? and user_id = ? and revoked_at is null", now(), id, userId);
     if (!result.changes) throw new ApiError("not_found", "その接続は見つかりません。");
     run(this.db, "delete from setup_checks where connection_id = ?", id);
+    run(this.db, "delete from request_uploads where connection_id = ?", id);
   }
 
   connectionByToken(token: string | undefined): Connection {

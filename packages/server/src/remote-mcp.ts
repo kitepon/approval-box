@@ -194,7 +194,7 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
       if (name === "upload_request_image") {
         if (!attachments) throw new ApiError("not_found", "このサーバーでは添付を使えません。");
         const input = z.object({name:z.string().min(1).max(200),content_type:z.string().max(100),data_base64:z.string().min(4).max(Math.ceil(MAX_FILE_BYTES / 3) * 4)}).parse(args);
-        if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(input.data_base64)) throw new ApiError("validation_failed", "画像のbase64が正しくありません。");
+        if (input.data_base64.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(input.data_base64)) throw new ApiError("validation_failed", "画像のbase64が正しくありません。");
         const data = Buffer.from(input.data_base64, "base64");
         if (data.toString("base64") !== input.data_base64) throw new ApiError("validation_failed", "画像のbase64が正しくありません。");
         accounts.assertCanUse(conn.user_id);
