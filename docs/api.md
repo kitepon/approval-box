@@ -333,3 +333,25 @@ message は利用者にそのまま見せてよい日本語の文。
 ## アプリ診断（2026-10-04）
 
 `POST /v1/diagnostics` はアプリのBearer sessionで診断イベントを受け取ります。未ログイン時は端末内outboxへ保存し、ログイン後に送ります。項目・列挙・重複排除・上限・MetricKit・BugHub管理APIの契約は [diagnostics.md](diagnostics.md) と `packages/server/src/diagnostics.ts` を参照してください。初回も同一イベントの再送も202で受領を返します。診断POSTの失敗は診断として再送信しません。
+
+## 申請画像（v0.31）
+
+AIが撮影・作成した画像を申請本文に添え、人が画像を見て通常の回答を出せる。利用者の回答添付とは分離する。Decision（利用者GET/list、AI create/get/list/amend）に `request_attachments: Attachment[]` を追加する。未添付は空配列、旧サーバー互換のためアプリ側は欠落も空として扱う。Attachmentは既存の `id,name,content_type,kind,size,sha256,created_at`。kindはimageのみ。
+
+原本は既存 `GET /v1/decisions/:id/attachments/:aid` を共用し利用者Bearerを必須とする。他accountは404。AIは自接続の `GET /connector/v1/decisions/:id/attachments/:aid` でも取得できる。公開URLは作らない。アプリ/Webはsize・sha256を照合して本文下に『AIの添付画像』、縮小画像/ファイル名を表示しタップで原本拡大。取得失敗時は画像欄に明示して再読込できる。回答添付は `answer.attachments` と従来draft APIのまま。
+
+### AIによるアップロードと確定
+
+`POST /connector/v1/request-images?name=<URL encoded name>` は接続Bearer、画像Content-Type、raw binary body。返却はAttachment。JPEG/PNG/GIF/WebP/HEIC/HEIFの既存signature検査、単体20MiBまで。認証・利用権限・account上限1GiBは既存回答添付と共用。接続/中身SHA256/clean nameが同じ未結合uploadは同じIDを返す。下書きは接続専用で、申請/通知/利用者一覧には出ない。未結合24時間で削除する。
+
+create `POST /connector/v1/decisions` に任意 `request_attachment_ids: string[]`（最大10件、重複不可、合計50MiB）。全IDが自接続の画像下書きでなければ拒否。既存check_token往復を維持する。申請のinsertと全画像の結合を同じDB取引で確定し、その後だけdecision.createdを出す。upload途中や1件でも不正な時は申請も通知も出ない。応答を失った時は既存list_my_decisionsで作成結果を照合し、未結合uploadだけを新しい申請へ使う。
+
+amend `changes.request_attachment_ids` は省略なら保持、`[]`なら全削除、配列なら全置換。自接続uploadと同じ申請の既存request画像IDを混在できる。他申請・他接続・回答添付IDは不可。version競合時は全件そのまま、成功時だけversion更新/履歴fieldsにrequest_attachment_ids/decision.updated通知。旧画像原本はGCで削除する。古いversionへの回答は既存409で防ぐ。
+
+cancelは画像も保持して取消理由とともに閲覧可能。回答時はrequest画像をanswerへ移さず保持する。既決削除/retention/account削除はDB cascadeと原本GCで両種類を削除する。接続を解除すると未結合uploadは削除するが、既存申請の画像は保持する。
+
+### MCP
+
+ローカルstdio `request_decision.image_paths?: string[]` は端末の画像ファイルパス（最大10件）。コネクタがローカル検査/バイナリupload後にrequest_attachment_idsへ変換し、confirmation往復を行う。`amend_decision.changes.image_paths` は全置換、空配列で削除。ローカルpathはサーバー/人へ保存しない。ID指定 `request_attachment_ids` も使えるが同じ呼出しでpathとIDを混在させない。
+
+remote HTTP MCPはローカルファイルを読めないため `upload_request_image(name,content_type,data_base64)` を追加する。返却attachment.idを `request_decision.request_attachment_ids` または `amend_decision.changes.request_attachment_ids` へ渡す。base64は厳密に検査してデコード20MiBまで。1画像ずつuploadし、全画像が揃ったら申請する。`get_attachment` はrequest/answer画像の原本に共用する。
