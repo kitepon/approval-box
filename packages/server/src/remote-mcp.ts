@@ -241,7 +241,7 @@ export function remoteMcpHandler(accounts: Accounts, decisions: Decisions, optio
       throw error;
     }
     const server = buildServer(conn, accounts, decisions, options.callBridgeConnections?.has(conn.id) ?? false, options.attachments);
-    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true, maxRequestBodySize: 32 * 1024 * 1024 });
     await server.connect(transport);
     try {
       return await transport.handleRequest(c.req.raw);
