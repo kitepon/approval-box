@@ -1,10 +1,12 @@
-# Approval Box API（アプリ・Web版向け） v0.24
+# Approval Box API（アプリ・Web版向け） v0.25
+
+v0.25（2026-10-07）: 診断原本と独立した管理者の調査注記 `investigation` を追加。LAN管理PATCHと既存管理GETの任意項目だけを拡張。診断POST・fingerprint・回数・状態は不変。詳細は [diagnostics.md](diagnostics.md)。
 
 v0.24（2026-10-06）: 診断に任意の固定enum `diagnostic_log.trigger` を追加。業務処理の開始入口を表し、fingerprintから除外。詳細は [diagnostics.md](diagnostics.md)。
 
 v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ。表示名・文言の「Approval Box」を置き換える）。
 
-2026-10-01 ラプラス起案。iPhone・Androidアプリ（ベル）とWeb版（ラプラス）が同じAPIを使う。正本はこのファイルで、変更はラプラスが行いベルへ知らせる。
+2026-10-01 ラプラス起案。iPhone・Androidアプリ（ベル）とWeb版が同じAPIを使う。サーバーAPIの正本はこのファイルで、現在の担当はナユタ（2026-10-02引継ぎ）。変更を利用側の担当へ知らせる。
 
 - 基点: `https://<host>/v1`。公式サーバーは `https://approval-box.kitepon.dev/v1`（2026-10-01 公開。今はこの1台だけで、本番用は別に立てていない。2026-10-02 から BILLING=store、ログインはAppleとGoogle）
 - アプリは公式サーバー専用。接続先は焼き込み（検証用・本番の切り替えはビルド設定だけ）。利用者が接続先を変える設定は作らない。

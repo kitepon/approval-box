@@ -257,6 +257,13 @@ const MIGRATIONS: ((db: Db) => void)[] = [
     db.exec("drop table if exists personal_links");
     db.exec("delete from login_links where code_challenge is null");
   },
+  // 4: 管理者の調査注記。診断原本・集計・解決状態から独立して保存する。
+  (db) => {
+    db.exec(`create table if not exists diagnostic_investigations (
+      fingerprint text primary key references diagnostic_groups(fingerprint) on delete cascade,
+      summary text not null, evidence text not null, updated_at text not null
+    )`);
+  },
 ];
 
 function migrate(db: Db) {

@@ -55,3 +55,24 @@ The public reverse proxy also blocks `/api/admin` and `/api/admin/*` with 404 be
 Trigger is excluded from fingerprints and severity; existing groups and counts continue across trigger values and omission. Raw payloads retain it; the existing admin `diagnostic_log` and `diagnostic_context` expose it for the latest event. Admin aggregates do not provide trigger-specific counts; retained raw events are needed for distributions.
 
 Apply only to newly captured events. Never mutate existing outbox bodies or event IDs: identical retries remain duplicates, while changing a received event's trigger (including adding/removing it) returns 409. This addition does not change cancellation, retry, error display, or SSE capture exclusions.
+
+## Independent investigation notes (2026-10-07)
+
+An administrator can record findings, corrections and unresolved causes separately from the original diagnosis. This is an optional extension of the existing BugHub signature feed; application diagnostic uploads still reject arbitrary text and `investigation`.
+
+`PATCH /api/admin/logs/{fingerprint}/investigation` uses the same direct-LAN socket/host, no-proxy and administrator Bearer requirements as other admin endpoints. Require `Content-Type: application/json`, a full 64-character lowercase hexadecimal fingerprint, and at most 96 KiB of UTF-8 JSON:
+
+```json
+{
+  "summary": "Correction and current findings; the cause remains unconfirmed.",
+  "evidence": ["https://example.test/evidence", "A timestamped reference to retained observations"]
+}
+```
+
+Both fields are required. `summary` is nonempty after trimming, at most 4000 characters; `evidence` is an array of at most 20 nonempty trimmed strings, each at most 1000 characters. Lengths use JavaScript string length. Evidence can be a URL or a plain reference; the server neither fetches it nor asserts that it proves the summary. Do not include credentials, personal addresses, raw private logs or request/response bodies. These are administrator notes, not client diagnostics. Unknown fields, including caller-supplied `updated_at` or status, return 400; oversized bodies return 413, other content types 415, unknown fingerprints 404.
+
+The response is `{"fingerprint":"<64hex>","investigation":{"summary":"...","evidence":["..."],"updated_at":"<server UTC ISO timestamp>"}}`. Each PATCH replaces the note's summary and evidence and sets its update time on the server. No note deletion or diagnostic-state change is implied.
+
+`GET /api/admin/logs` includes the same optional `investigation` object on that fingerprint. It is omitted when never saved. The existing array format and all diagnostic fields remain unchanged. BugHub must store and display this separately from the raw diagnostic and retain a previously received note when an older or unset feed omits the optional object.
+
+DB migration 4 adds `diagnostic_investigations`, keyed to its diagnostic group, without altering existing diagnostic rows. PATCH does not change raw payloads/hashes, receipts, counters, first/last receipt times, severity, fingerprint, event ID, status or resolution notes. Identical event retries, new occurrences, resolve/reopen and database restarts retain the investigation; normal removal of an expired diagnostic group removes its associated note. Recording a cause candidate does not resolve the issue. Existing public-proxy admin blocking remains in force.

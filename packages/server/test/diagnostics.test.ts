@@ -16,7 +16,7 @@ function setup() {
  const app=createApp({db,events,accounts,decisions:new Decisions(db,events),publicUrl:"https://example.test",diagnosticsAdminToken:"test-secret"});
  const event=()=>({event_id:randomUUID(),occurred_at:new Date().toISOString(),code:"cancelled",module:"processing",app_version:"0.1.0(14)",device_type:"iPhone",os_version:"27.0.0",diagnostic_log:{operation:"app.operation",user_visible:false,cancellation:"system"}});
  const send=(body:unknown,authorization=token)=>app.request("http://192.168.1.2:18871/v1/diagnostics",{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${authorization}`},body:JSON.stringify(body)});
- const admin=(path:string,body?:unknown,options:{host?:string,remote?:string,token?:string,headers?:Record<string,string>}={})=>app.request(`http://${options.host ?? "192.168.1.2:18871"}/api/admin${path}`,{method:body ? "POST":"GET",headers:{authorization:`Bearer ${options.token ?? "test-secret"}`,"content-type":"application/json",...options.headers},...(body ? {body:JSON.stringify(body)} : {})},{incoming:{socket:{remoteAddress:options.remote ?? "192.168.1.9"}}});
+ const admin=(path:string,body?:unknown,options:{host?:string,remote?:string,token?:string,headers?:Record<string,string>,method?:string}={})=>app.request(`http://${options.host ?? "192.168.1.2:18871"}/api/admin${path}`,{method:options.method ?? (body ? "POST":"GET"),headers:{authorization:`Bearer ${options.token ?? "test-secret"}`,"content-type":"application/json",...options.headers},...(body ? {body:JSON.stringify(body)} : {})},{incoming:{socket:{remoteAddress:options.remote ?? "192.168.1.9"}}});
  return {db,user,app,event,send,admin};
 }
 test("authenticated diagnostics: exact receipt, replay, conflict, bounded typed payload",async()=>{
@@ -104,4 +104,51 @@ test("optional trigger preserves grouping, exact receipts and admin/raw observat
   assert.equal((await x.send({...x.event(),diagnostic_log})).status,400);
  const rows=await (await x.admin("/logs")).json();
  assert.equal(rows.length,1);assert.equal(rows[0].fingerprint,fingerprint);assert.equal(rows[0].occurrence_count,11);assert.equal(rows[0].severity,"info");
+});
+
+test("investigation PATCH changes only independent note; replay/new diagnostics and state changes retain it",async()=>{
+ const x=setup(),event=x.event();await x.send(event);
+ const before=(await (await x.admin("/logs")).json())[0];
+ assert.equal("investigation" in before,false);
+ const original={groups:all(x.db,"select * from diagnostic_groups"),raw:all(x.db,"select * from diagnostics"),receipts:all(x.db,"select * from diagnostic_receipts")};
+ const note={summary:"訂正: reset受信なし。根治は未確定。",evidence:["https://example.test/evidence","3窓の経路喪失→通信失敗"]};
+ const patch=(body:unknown)=>x.admin(`/logs/${before.fingerprint}/investigation`,body,{method:"PATCH"});
+ const r=await patch(note);assert.equal(r.status,200);const saved=await r.json();
+ assert.equal(saved.fingerprint,before.fingerprint);assert.deepEqual({...saved.investigation,updated_at:undefined},{...note,updated_at:undefined});assert.ok(Number.isFinite(Date.parse(saved.investigation.updated_at)));
+ assert.deepEqual({groups:all(x.db,"select * from diagnostic_groups"),raw:all(x.db,"select * from diagnostics"),receipts:all(x.db,"select * from diagnostic_receipts")},original);
+ const row=(await (await x.admin("/logs?status=open")).json())[0];assert.deepEqual(row,{...before,investigation:saved.investigation});
+ await x.admin("/logs/resolve",{fingerprint:before.fingerprint,note:"別の解決記録"});
+ assert.equal((await (await x.send(event)).json()).duplicate,true);
+ assert.equal((await (await x.admin("/logs?status=resolved")).json())[0].investigation.summary,note.summary);
+ await x.send({...event,event_id:randomUUID(),app_version:"0.1.0(15)"});
+ const repeated=(await (await x.admin("/logs?status=open")).json())[0];assert.equal(repeated.occurrence_count,2);assert.deepEqual(repeated.investigation,saved.investigation);
+ const revised={summary:"追加照合、未解決。",evidence:[]};assert.equal((await patch(revised)).status,200);
+ const latest=(await (await x.admin("/logs")).json())[0];assert.equal(latest.investigation.summary,revised.summary);assert.deepEqual(latest.investigation.evidence,[]);assert.equal(latest.status,"open");assert.equal(latest.occurrence_count,2);
+ assert.equal((await x.send({...x.event(),investigation:note})).status,400);
+});
+
+test("investigation uses existing LAN admin authority and bounded independent input",async()=>{
+ const x=setup();await x.send(x.event());const row=(await (await x.admin("/logs")).json())[0];const path=`/logs/${row.fingerprint}/investigation`,note={summary:"候補",evidence:[]};
+ for(const options of [{token:"wrong"},{token:""},{host:"approval-box.kitepon.dev"},{remote:"203.0.113.1"},{headers:{"cf-ray":"a"}},{headers:{"x-forwarded-for":"192.168.1.1"}}])assert.notEqual((await x.admin(path,note,{...options,method:"PATCH"})).status,200);
+ for(const body of [{...note,summary:""},{...note,summary:"a".repeat(4001)},{...note,evidence:Array(21).fill("ref")},{...note,evidence:["a".repeat(1001)]},{...note,evidence:[""]},{...note,evidence:"ref"},{...note,updated_at:"client time"},{...note,status:"resolved"},{...note,payload:"raw"}])assert.equal((await x.admin(path,body,{method:"PATCH"})).status,400);
+ assert.equal((await x.admin(path,note,{method:"PATCH",headers:{"content-type":"text/plain"}})).status,415);
+ assert.equal((await x.admin(path,{...note,padding:"x".repeat(97*1024)},{method:"PATCH"})).status,413);
+ assert.equal((await x.admin("/logs/not-a-fingerprint/investigation",note,{method:"PATCH"})).status,400);
+ assert.equal((await x.admin(`/logs/${"a".repeat(64)}/investigation`,note,{method:"PATCH"})).status,404);
+ assert.equal(all(x.db,"select * from diagnostic_investigations").length,0);
+ const maximal={summary:"あ".repeat(4000),evidence:Array(20).fill("あ".repeat(1000))};assert.equal((await x.admin(path,maximal,{method:"PATCH"})).status,200);
+});
+
+test("v3 database migration preserves diagnosis and persists independent investigation across reopen",()=>{
+ const directory=mkdtempSync(join(tmpdir(),"approvalbox-investigation-"));
+ try {
+  const file=join(directory,"test.db");let db=openDb(file);const accounts=new Accounts(db,new EventHub(db),"off");const user=accounts.createUser();
+  const event=diagnosticSchema.parse({event_id:randomUUID(),occurred_at:new Date().toISOString(),code:"api_failed",module:"api",app_version:"0.1.0(18)",device_type:"Mac",os_version:"26.0.0",diagnostic_log:{operation:"events",error_domain:"NSURLErrorDomain",error_code:-1005,user_visible:true}});
+  new Diagnostics(db).accept(user,event);const original={groups:all(db,"select * from diagnostic_groups"),raw:all(db,"select * from diagnostics")};
+  db.exec("drop table diagnostic_investigations; pragma user_version=3");db.close();db=openDb(file);
+  assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version,4);assert.deepEqual({groups:all(db,"select * from diagnostic_groups"),raw:all(db,"select * from diagnostics")},original);
+  const fingerprint=diagnosticFingerprint(event);run(db,"insert into diagnostic_investigations values (?,?,?,?)",fingerprint,"未確定",JSON.stringify(["原文参照"]),"2026-10-07T03:00:00Z");db.close();db=openDb(file);
+  assert.equal(get<{summary:string}>(db,"select summary from diagnostic_investigations where fingerprint=?",fingerprint)?.summary,"未確定");assert.deepEqual(all(db,"select * from diagnostics"),original.raw);
+  run(db,"delete from diagnostic_groups where fingerprint=?",fingerprint);assert.equal(all(db,"select * from diagnostic_investigations").length,0);db.close();
+ } finally {rmSync(directory,{recursive:true,force:true});}
 });

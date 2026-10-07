@@ -31,6 +31,15 @@ export const diagnosticSchema = z.strictObject({
   }),
 });
 type Diagnostic = z.infer<typeof diagnosticSchema>;
+export const investigationInputSchema = z.strictObject({
+  summary: z.string().trim().min(1).max(4000),
+  evidence: z.array(z.string().trim().min(1).max(1000)).max(20),
+});
+export type DiagnosticInvestigation = z.infer<typeof investigationInputSchema> & { updated_at: string };
+type InvestigationRow = { summary: string; evidence: string; updated_at: string };
+function investigationOf(row: InvestigationRow): DiagnosticInvestigation {
+  return { summary: row.summary, evidence: JSON.parse(row.evidence) as string[], updated_at: row.updated_at };
+}
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value && typeof value === "object") return `{${Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
@@ -118,8 +127,24 @@ export function diagnosticsAdmin(diagnostics: Diagnostics, token?: string) {
     const rows = all<{fingerprint:string;severity:string;message_template:string;occurrence_count:number;last_seen:string;status:string;payload:string}>(diagnostics.db,`select * from diagnostic_groups ${status === "all" ? "" : "where status=?"} order by last_seen desc,fingerprint limit ?`,...(status === "all" ? [limit] : [status,limit]));
     return c.json(rows.map(r=>{
       const p = JSON.parse(r.payload) as Diagnostic;
-      return {fingerprint:r.fingerprint,severity:r.severity,message_template:r.message_template,occurrence_count:r.occurrence_count,last_seen:r.last_seen,status:r.status,module:`${p.module}.${p.device_type}`,category:p.code,app_version:p.app_version,diagnostic_log:JSON.stringify(p.diagnostic_log),diagnostic_log_version:p.app_version,diagnostic_log_received_at:r.last_seen,diagnostic_context:{diagnostic_schema_version:1,device_type:p.device_type,os_version:p.os_version,occurred_at:p.occurred_at,event_id:p.event_id,...p.diagnostic_log}};
+      const note = get<InvestigationRow>(diagnostics.db,"select summary,evidence,updated_at from diagnostic_investigations where fingerprint=?",r.fingerprint);
+      return {fingerprint:r.fingerprint,severity:r.severity,message_template:r.message_template,occurrence_count:r.occurrence_count,last_seen:r.last_seen,status:r.status,module:`${p.module}.${p.device_type}`,category:p.code,app_version:p.app_version,diagnostic_log:JSON.stringify(p.diagnostic_log),diagnostic_log_version:p.app_version,diagnostic_log_received_at:r.last_seen,diagnostic_context:{diagnostic_schema_version:1,device_type:p.device_type,os_version:p.os_version,occurred_at:p.occurred_at,event_id:p.event_id,...p.diagnostic_log},...(note ? {investigation: investigationOf(note)} : {})};
     }));
+  });
+  app.patch("/logs/:fingerprint/investigation",async c=>{
+    const fingerprint = z.string().regex(/^[a-f0-9]{64}$/).parse(c.req.param("fingerprint"));
+    if ((c.req.header("content-type") ?? "").split(";")[0]?.trim().toLowerCase() !== "application/json") throw new ApiError("unsupported_type","application/json を指定してください。");
+    const bytes = await readLimited(c.req.raw.body,96*1024);
+    let raw: unknown;
+    try { raw = JSON.parse(bytes.toString("utf8")); } catch { throw new ApiError("validation_failed","JSONを送ってください。"); }
+    const input = investigationInputSchema.parse(raw);
+    const investigation = tx(diagnostics.db,()=>{
+      if (!get(diagnostics.db,"select fingerprint from diagnostic_groups where fingerprint=?",fingerprint)) throw new ApiError("not_found","診断がありません。");
+      const updated_at = new Date().toISOString();
+      run(diagnostics.db,"insert into diagnostic_investigations (fingerprint,summary,evidence,updated_at) values (?,?,?,?) on conflict(fingerprint) do update set summary=excluded.summary,evidence=excluded.evidence,updated_at=excluded.updated_at",fingerprint,input.summary,JSON.stringify(input.evidence),updated_at);
+      return { ...input, updated_at };
+    });
+    return c.json({ fingerprint, investigation });
   });
   for (const action of ["resolve","reopen"] as const) app.post(`/logs/${action}`,async c=>{
     const bytes = await readLimited(c.req.raw.body,4096);
