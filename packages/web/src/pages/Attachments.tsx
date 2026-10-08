@@ -156,7 +156,7 @@ function RequestImage({decisionId,item}:{decisionId:string;item:Attachment}) {
   },[decisionId,item.id,item.sha256,retry]);
   return <li class="attachment">
     {url ? <button class="ghost" onClick={()=>setExpanded(true)} aria-label={`${item.name}を拡大`}><img src={url} alt={item.name} onError={()=>setError("この画像はブラウザで表示できません。原本を保存して開いてください。")}/></button> : <span>画像を読み込み中…</span>}
-    <span>{item.name}<span class="muted"> {bytes(item.size)}</span></span>
+    <button class="attachment-name" disabled={!url} onClick={()=>setExpanded(true)} title="拡大する">{item.name}<span class="muted"> {bytes(item.size)}</span></button>
     {error&&<div role="alert">{error} <button onClick={()=>setRetry(n=>n+1)}>再読込</button></div>}
     {url&&<a href={url} download={item.name}>原本を保存</a>}
     {expanded&&url&&<div class="image-overlay" role="dialog" aria-modal="true" aria-label={item.name} onKeyDown={e=>{if(e.key==="Escape")setExpanded(false);}}>
