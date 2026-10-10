@@ -56,7 +56,8 @@ function referenceOnly(input: Diagnostic) {
   const d = input.diagnostic_log, a = d.impact_assessment;
   if (!a || a.severity !== "info" || a.recovery !== "recovered") return false;
   if (d.handling === "normal_cancel") return input.code === "cancelled" && (d.cancellation === "user" || d.cancellation === "system");
-  return input.code === "api_failed" && (d.handling === "reconnecting" || d.handling === "retry_available");
+  // 想定外の取消も、送信元が再試行・再接続での回復を観測していれば参考に留める（v0.28）。
+  return (input.code === "api_failed" || input.code === "cancelled") && (d.handling === "reconnecting" || d.handling === "retry_available");
 }
 function assessmentNote(input: Diagnostic, at: string): DiagnosticInvestigation | undefined {
   const d = input.diagnostic_log, a = d.impact_assessment;

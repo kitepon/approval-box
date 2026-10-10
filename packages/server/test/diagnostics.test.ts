@@ -183,6 +183,23 @@ test("normal cancellation requires explicit source assessment and known cancella
  await x.send({...input,event_id:randomUUID(),diagnostic_log:{...input.diagnostic_log,cancellation:"unexpected"}});assert.equal((await (await x.admin("/logs")).json()).length,1);
 });
 
+test("recovered retry of an unexpected cancellation stays a reference; unassessed or unrecovered ones still register",async()=>{
+ const x=setup(), log={operation:"decisions.list",http_method:"GET",user_visible:false,error_domain:"NSURLErrorDomain",error_code:-999,cancellation:"unexpected",trigger:"notification_refresh"};
+ const recovered={...x.event(),code:"cancelled",module:"api",diagnostic_log:{...log,handling:"retry_available",impact_assessment:{severity:"info",summary:"The automatic list refresh succeeded on the first retry. No error was shown.",recovery:"recovered"}}};
+ assert.equal((await x.send(recovered)).status,202);
+ assert.equal(all(x.db,"select * from diagnostics").length,1);assert.equal((await (await x.admin("/logs")).json()).length,0);
+ await x.send({...recovered,event_id:randomUUID(),diagnostic_log:{...recovered.diagnostic_log,handling:"reconnecting"}});assert.equal((await (await x.admin("/logs")).json()).length,0);
+ // 評価の無い取消、回復していない取消、対処不良は、今までどおり未解決として登録する。
+ await x.send({...recovered,event_id:randomUUID(),diagnostic_log:{...log,handling:"retry_available"}});
+ let rows=await (await x.admin("/logs")).json();assert.equal(rows.length,1);assert.equal(rows[0].status,"open");assert.equal(rows[0].severity,"warn");
+ await x.send({...recovered,event_id:randomUUID(),diagnostic_log:{...log,handling:"retry_available",impact_assessment:{severity:"warn",summary:"Retries were exhausted and an error was shown; the list stayed stale.",recovery:"unrecovered"}}});
+ await x.send({...recovered,event_id:randomUUID(),diagnostic_log:{...log,handling:"handling_failed",impact_assessment:{severity:"info",summary:"Recovered, but the retry action stayed disabled.",recovery:"recovered"}}});
+ rows=await (await x.admin("/logs")).json();assert.equal(rows.length,1);assert.equal(rows[0].occurrence_count,3);assert.equal(rows[0].status,"open");
+ // 既に未解決がある時、参考の発生は回数だけ進め、状態と重大度を動かさない。
+ const severity=rows[0].severity;await x.send({...recovered,event_id:randomUUID()});
+ rows=await (await x.admin("/logs")).json();assert.equal(rows[0].occurrence_count,4);assert.equal(rows[0].status,"open");assert.equal(rows[0].severity,severity);
+});
+
 test("unknown recovery remains registered; bounded administrator notes survive assessment projection and replay",async()=>{
  const x=setup();const input={...x.event(),code:"api_failed",module:"api",diagnostic_log:{operation:"decisions.list",user_visible:false,handling:"reconnecting",impact_assessment:{severity:"info",summary:"Temporary diagnostic, recovery is still unknown.",recovery:"unknown"}}};
  await x.send(input);let row=(await (await x.admin("/logs")).json())[0];assert.equal(row.status,"open");assert.match(row.investigation.summary,/recovery is still unknown/);

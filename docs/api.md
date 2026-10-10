@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.27
+# Approval Box API（アプリ・Web版向け） v0.28
+
+v0.28（2026-10-10）: 項目は変えていない。①想定外の取消（`cancelled`）も、送信元が再試行・再接続での回復を観測して `info`・`recovered` と `handling: retry_available | reconnecting` を付けた時は参考診断に留める。②サーバーは停止の合図（SIGTERM）で `GET /v1/events` と `GET /connector/v1/stream` を正しく閉じる。入れ替えの間に切断でなく正常終了が届くので、利用側は今までどおり再接続する。入れ替えの数秒は手前のプロキシが接続を待たせ、502を返さない。詳細は[diagnostics.md](diagnostics.md)。
 
 v0.26（2026-10-07）: 通信診断の任意handlingとimpact_assessmentを正式定義。根拠付きの参考診断は原本・受領記録を保持し新規修理groupに昇格しない。既存未解決を自動解決せず、送信元の重大度・評価根拠を尊重する。詳細は[diagnostics.md](diagnostics.md)。
 

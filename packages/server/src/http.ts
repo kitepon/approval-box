@@ -14,12 +14,21 @@ import { Decisions, amendSchema, answerSchema, createSchema, routeSchema } from 
 import { now } from "./ids.ts";
 import { type RemoteMcpOptions, remoteMcpHandler } from "./remote-mcp.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal };
 
 const STATUSES = ["pending", "held", "answered", "cancelled"] as const;
 /** アプリへ戻すURLのscheme（AndroidのCustom Tabsから戻る先）。 */
 const APP_SCHEME = "approvalbox";
 const HEARTBEAT_MS = 25_000;
+/** 次の知らせ・切断・停止の合図か、ping の時刻まで待つ。起こされたら時計を片付ける。 */
+function untilWake(shutdown: AbortSignal | undefined, arm: (resume: () => void) => void) {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, HEARTBEAT_MS);
+    const resume = () => { clearTimeout(timer); resolve(); };
+    arm(resume);
+    if (shutdown?.aborted) resume();
+  });
+}
 
 function bearer(c: Context): string | undefined {
   const header = c.req.header("authorization");
@@ -211,18 +220,22 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       let wake: (() => void) | null = null;
       const unsubscribe = events.subscribe(userId, (event) => { queue.push(event); wake?.(); });
       stream.onAbort(() => { unsubscribe(); wake?.(); });
+      const stop = () => wake?.();
+      services.shutdown?.addEventListener("abort", stop, { once: true });
       let sent = last;
-      while (!stream.aborted) {
+      while (!stream.aborted && !services.shutdown?.aborted) {
         while (queue.length) {
           const event = queue.shift()!;
           if (event.id <= sent) continue;
           sent = event.id;
           await stream.writeSSE({ id: String(event.id), event: event.type, data: JSON.stringify(event.data) });
         }
-        await new Promise<void>((resolve) => { wake = resolve; setTimeout(resolve, HEARTBEAT_MS); });
+        await untilWake(services.shutdown, (resume) => { wake = resume; });
         wake = null;
-        if (!queue.length && !stream.aborted) await stream.write(": ping\n\n");
+        if (!queue.length && !stream.aborted && !services.shutdown?.aborted) await stream.write(": ping\n\n");
       }
+      // 停止の合図では、流れを正しく閉じて返す。利用側は切断でなく正常終了として再接続できる。
+      services.shutdown?.removeEventListener("abort", stop);
       unsubscribe();
     });
   });
@@ -370,15 +383,18 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       let wake: (() => void) | null = null;
       const unsubscribe = events.subscribeConnection(connection.id, () => { pending = true; wake?.(); });
       stream.onAbort(() => { unsubscribe(); wake?.(); });
-      while (!stream.aborted) {
+      const stop = () => wake?.();
+      services.shutdown?.addEventListener("abort", stop, { once: true });
+      while (!stream.aborted && !services.shutdown?.aborted) {
         if (pending) {
           pending = false;
           await stream.writeSSE({ event: "deliveries", data: "{}" });
         }
-        await new Promise<void>((resolve) => { wake = resolve; setTimeout(resolve, HEARTBEAT_MS); });
+        await untilWake(services.shutdown, (resume) => { wake = resume; });
         wake = null;
-        if (!pending && !stream.aborted) await stream.write(": ping\n\n");
+        if (!pending && !stream.aborted && !services.shutdown?.aborted) await stream.write(": ping\n\n");
       }
+      services.shutdown?.removeEventListener("abort", stop);
       unsubscribe();
     });
   });

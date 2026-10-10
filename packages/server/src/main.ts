@@ -111,7 +111,9 @@ if (callBridgeIds.length) {
   }
 }
 const diagnosticsAdminToken = env.DIAGNOSTICS_ADMIN_KEY_FILE ? readFileSync(env.DIAGNOSTICS_ADMIN_KEY_FILE,"utf8").trim() : env.DIAGNOSTICS_ADMIN_KEY;
-const app = createApp({ diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) } }, { staticHandler });
+// 停止の合図。開いたままの更新の知らせ（SSE）を正しく閉じてから終える。
+const shutdown = new AbortController();
+const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) } }, { staticHandler });
 
 setInterval(() => {
   new Diagnostics(db).prune();
@@ -121,6 +123,25 @@ setInterval(() => {
   events.prune(7);
 }, 3600_000).unref();
 
-serve({ fetch: app.fetch, port }, () => {
+const server = serve({ fetch: app.fetch, port }, () => {
   console.log(`approval-box-server: ${publicUrl} (port ${port}, data ${dataDir}, billing ${billing}${webRoot ? "" : ", web未ビルド"})`);
 });
+
+// コンテナの中ではこのプロセスが PID 1 で、合図を受ける処理が無いと SIGTERM は無視される。
+// その場合 docker stop は10秒待ってから強制終了し、処理中の応答とSSEが途中で切れる。
+let stopping = false;
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.on(signal, () => {
+    if (stopping) return;
+    stopping = true;
+    console.log(`approval-box-server: ${signal} を受けて停止します`);
+    shutdown.abort();
+    const finish = () => { try { db.close(); } catch { /* 既に閉じている */ } process.exit(0); };
+    server.close(finish);
+    // 新しい要求は受けず、処理中の応答が終わるのを待つ。待ちすぎないよう上限を置く。
+    const http = server as { closeIdleConnections?: () => void; closeAllConnections?: () => void };
+    http.closeIdleConnections?.();
+    setTimeout(() => http.closeAllConnections?.(), 3000).unref();
+    setTimeout(finish, 6000).unref();
+  });
+}

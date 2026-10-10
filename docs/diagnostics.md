@@ -97,7 +97,9 @@ Optional fields inside `diagnostic_log`:
 
 Only reference events with **all** of these are retained as raw diagnostics/receipts without creating a new open repair group:
 - explicit assessment severity `info`, observed absence of material harm stated in summary, and recovery `recovered`;
-- `api_failed` with handling `reconnecting` or `retry_available`, or `cancelled` with handling `normal_cancel` and known `user`/`system` cancellation.
+- `api_failed` with handling `reconnecting` or `retry_available`, or `cancelled` with handling `normal_cancel` and known `user`/`system` cancellation, or (API v0.28) `cancelled` with handling `reconnecting` or `retry_available`.
+
+The v0.28 case covers a request cancelled by something other than the application's own task (`cancellation: unexpected`, or a system cancellation of an automatic request) that the application retried or reconnected and observed to succeed. As with `api_failed`, the recovery must be observed before the event is assessed: an unassessed, unrecovered or `handling_failed` cancellation still registers. `normal_cancel` keeps requiring a known `user`/`system` cancellation.
 
 The server validates the typed conditions, while the source owns the truth of the observation. Merely catching an error, displaying a retry button, continuing reconnect attempts or having `user_visible=false` is not evidence of recovery or no harm. Initial network failures with recovery not yet known remain unassessed/investigation; assess after observed recovery. `handling_failed`, unknown cancellation/recovery and high/fatal impact remain registered even after recovery. Known normal Task cancellation can continue to be excluded by the source before upload.
 
