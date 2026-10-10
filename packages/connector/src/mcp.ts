@@ -10,6 +10,7 @@ import { requireConfig, writeJsonFile } from "./config.ts";
 import { ensureDaemon } from "./daemon.ts";
 import { uploadImagePaths } from "./request-images.ts";
 import { runtimeEntry } from "./runtime.ts";
+import { claudeChannelIsCurrent } from "./claude-channel.ts";
 import { MCP_SERVER, PROFILE, stateRoot } from "./profile.ts";
 import { osName, VERSION } from "./version.ts";
 
@@ -166,7 +167,9 @@ async function channelFor(harness: Harness, clientName: string | undefined, meta
     // /clear で session_id が変わる。依頼のたびに親を特定し、変わっていたら開き直す。
     const key = `claude:${parent.session_id}`;
     const existing = reuse(key, true);
-    if (existing) return existing;
+    // アプリの起動し直しでは、session_id が同じままprocessが替わる。古いprocessに結んだchannelは使い回さない。
+    // 古いchannelは閉じない。同じ会話の待機が、そこに残った答えも一緒に引き取る。
+    if (existing && claudeChannelIsCurrent(PROFILE, existing, parent)) return existing;
     const channel = steer.openChannel(PROFILE, parent);
     remember(key, channel.channel_id, true);
     return channel.channel_id;
