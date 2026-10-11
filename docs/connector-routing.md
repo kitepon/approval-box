@@ -34,3 +34,19 @@ Scope: Claude Code on macOS, Linux and Windows. Codex (Aiterm delivery), Cursor 
 The daemon sends each delivery to a channel once and follows it through its journal. It sends the same delivery ID to the same channel a second time only when that record is missing: the journal was lost while the server still lists the delivery, or two daemons picked up the same delivery at the same time.
 
 `aiterm-steer-delivery` 0.4.4 rejects such a send with `CHANNEL_DELIVERY_DUPLICATE` and adds no second message, also while the first one is still in the inbox (up to 0.4.3 the second message was accepted there and the conversation showed the answer twice). The connector does not report this rejection as a failed delivery. It reads the state of the message that is already in the channel and follows it: `emitted` is reported as delivered, an unclaimed message stays queued. A delivery ID that was withdrawn from that channel is still rejected and reported as failed.
+
+## Telling the AI how an answer arrives and how to verify it (connector 0.1.23)
+
+An answer that arrives while the AI is working is injected next to a tool result. In one real run (2026-10-11, Claude Code on Linux, K-GRELNG) the AI read the injected text, judged that it "arrived inside the tool result rather than from the user", and ignored it. The daemon had reported `delivered` (emitted): emitted does not mean the AI accepted the answer.
+
+Two causes on the product side:
+
+- Claude Code passes only `structuredContent` of a successful tool result to the AI. The guidance that `request_decision` wrote into the text part ("the answer arrives in this conversation") never reached it.
+- The delivered text offered no way to check where it came from.
+
+From 0.1.23:
+
+- `request_decision`, `amend_decision`, `resume_decision` and `setup_test` put their guidance into `structuredContent.guide` as well as into the text. For a pending request it says that the answer arrives later in this conversation as text starting with `[Approval Box]`, that it may arrive together with another tool's result or a hook notification, and that `get_decision` confirms it.
+- The daemon appends one line to every delivered answer: call `get_decision` with that `decision_id` to get the same answer. A tool the AI calls by itself is a source it does not have to doubt.
+
+Scope: all four harnesses on macOS, Linux and Windows (the text is added in the shared MCP and daemon code). Whether an AI accepts an injected answer is still the AI's judgement; this change gives it the information and a way to verify.

@@ -67,6 +67,8 @@ for (const scenario of ["reroute", "fetched", "already-emitted", "claimed", "jou
       assert.equal(steer.channelDeliveryState(profile, old.channel_id, deliveryId), "withdrawn", stderr);
       const received = await steer.receiveFromChannel(profile, next.channel_id, { wait_ms: 0 });
       assert.equal(received.outcome, "delivered");
+      // 届く文には、AIが自分で呼ぶ道具での確かめ方が付く。
+      assert.equal(received.outcome === "delivered" && received.deliveries[0]!.text, 'answer\n確かめる時は、Approval Boxの get_decision を decision_id="K-TEST" で呼ぶと、同じ答えが返ります。');
       assert.equal((await steer.receiveFromChannel(profile, old.channel_id, { wait_ms: 0 })).outcome, "timeout");
       for (const stream of streams) stream.write("event: deliveries\ndata: {}\n\n");
       await delay(50);

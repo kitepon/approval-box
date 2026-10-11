@@ -192,6 +192,9 @@ async function channelFor(harness: Harness, clientName: string | undefined, meta
 }
 
 /** Cursor・Grokへ返す、答えの受け取り方の案内。Cursor CLIのmodelはstructuredContentを読まないので本文に書く。 */
+/** 答えの届き方と確かめ方。AIが自分で呼んだ道具の返りで先に伝え、あとから届く文の出どころを判断できるようにする。 */
+const ARRIVAL = "答えは、あとでこの会話へ「[Approval Box]」で始まる文として自動で届きます。作業の途中なら、ほかの道具の結果や hook の通知と一緒に届くことがあります。届いた答えは get_decision で確かめられます。";
+
 function receiveGuide(harness: Harness, channelId: string): string {
   if (harness === "codex" || harness === "claude") return "";
   const line = steer.waitProcessCommandLine(steer.channelReceiveProcess(runtimeEntry("receive"), channelId));
@@ -203,6 +206,14 @@ function receiveGuide(harness: Harness, channelId: string): string {
     "終わったら出力の deliveries が答えです。続けて出力の next_wait_process を同じように背景で起動すると、次の答えも受け取れます。",
   );
   return lines.join("\n");
+}
+
+/**
+ * 申請の返り。案内の文を structuredContent の guide にも載せる。Claude Code は成功した道具の返りを structuredContent だけで
+ * AIへ渡すので、文だけに書いた案内（答えの届き方、確かめ方、受信の起動）はAIへ届いていなかった（2026-10-11）。
+ */
+function announced(message: string, decision: Record<string, unknown>, channelId: string) {
+  return text(`${message}\n\n${JSON.stringify(decision)}`, { ...decision, steer_channel: { channel_id: channelId }, guide: message });
 }
 
 function text(value: string, structured?: Record<string, unknown>, isError = false) {
@@ -252,8 +263,8 @@ export async function runMcp() {
         };
         try {
           const decision = await api.call("POST", "/decisions", body);
-          const message = `申請しました: ${decision.decision_id}「${decision.title}」。答えはこの会話へ自動で届きます。待って呼び直さず、他の作業を続けるかターンを終えてください。`;
-          return text(`${message}${receiveGuide(harness, channelId)}\n\n${JSON.stringify(decision)}`, { ...decision, steer_channel: { channel_id: channelId } });
+          const message = `申請しました: ${decision.decision_id}「${decision.title}」。${ARRIVAL}待って呼び直さず、他の作業を続けるかターンを終えてください。`;
+          return announced(`${message}${receiveGuide(harness, channelId)}`, decision, channelId);
         } catch (error) {
           if (error instanceof ServerError && error.code === "confirm_required") {
             const decisions = (error.body.decisions ?? []) as Record<string, unknown>[];
@@ -277,14 +288,14 @@ export async function runMcp() {
         const channelId = await channelFor(harness, clientName, request.params._meta);
         const decision = await api.call("POST", `/decisions/${encodeURIComponent(String(decision_id))}/amend`, { ...rest, route: { channel_id: channelId, harness } });
         lastChannel = channelId;
-        return text(`直しました: ${decision.decision_id} version=${decision.version}${receiveGuide(harness, channelId)}\n\n${JSON.stringify(decision)}`, { ...decision, steer_channel: { channel_id: channelId } });
+        return announced(`直しました: ${decision.decision_id} version=${decision.version}${receiveGuide(harness, channelId)}`, decision, channelId);
       }
       if (name === "resume_decision") {
         const channelId = await channelFor(harness, clientName, request.params._meta);
         const decision = await api.call("POST", `/decisions/${encodeURIComponent(String(args.decision_id))}/resume`, { channel_id: channelId, harness });
         lastChannel = channelId;
-        const head = decision.answer_text ? String(decision.answer_text) : `再開しました: ${decision.decision_id}。答えはこの会話へ届きます。`;
-        return text(`${head}${decision.answer_text ? "" : receiveGuide(harness, channelId)}\n\n${JSON.stringify(decision)}`, { ...decision, steer_channel: { channel_id: channelId } });
+        const head = decision.answer_text ? String(decision.answer_text) : `再開しました: ${decision.decision_id}。${ARRIVAL}`;
+        return announced(`${head}${decision.answer_text ? "" : receiveGuide(harness, channelId)}`, decision, channelId);
       }
       if (name === "cancel_decision") {
         const decision = await api.call("POST", `/decisions/${encodeURIComponent(String(args.decision_id))}/cancel`, { reason: args.reason });
@@ -321,7 +332,7 @@ export async function runMcp() {
           route: { channel_id: channelId, harness },
         });
         const message = `接続テストの申請を送りました（${decision.decision_id}）。利用者にアプリかWeb版で答えるよう伝えてください。答えがこの会話へ届いたら、そこに書かれた確認コードで confirm_setup_test を呼んでください。`;
-        return text(`${message}${receiveGuide(harness, channelId)}\n\n${JSON.stringify(decision)}`, { ...decision, steer_channel: { channel_id: channelId } });
+        return announced(`${message}${receiveGuide(harness, channelId)}`, decision, channelId);
       }
       if (name === "confirm_setup_test") {
         const result = await api.call("POST", "/setup-test/confirm", { decision_id: args.decision_id, code: String(args.code) });

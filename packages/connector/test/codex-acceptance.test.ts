@@ -50,6 +50,12 @@ await runMcp();`;
   assert.equal((first.structuredContent as any)?.check_token, "test-confirm", JSON.stringify(first));
   const accepted = await client.callTool({ name: "request_decision", arguments: { ...args, check_token: "test-confirm" }, _meta: { threadId } });
   assert.equal((accepted.structuredContent as any)?.decision_id, "K-TEST");
+  // 案内は structuredContent にも載る（Claude Code は成功した返りを structuredContent だけでAIへ渡す）。答えの届き方と確かめ方を先に伝える。
+  const guide = String((accepted.structuredContent as any)?.guide);
+  assert.match(guide, /^申請しました: K-TEST/);
+  assert.match(guide, /「\[Approval Box\]」で始まる文として自動で届きます/);
+  assert.match(guide, /get_decision で確かめられます/);
+  assert.ok((accepted.content as any)[0].text.startsWith(guide));
   assert.notEqual(accepted.isError, true);
   const resumed = await client.callTool({ name: "resume_decision", arguments: { decision_id: "K-TEST" }, _meta: { threadId } });
   assert.notEqual(resumed.isError, true);

@@ -109,7 +109,10 @@ export async function runDaemon() {
     const existing = journal[item.decision_id];
     if (existing) return;
     // 添付は届ける前に端末へ保存し、場所を書き足す（AIがすぐ開けるように）。保存に失敗しても答えは届ける。
-    const text = item.attachments?.length ? item.text + await saveAll(api, item.decision_id, item.attachments) : item.text;
+    // 届いた文の出どころを、AIが自分で呼ぶ道具で確かめられるようにする。作業の途中に道具の結果と一緒に届いた答えを、
+    // AIが本物と扱わず採らなかった例がある（2026-10-11 K-GRELNG）。
+    const verify = `\n確かめる時は、Approval Boxの get_decision を decision_id="${item.decision_id}" で呼ぶと、同じ答えが返ります。`;
+    const text = (item.attachments?.length ? item.text + await saveAll(api, item.decision_id, item.attachments) : item.text) + verify;
     journal[item.decision_id] = { delivery_id: item.delivery_id, channel_id: item.route.channel_id, harness: item.route.harness, state: "sending", at: new Date().toISOString() };
     save();
     const entry = journal[item.decision_id]!;
