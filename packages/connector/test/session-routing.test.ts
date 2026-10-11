@@ -11,12 +11,12 @@ import { PROFILE } from "../src/profile.ts";
 import { writeJsonFile } from "../src/config.ts";
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-async function until(check: () => boolean) {
-  for (let i = 0; i < 150; i++) { if (check()) return; await delay(20); }
-  assert.fail("配送が3秒以内に進みませんでした");
+async function until(check: () => boolean, tries = 150) {
+  for (let i = 0; i < tries; i++) { if (check()) return; await delay(20); }
+  assert.fail(`配送が${tries / 50}秒以内に進みませんでした`);
 }
 
-for (const scenario of ["reroute", "fetched", "already-emitted", "claimed"] as const) {
+for (const scenario of ["reroute", "fetched", "already-emitted", "claimed", "journal-lost"] as const) {
   test(`実デーモン: 旧会話のqueuedを${scenario}後に二重配送しない`, async t => {
     const root = mkdtempSync(join(tmpdir(), "ab-routing-"));
     const profile = { ...PROFILE, config_root: () => root, state_root: () => join(root, "state") };
@@ -26,9 +26,10 @@ for (const scenario of ["reroute", "fetched", "already-emitted", "claimed"] as c
     if (scenario === "already-emitted") await steer.receiveFromChannel(profile, old.channel_id, { wait_ms: 0 });
     if (scenario === "claimed") writeJsonFile(join(steer.channelRoot(profile), old.channel_id, "claims", `${deliveryId}.json`), { state: "sending" });
     const journal = join(root, "state", "deliveries.json");
-    writeJsonFile(journal, { "K-TEST": { delivery_id: deliveryId, channel_id: old.channel_id, harness: "grok", state: "queued", at: new Date().toISOString() } });
+    // journal-lost: 本文は受信箱にあるのに控えが無く、サーバーは同じchannel・同じ配送IDのまま待っている。
+    if (scenario !== "journal-lost") writeJsonFile(journal, { "K-TEST": { delivery_id: deliveryId, channel_id: old.channel_id, harness: "grok", state: "queued", at: new Date().toISOString() } });
     const reports: unknown[] = []; const streams = new Set<ServerResponse>();
-    let items = scenario === "fetched" ? [] : [{ decision_id: "K-TEST", delivery_id: deliveryId, route: { channel_id: next.channel_id, harness: "grok" }, text: "answer" }];
+    let items = scenario === "fetched" ? [] : [{ decision_id: "K-TEST", delivery_id: deliveryId, route: { channel_id: (scenario === "journal-lost" ? old : next).channel_id, harness: "grok" }, text: "answer" }];
     const server = createServer((req, res) => {
       if (req.url?.endsWith("/stream")) {
         res.writeHead(200, { "content-type": "text/event-stream" }); streams.add(res);
@@ -52,9 +53,17 @@ for (const scenario of ["reroute", "fetched", "already-emitted", "claimed"] as c
     await until(() => {
       const entry = recorded()["K-TEST"];
       // 配送先はsendingの保存時点で替わる。受信箱へ保存を終えたqueuedまで待つ。
+      if (scenario === "journal-lost") return entry?.channel_id === old.channel_id && entry.state === "queued";
       return scenario === "reroute" ? entry?.channel_id === next.channel_id && entry.state === "queued" : !entry;
     });
-    if (scenario === "reroute") {
+    if (scenario === "journal-lost") {
+      // 送り直しは本文を足さず、失敗とも報告しない。会話へ出た後に delivered と報告する（次の見回りは2秒おき）。
+      const received = await steer.receiveFromChannel(profile, old.channel_id, { wait_ms: 0 });
+      assert.equal(received.outcome === "delivered" && received.deliveries.length, 1, stderr);
+      await until(() => reports.length > 0, 300);
+      assert.deepEqual(reports, [{ state: "delivered" }]);
+      assert.equal((await steer.receiveFromChannel(profile, old.channel_id, { wait_ms: 0 })).outcome, "timeout");
+    } else if (scenario === "reroute") {
       assert.equal(steer.channelDeliveryState(profile, old.channel_id, deliveryId), "withdrawn", stderr);
       const received = await steer.receiveFromChannel(profile, next.channel_id, { wait_ms: 0 });
       assert.equal(received.outcome, "delivered");

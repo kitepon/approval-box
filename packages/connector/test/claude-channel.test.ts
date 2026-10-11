@@ -42,23 +42,44 @@ test("同じ会話でも、Claudeのprocessが替わったら保存済みのchan
   assert.equal(claudeChannelIsCurrent(x.profile, channel.channel_id, { ...before, request_id: randomUUID() }), false);
 });
 
-test("古いprocessに結んだchannelだけでは待機が終わり、今のprocessのchannelを開くと古いchannelの答えも届く", async t => {
+test("Claudeが起動し直した後、古いprocessに結んだchannelの答えが、新しい申請を待たずに今のprocessへ届く", async t => {
   const x = setup(t);
-  // 起動し直す前のprocessに結んだchannel（そのprocessはもう居ない）。
+  // 起動し直す前のprocessに結んだchannel（そのprocessはもう居ない）へ、止まっていた間の答えが届いた。
   const stale = steer.openChannel(x.profile, x.request(999_999_999, "2026-10-10T04:20:11.627Z"));
   const deliveryId = randomUUID();
   await steer.sendToChannel(x.profile, stale.channel_id, deliveryId, "restart-answer");
   let out = "";
   const emit = (text: string) => { out += text; };
-  // 2026-10-10 に fox で起きた形。待機はすぐ終わり、答えは受信箱に残る。
-  assert.equal(await steer.runClaudeChannelWaiter(x.profile, { session_id: x.sessionId }, emit, { wait_ms: 300, poll_ms: 20 }), 0);
+  const wait = { wait_ms: 300, poll_ms: 20 };
+  // hookを起こしたprocessが居ない時は、本文を取らずに終わる（取ると、出す先が無くて失う）。
+  assert.equal(await steer.runClaudeChannelWaiter(x.profile, { session_id: x.sessionId }, emit, { ...wait, owner: { pid: 999_999_998, started_identity: "2026-10-10T04:20:11.627Z" } }), 0);
+  // hookを起こしたprocessを確かめられない時は、channelを開いたprocessで決める。0.4.1 までの動きで、2026-10-10 に fox で起きた形。
+  assert.equal(await steer.runClaudeChannelWaiter(x.profile, { session_id: x.sessionId }, emit, { ...wait, owner: null }), 0);
   assert.equal(out, "");
   assert.equal(steer.channelDeliveryState(x.profile, stale.channel_id, deliveryId), "queued");
-  // 修理後: 次の依頼で、今のprocessに結んだchannelを開く（古いchannelは閉じない）。
-  const now = x.request(process.pid, x.alive);
-  assert.equal(claudeChannelIsCurrent(x.profile, stale.channel_id, now), false);
-  steer.openChannel(x.profile, now);
-  assert.equal(await steer.runClaudeChannelWaiter(x.profile, { session_id: x.sessionId }, emit, { wait_ms: 2000, poll_ms: 20 }), 2);
+  // 再開した会話のhook（今のprocess）は、同じ会話の古いchannelの答えを引き取る。新しい申請は要らない。
+  const owner = { pid: process.pid, started_identity: x.alive };
+  assert.equal(await steer.runClaudeChannelWaiter(x.profile, { session_id: x.sessionId }, emit, { ...wait, owner }), 2);
   assert.equal(out, "restart-answer");
   assert.equal(steer.channelDeliveryState(x.profile, stale.channel_id, deliveryId), "emitted");
+});
+
+test("起動し直した後の新しい申請は今のprocessのchannelを開き、古いchannelの答えと届いた順に出る", async t => {
+  const x = setup(t);
+  const stale = steer.openChannel(x.profile, x.request(999_999_999, "2026-10-10T04:20:11.627Z"));
+  const now = x.request(process.pid, x.alive);
+  // コネクタは、古いprocessに結んだchannelを使い回さず、開き直す。古いchannelは閉じない。
+  assert.equal(claudeChannelIsCurrent(x.profile, stale.channel_id, now), false);
+  const current = steer.openChannel(x.profile, now);
+  assert.equal(steer.channelClosed(x.profile, stale.channel_id), false);
+  const first = randomUUID(), second = randomUUID();
+  await steer.sendToChannel(x.profile, stale.channel_id, first, "before-restart");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  await steer.sendToChannel(x.profile, current.channel_id, second, "after-restart");
+  let out = "";
+  const owner = { pid: process.pid, started_identity: x.alive };
+  assert.equal(await steer.runClaudeChannelWaiter(x.profile, { session_id: x.sessionId }, text => { out += text; }, { wait_ms: 2000, poll_ms: 20, owner }), 2);
+  assert.equal(out, "before-restart\n\nafter-restart");
+  assert.equal(steer.channelDeliveryState(x.profile, stale.channel_id, first), "emitted");
+  assert.equal(steer.channelDeliveryState(x.profile, current.channel_id, second), "emitted");
 });

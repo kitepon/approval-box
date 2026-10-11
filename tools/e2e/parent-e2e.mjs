@@ -55,17 +55,26 @@ try { const lock = JSON.parse(readFileSync(join(kbHome, "state", "daemon.json"),
 // ---- 試験用project（AIへの登録はここだけ）----
 const project = join(work, "project");
 mkdirSync(project);
-const mcp = { command: node, args: [join(dist, "cli.mjs"), "mcp"] };
+// hookはAIの環境で動き、Aitermが使い回すtmuxの環境には APPROVAL_BOX_HOME が無いことがある。nodeを包んで必ず渡す。
+const kbNode = process.env.APPROVAL_BOX_HOME ? join(work, "node-kb") : node;
+if (process.env.APPROVAL_BOX_HOME) writeFileSync(kbNode, `#!/bin/sh\nAPPROVAL_BOX_HOME=${JSON.stringify(process.env.APPROVAL_BOX_HOME)} exec ${JSON.stringify(node)} "$@"\n`, { mode: 0o755 });
+const mcp = { command: kbNode, args: [join(dist, "cli.mjs"), "mcp"] };
+// APPROVAL_BOX_HOME を渡して試験を走らせると、共有の ~/.approval-box（同じHOMEの他のAIが使う）に触れずに済む。
+// Codex・GrokはMCPへ環境変数を渡さないので、設定に明記する。
+const kbEnv = process.env.APPROVAL_BOX_HOME ? { APPROVAL_BOX_HOME: process.env.APPROVAL_BOX_HOME } : {};
+// 試験の状態の置き場（kbHome）を読むprofile。channelの記録を確かめる時に使う。
+const PROFILE_AT = { ...PROFILE, config_root: () => kbHome, state_root: () => join(kbHome, "state") };
+const tomlEnv = process.env.APPROVAL_BOX_HOME ? `env = { APPROVAL_BOX_HOME = ${JSON.stringify(process.env.APPROVAL_BOX_HOME)} }\n` : "";
 let codexHome = null;
 if (harness === "claude-code") {
-  writeFileSync(join(project, ".mcp.json"), JSON.stringify({ mcpServers: { "approval-box": { type: "stdio", ...mcp } } }, null, 1));
+  writeFileSync(join(project, ".mcp.json"), JSON.stringify({ mcpServers: { "approval-box": { type: "stdio", ...mcp, env: kbEnv } } }, null, 1));
   mkdirSync(join(project, ".claude"));
   writeFileSync(join(project, ".claude", "settings.local.json"), JSON.stringify({ enableAllProjectMcpServers: true,
     permissions: { allow: ["mcp__approval-box", "Bash(node:*)", "Bash(sleep:*)"] },
-    hooks: steer.claudeParentHookEntries(PROFILE, { command: node, script: join(dist, "approval-box-claude-hook.mjs") }) }, null, 1));
+    hooks: steer.claudeParentHookEntries(PROFILE, { command: kbNode, script: join(dist, "approval-box-claude-hook.mjs") }) }, null, 1));
 } else if (harness === "codex-cli") {
   mkdirSync(join(project, ".codex"));
-  writeFileSync(join(project, ".codex", "config.toml"), `[mcp_servers.approval-box]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\nenv_vars = ["CODEX_HOME"]\n`);
+  writeFileSync(join(project, ".codex", "config.toml"), `[mcp_servers.approval-box]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\nenv_vars = ["CODEX_HOME"]\n${tomlEnv}`);
   // 作業中の割り込み（Steer）のhookは CODEX_HOME に入る。共有の設定に触れないよう、使い捨てのCODEX_HOMEを作り、認証だけ複製する。
   const realCodexHome = process.env.CODEX_HOME ?? join(homedir(), ".codex");
   codexHome = join(work, "codex-home");
@@ -87,11 +96,11 @@ if (harness === "claude-code") {
 } else if (harness === "cursor-cli") {
   const cursorHome = join(project, ".cursor");
   mkdirSync(cursorHome);
-  writeFileSync(join(cursorHome, "mcp.json"), JSON.stringify({ mcpServers: { "approval-box": { ...mcp, env: { CURSOR_HOME: cursorHome } } } }, null, 1));
-  steer.mergeCursorParentHooks(PROFILE, join(cursorHome, "hooks.json"), { command: node, script: join(dist, "approval-box-cursor-hook.mjs") });
+  writeFileSync(join(cursorHome, "mcp.json"), JSON.stringify({ mcpServers: { "approval-box": { ...mcp, env: { CURSOR_HOME: cursorHome, ...kbEnv } } } }, null, 1));
+  steer.mergeCursorParentHooks(PROFILE, join(cursorHome, "hooks.json"), { command: kbNode, script: join(dist, "approval-box-cursor-hook.mjs") });
 } else {
   mkdirSync(join(project, ".grok"));
-  writeFileSync(join(project, ".grok", "config.toml"), `[mcp_servers.approval-box]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\nenv_vars = ["CODEX_HOME"]\n`);
+  writeFileSync(join(project, ".grok", "config.toml"), `[mcp_servers.approval-box]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\nenv_vars = ["CODEX_HOME"]\n${tomlEnv}`);
 }
 log("server", serverUrl, "project", project);
 
@@ -109,7 +118,8 @@ const deliveryOf = (id) => decisions.toApi(decisions.forUser(userId, id)).delive
 
 // ---- Aitermで本物のAIを起動 ----
 const aitermCommand = JSON.parse(process.env.AITERM_CMD ?? '["aiterm-mcp"]');
-const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AITERM_"))), ...(codexHome ? { CODEX_HOME: codexHome } : {}) };
+// 親のAitermとClaude Codeの印を外す。残すと、試験の会話が親の子として扱われる（配送の相関が混ざる、会話の記録が残らない）。
+const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AITERM_") && k !== "CLAUDECODE" && !k.startsWith("CLAUDE_CODE_") && k !== "CLAUDE_PID" && k !== "CLAUDE_EFFORT")), ...(codexHome ? { CODEX_HOME: codexHome } : {}) };
 const client = new Client({ name: "approval-box-e2e", version: "1" });
 await client.connect(new StdioClientTransport({ command: aitermCommand[0], args: aitermCommand.slice(1), env, stderr: "ignore" }));
 const call = (name, args) => client.callTool({ name, arguments: args }, undefined, { timeout: 600_000 });
@@ -244,6 +254,75 @@ try {
   await sleep(8000);
   for (const d of [b1, b2]) if (d) result.deliveries[d.id] = deliveryOf(d.id);
   log("burst", result.checks.burst);
+
+  // 5. Claude Codeのprocessを落とし、同じ会話を別のprocessで再開する（アプリの起動し直しと同じ形。2026-10-10 fox）。
+  //    B: 落ちている間に答える。再開した会話が新しい申請を出さないまま、その答えを受け取る。
+  //    A: 再開した会話から新しく申請し、答えを受け取る。
+  if (harness === "claude-code" && process.platform !== "win32" && process.env.E2E_RESTART !== "0") {
+    await send(sid, `Call approval-box request_decision with title "E2E restart", ${options}, session_label "e2e". Then reply with exactly REQUESTED3.`);
+    const pendingAcross = await waitDecision("E2E restart");
+    await waitScreen(sid, /REQUESTED3/u, 120_000);
+    result.checks.restart_requested = !!pendingAcross;
+    if (!pendingAcross) throw new Error("再起動の前の申請が来ません");
+    await sleep(5000);
+    // この会話の session_id は、Claude Codeの記録のファイル名。
+    const slugRoot = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects");
+    const slug = readdirSync(slugRoot).find((name) => name.endsWith(project.replace(/[^A-Za-z0-9]/g, "-")));
+    const sessionId = slug ? readdirSync(join(slugRoot, slug)).filter((name) => name.endsWith(".jsonl")).map((name) => name.slice(0, -6))[0] : null;
+    // Claude Codeの中からこの試験を起こすと、試験の会話が子の会話になり、記録が残らない（再開できない）。CLAUDE_CODE_* を外して起こす。
+    if (!sessionId) throw new Error("会話の記録が見つかりません（Claude Codeの中から起こした時は、CLAUDECODE と CLAUDE_CODE_* を外して起こす）");
+    const channelsOf = () => {
+      const root = join(steer.channelRoot(PROFILE_AT), "claude-sessions", sessionId);
+      return (existsSync(root) ? readdirSync(root) : []).filter((name) => /^[0-9a-f-]{36}$/u.test(name)).map((name) => {
+        const c = JSON.parse(readFileSync(join(steer.channelRoot(PROFILE_AT), name, "channel.json"), "utf8"));
+        return { channel: name.slice(0, 8), parent_pid: c.claude.parent_pid, parent_started_identity: c.claude.parent_started_identity, created_at: c.created_at };
+      });
+    };
+    result.restart = { session_id: sessionId, channels_before: channelsOf() };
+    // 試験用projectで動いているClaude Codeを強制終了する（SessionEndは走らず、channelは閉じない）。
+    const claudePids = () => readdirSync("/proc").filter((name) => /^\d+$/u.test(name)).filter((pid) => {
+      try { return readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0")[0].endsWith("claude") && execFileSync("readlink", [`/proc/${pid}/cwd`], { encoding: "utf8" }).trim() === project; } catch { return false; }
+    }).map(Number);
+    const before = claudePids();
+    for (const pid of before) { try { process.kill(pid, "SIGKILL"); } catch { /* 既に居ない */ } }
+    await sleep(3000);
+    result.restart.killed = before;
+    result.checks.restart_killed = before.length > 0 && claudePids().length === 0;
+    // 落ちている間に答える。答えは、落ちたprocessに結んだchannelの受信箱へ入る。
+    answer(pendingAcross);
+    await sleep(8000);
+    result.restart.delivery_while_down = deliveryOf(pendingAcross.id);
+    // 別のprocessで同じ会話を再開する（Aitermを通さず、tmuxで素のClaude Codeを起こす）。新しい文は送らない。
+    const tmux = `kb-e2e-resume-${process.pid}`;
+    const pane = () => execFileSync("tmux", ["capture-pane", "-p", "-J", "-S", "-400", "-t", tmux], { encoding: "utf8" });
+    const waitPane = async (pattern, ms) => { for (const deadline = Date.now() + ms; Date.now() < deadline; await sleep(2000)) if (pattern.test(pane())) return true; return false; };
+    execFileSync("tmux", ["new-session", "-d", "-s", tmux, "-x", "200", "-y", "50", "-c", project, "claude", "--dangerously-skip-permissions", "--resume", sessionId]);
+    try {
+      result.checks.resumed_answer_without_new_request = await waitPane(new RegExp(`GOT ${pendingAcross.id}`, "u"), 180_000);
+      result.restart.resumed_pids = claudePids();
+      result.restart.channels_after_resume = channelsOf();
+      // 会話へ出た後、デーモンは次の見回り（2秒おき）で delivered を報告する。それを待ってから読む。
+      await waitFor(() => deliveryOf(pendingAcross.id) === "delivered", 15_000, "再開後の配送の報告");
+      result.deliveries[pendingAcross.id] = deliveryOf(pendingAcross.id);
+      log("restart B", result.checks.resumed_answer_without_new_request);
+      // A: 再開した会話から新しい申請。コネクタは今のprocessに結んだchannelを開く。
+      execFileSync("tmux", ["send-keys", "-t", tmux, "-l", `Call approval-box request_decision with title "E2E after restart", ${options}, session_label "e2e". Then reply with exactly REQUESTED4.`]);
+      await sleep(1000);
+      execFileSync("tmux", ["send-keys", "-t", tmux, "Enter"]);
+      const after = await waitDecision("E2E after restart");
+      await waitPane(/REQUESTED4[\s\S]*REQUESTED4/u, 120_000); // 1つ目は送った依頼文
+      await sleep(8000);
+      if (after) answer(after);
+      result.checks.after_restart = !!after && await waitPane(new RegExp(`GOT ${after.id}`, "u"), 180_000);
+      if (after) await waitFor(() => deliveryOf(after.id) === "delivered", 15_000, "再開後の申請の配送の報告");
+      if (after) result.deliveries[after.id] = deliveryOf(after.id);
+      result.restart.channels_after_request = channelsOf();
+      result.restart.tail = pane().split("\n").filter(Boolean).slice(-18).join("\n");
+      log("restart A", result.checks.after_restart);
+    } finally {
+      try { execFileSync("tmux", ["kill-session", "-t", tmux]); } catch { /* 既に無い */ }
+    }
+  }
 } catch (e) {
   result.error = e instanceof Error ? e.message.slice(0, 600) : String(e);
 } finally {

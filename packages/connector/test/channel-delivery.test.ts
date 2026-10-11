@@ -46,3 +46,27 @@ test("Codex以外のchannelは既存配送を維持する", async t => {
   const received = await steer.receiveFromChannel(PROFILE, channel.channel_id, { wait_ms: 0 });
   assert.equal(received.outcome, "delivered");
 });
+
+test("同じchannelへ同じ配送IDで送り直しても本文は1通で、前の本文の行方を返す", async t => {
+  const root = mkdtempSync(join(tmpdir(), "ab-duplicate-send-"));
+  const saved = process.env.APPROVAL_BOX_HOME; process.env.APPROVAL_BOX_HOME = root;
+  t.after(() => { if (saved === undefined) delete process.env.APPROVAL_BOX_HOME; else process.env.APPROVAL_BOX_HOME = saved; rmSync(root, { recursive: true, force: true }); });
+  const channel = steer.openChannel(PROFILE, null), id = randomUUID();
+  assert.equal((await sendChannelAnswer(channel.channel_id, id, "answer")).state, "queued");
+  // 前の本文がまだ受信箱にある。失敗として返さず、待ちとして扱う。
+  assert.equal((await sendChannelAnswer(channel.channel_id, id, "answer")).state, "queued");
+  assert.equal(await channelAnswerState(channel.channel_id, id), "queued");
+  const received = await steer.receiveFromChannel(PROFILE, channel.channel_id, { wait_ms: 0 });
+  assert.deepEqual(received.outcome === "delivered" && received.deliveries.map(d => d.delivery_id), [id]);
+  // 会話へ出た後の送り直しも足さない。デーモンは emitted を見て delivered と報告する。
+  assert.equal((await sendChannelAnswer(channel.channel_id, id, "answer")).state, "queued");
+  assert.equal(await channelAnswerState(channel.channel_id, id), "emitted");
+  assert.equal((await steer.receiveFromChannel(PROFILE, channel.channel_id, { wait_ms: 0 })).outcome, "timeout");
+
+  // 取り下げた配送IDを同じchannelへ送り直す形は、今までどおり断る。
+  const withdrawn = randomUUID();
+  await sendChannelAnswer(channel.channel_id, withdrawn, "moved");
+  assert.equal(steer.withdrawFromChannel(PROFILE, channel.channel_id, withdrawn), true);
+  await assert.rejects(sendChannelAnswer(channel.channel_id, withdrawn, "moved"), /CHANNEL_DELIVERY_DUPLICATE/);
+  assert.equal((await steer.receiveFromChannel(PROFILE, channel.channel_id, { wait_ms: 0 })).outcome, "timeout");
+});

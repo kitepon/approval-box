@@ -113,7 +113,7 @@ async function setup() {
   out("次のAIにApproval Boxを登録します。書き換えるファイル:");
   for (const target of targets) out(`  ${LABEL[target]}: ${filesOf(target).join(", ")}`);
   out("");
-  if (targets.includes("claude")) out("・Claude Code の Stop hook は、すべての会話でターンが終わるたびに node を1回起動します（Approval Boxの申請が無ければすぐ終わります）。");
+  if (targets.includes("claude")) out("・Claude Code の Stop hook と SessionStart hook は、すべての会話で、ターンが終わるたび・会話が始まるたびに node を1回起動します（Approval Boxの申請が無ければすぐ終わります）。");
   if (targets.includes("codex")) out("・Codex の答えは Aiterm の Steer で元の会話へ返します。旧版のApproval Box専用配送hookは撤去します。");
   if (targets.includes("cursor") || targets.includes("grok")) out("・Cursor（止まっている時）と Grok は、申請の時にAIが背景で受信を起動します。");
   out(`・書き換える前のファイルは「${".approval-box-backup"}」を付けて控えます。元に戻すには npx approval-box uninstall。\n`);
