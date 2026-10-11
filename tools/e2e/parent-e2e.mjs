@@ -328,7 +328,10 @@ try {
       await call("pty_send", { session_id: rsid, text: win ? `Set-Location -LiteralPath '${project.replace(/'/g, "''")}'` : `cd '${project.replace(/'/g, "'\\''")}'` });
       await sleep(1000);
       // 試験用projectに登録する形では、projectのMCPとhookの確認で止まらないよう、確認を飛ばして起こす（導入済みの登録だけの形では要らない）。
-      await call("pty_send", { session_id: rsid, text: `${win ? "claude.cmd" : "claude"}${installed ? "" : " --dangerously-skip-permissions"} --resume ${sessionId}` });
+      // 素の端末のPATHに claude の場所が無い事がある（macOSのtmuxなど）。この試験のPATHで見つけた場所を使う。
+      let claudeBin = win ? "claude.cmd" : "claude";
+      if (!win) { try { claudeBin = `'${execFileSync("/bin/sh", ["-c", "command -v claude"], { encoding: "utf8" }).trim().replace(/'/g, "'\\''")}'`; } catch { /* PATHに任せる */ } }
+      await call("pty_send", { session_id: rsid, text: `${claudeBin}${installed ? "" : " --dangerously-skip-permissions"} --resume ${sessionId}` });
       result.checks.resumed_answer_without_new_request = await waitScreen(rsid, new RegExp(`GOT ${pendingAcross.id}`, "u"), 180_000);
       result.restart.resumed = steer.readRuntimeProcesses().filter((row) => row.command.includes(sessionId))
         .map((row) => ({ pid: row.pid, started_identity: row.started_identity, command: row.command.slice(0, 120) }));
