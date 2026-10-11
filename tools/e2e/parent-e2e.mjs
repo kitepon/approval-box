@@ -22,6 +22,7 @@ import { Decisions } from "../../packages/server/src/decisions.ts";
 import { EventHub } from "../../packages/server/src/events.ts";
 import { createApp } from "../../packages/server/src/http.ts";
 import { PROFILE } from "../../packages/connector/src/profile.ts";
+import { claudeBinaryForShell } from "./claude-binary.mjs";
 
 const harness = process.argv[2];
 if (!["claude-code", "codex-cli", "cursor-cli", "grok-cli"].includes(harness)) { console.error("usage: parent-e2e.mjs <claude-code|codex-cli|cursor-cli|grok-cli>"); process.exit(2); }
@@ -282,6 +283,9 @@ try {
   //    B: 落ちている間に答える。再開した会話が新しい申請を出さないまま、その答えを受け取る。
   //    A: 再開した会話から新しく申請し、答えを受け取る。
   if (harness === "claude-code" && process.env.E2E_RESTART !== "0") {
+    // 再開に使う claude の場所。素の端末のPATHに無い事がある（macOSのtmuxなど）ので、この試験のPATHで決める。
+    // 見つからなければ、何も落とさないうちにここで止まる。
+    const claudeBin = claudeBinaryForShell();
     await send(sid, `Call approval-box request_decision with title "E2E restart", ${options}, session_label "e2e". Then reply with exactly REQUESTED3.`);
     const pendingAcross = await waitDecision("E2E restart");
     await waitScreen(sid, /REQUESTED3/u, 120_000);
@@ -328,9 +332,6 @@ try {
       await call("pty_send", { session_id: rsid, text: win ? `Set-Location -LiteralPath '${project.replace(/'/g, "''")}'` : `cd '${project.replace(/'/g, "'\\''")}'` });
       await sleep(1000);
       // 試験用projectに登録する形では、projectのMCPとhookの確認で止まらないよう、確認を飛ばして起こす（導入済みの登録だけの形では要らない）。
-      // 素の端末のPATHに claude の場所が無い事がある（macOSのtmuxなど）。この試験のPATHで見つけた場所を使う。
-      let claudeBin = win ? "claude.cmd" : "claude";
-      if (!win) { try { claudeBin = `'${execFileSync("/bin/sh", ["-c", "command -v claude"], { encoding: "utf8" }).trim().replace(/'/g, "'\\''")}'`; } catch { /* PATHに任せる */ } }
       await call("pty_send", { session_id: rsid, text: `${claudeBin}${installed ? "" : " --dangerously-skip-permissions"} --resume ${sessionId}` });
       result.checks.resumed_answer_without_new_request = await waitScreen(rsid, new RegExp(`GOT ${pendingAcross.id}`, "u"), 180_000);
       result.restart.resumed = steer.readRuntimeProcesses().filter((row) => row.command.includes(sessionId))
