@@ -66,3 +66,26 @@ From 0.1.24:
 A waiter that is already running keeps the code it started with. It ends when it has emitted an answer, when its conversation ends, or after one day. Re-running `setup` replaces the daemon and points the hooks at the new runtime; waiters started after that use the new code.
 
 Scope: the waiter and the hook-owner check are Claude Code on macOS, Linux and Windows. The daemon's claim check applies to channel deliveries (Claude Code, Cursor, Grok). Codex is delivered through Aiterm and does not run these hooks. The load was measured on Windows only.
+
+## Node updated while a conversation stays open (connector 0.1.25)
+
+Connector 0.1.25 bundles `aiterm-steer-delivery` 0.4.6 and changes how the MCP starts the delivery daemon.
+
+A conversation keeps its MCP process for as long as it stays open, sometimes for days. Up to 0.1.24 that process started child processes with the Node path it was started from (`process.execPath`, the resolved real path). Homebrew installs Node under a versioned directory and removes the previous version on update, so after an update the path of an already running process no longer exists. On 2026-10-12 Node on the Mac went from 26.10.0_1 to 26.11.1 while conversations were open.
+
+What failed, for an MCP process that was started before the update:
+
+- Starting the delivery daemon (`ensureDaemon`, on each request and at MCP start). The daemon exits after 30 minutes without pending requests, so the MCP starts it again and again. Spawning a path that does not exist reports the error later, on the child process object, and with no listener Node ends the calling process. The MCP of that conversation died instead of only failing to start the daemon.
+- Inside the shared module: the watcher that wakes a stopped Codex conversation, the Node used to run the Aiterm command, and the launch target of the waiters. These failed without a message.
+
+From 0.1.25:
+
+- The daemon is started with `liveNodeExecutable()` of the shared module: the Homebrew `opt` path when the running Node is a Homebrew versioned path, the running path when it still exists, otherwise `node` from `PATH`.
+- A failed daemon start is written to `daemon.log` and to stderr with the name `DAEMON_LAUNCH_FAILED`, and the calling process keeps running.
+- The three places inside the shared module use the same lookup (0.4.6).
+
+Not covered: an MCP process that was started before 0.1.25 was installed keeps its old code. It is replaced when its conversation is opened again. Until then, an answer for that conversation is delivered once any newer process (a new conversation, or `setup`) has started the daemon.
+
+The paths written to settings (`setup`) already used the Homebrew `opt` path (`setupNodeExecutable`) and are unchanged. On machines without Homebrew Node the values are the same as before.
+
+Scope: the connector on macOS, Linux and Windows. The value changes only on machines where Node is installed by Homebrew. No server, app or Web API change.

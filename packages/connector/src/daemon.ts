@@ -51,6 +51,14 @@ export function shouldReplaceDaemon(runningEntry: string | undefined, myEntry: s
   return true;
 }
 
+/**
+ * 配送デーモンを起こすnode。長く開いた会話のMCPは、起きた後にnodeが更新されると、自分が起きた時の場所（process.execPath）が消えている
+ * （Homebrewは版ごとの場所へ入れて、更新で前の版を消す）。今ある場所を引く。
+ */
+export function daemonNode(executable: string = process.execPath, exists: (file: string) => boolean = existsSync): string {
+  return steer.liveNodeExecutable(executable, exists);
+}
+
 /** 配送デーモンが動いていなければ起動する。利用者ごとに1つ。 */
 export function ensureDaemon() {
   try {
@@ -59,7 +67,7 @@ export function ensureDaemon() {
     if (status.running && !shouldReplaceDaemon(status.entry, runtimeEntry("cli"))) return;
     if (status.running && status.pid) { try { process.kill(status.pid); } catch { /* 既に終わっている */ } }
     mkdirSync(stateRoot(), { recursive: true, mode: 0o700 });
-    launchDaemon(process.execPath, runtimeEntry("cli"), stateRoot());
+    launchDaemon(daemonNode(), runtimeEntry("cli"), stateRoot());
   } catch (error) {
     process.stderr.write(`approval-box: 配送デーモンを起動できません: ${(error as Error).message}\n`);
   }

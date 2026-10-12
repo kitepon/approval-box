@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, openSync } from "node:fs";
+import { appendFileSync, closeSync, openSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { home } from "./profile.ts";
 
@@ -22,7 +22,17 @@ export function launchDaemon(executable: string, entry: string, cwd: string) {
     if (result.error || result.status !== 0 || !/^\s*\d+\s*$/.test(result.stdout ?? "")) throw new Error(`Windowsの常駐起動に失敗しました（${result.error?.message ?? `exit ${result.status}`}）`);
     return;
   }
-  const log = openSync(join(cwd, "daemon.log"), "a", 0o600);
-  try { spawn(executable, [entry, "daemon"], { cwd, detached: true, stdio: ["ignore", "ignore", log], windowsHide: true }).unref(); }
+  const file = join(cwd, "daemon.log");
+  const log = openSync(file, "a", 0o600);
+  try {
+    const child = spawn(executable, [entry, "daemon"], { cwd, detached: true, stdio: ["ignore", "ignore", log], windowsHide: true });
+    // 起動先が無い時、spawnは後から error を出す。受け手が無いと、呼び出した側のprocess（会話のMCP）ごと落ちる。名前を付けて記録する。
+    child.on("error", error => {
+      const line = `approval-box: 配送デーモンを起動できません（DAEMON_LAUNCH_FAILED）: ${executable}: ${error.message}\n`;
+      try { appendFileSync(file, `${new Date().toISOString()} ${line}`, { mode: 0o600 }); } catch { /* 記録先が無くても、下のstderrへは出す */ }
+      process.stderr.write(line);
+    });
+    child.unref();
+  }
   finally { closeSync(log); }
 }
