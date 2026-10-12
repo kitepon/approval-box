@@ -50,3 +50,19 @@ From 0.1.23:
 - The daemon appends one line to every delivered answer: call `get_decision` with that `decision_id` to get the same answer. A tool the AI calls by itself is a source it does not have to doubt.
 
 Scope: all four harnesses on macOS, Linux and Windows (the text is added in the shared MCP and daemon code). Whether an AI accepts an injected answer is still the AI's judgement; this change gives it the information and a way to verify.
+
+## Process checks that slowed the machine down (connector 0.1.24)
+
+Connector 0.1.24 bundles `aiterm-steer-delivery` 0.4.5. No connector code changed.
+
+Up to 0.1.23 the Claude Code waiter (`approval-box-claude-hook.mjs`, started by a hook, waits up to one day per conversation) checked every 5 seconds whether its Claude Code process was still alive by reading the list of all processes of the machine. On Windows each read started PowerShell 7 and queried WMI. On 2026-10-12 a Windows PC with seven such waiters was visibly slow (reported by the owner of `aiterm-steer-delivery`). Every run of the receive hook, and the daemon's check of who claimed a delivery, read the full list as well.
+
+From 0.1.24:
+
+- The 5-second check asks the OS whether the pid exists and starts no process. The start time is compared at the first check and then once per 60 seconds, for that one process.
+- Hook runs and the daemon read only the processes they need (the one process, or the hook's ancestors). On Windows this no longer uses WMI, except for a process that cannot be read without it.
+- When Claude Code exits and the OS hands the same pid to another process right away, the waiter ends up to 60 seconds later (5 seconds before).
+
+A waiter that is already running keeps the code it started with. It ends when it has emitted an answer, when its conversation ends, or after one day. Re-running `setup` replaces the daemon and points the hooks at the new runtime; waiters started after that use the new code.
+
+Scope: the waiter and the hook-owner check are Claude Code on macOS, Linux and Windows. The daemon's claim check applies to channel deliveries (Claude Code, Cursor, Grok). Codex is delivered through Aiterm and does not run these hooks. The load was measured on Windows only.
