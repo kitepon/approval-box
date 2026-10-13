@@ -19,8 +19,11 @@ COPY --from=build /src/packages/server/package.json ./server/package.json
 COPY --from=build /src/packages/server/dist ./server/dist
 COPY --from=build /src/packages/server/certs ./server/certs
 COPY --from=build /src/packages/web/dist ./web
+# 入口。SECRETS_DIR を指定した時だけ、環境変数で受け取った鍵を tmpfs のファイルへ移してから起こす。
+COPY --chmod=755 tools/deploy/start-with-secrets.sh /app/start-with-secrets.sh
 RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME /data
 EXPOSE 8787
+ENTRYPOINT ["/app/start-with-secrets.sh"]
 CMD ["node", "server/dist/main.js"]

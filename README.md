@@ -50,7 +50,7 @@ npx -y approval-box@latest setup --server https://<あなたのURL>
 
 `https://<あなたのURL>/mcp` は Streamable HTTP のMCPです。アプリ・Web版で発行した接続トークンを `Authorization: Bearer <token>` で付けて登録します。答えは `get_decision` で取ります。利用者が答えに付けた添付（画像・書類）は `get_attachment` で取ります。
 
-答えをAIへ通話で届けたい接続（GrokBotなど）は、[call-bridge](https://github.com/kitepon/grokbot-bridge) を使えます。`CALL_BRIDGE_CONNECTIONS`（接続のid、カンマ区切り）と `CALL_BRIDGE_HEADERS_FILE`（`Authorization: Bearer …` の行のファイル）を設定すると、その接続の `request_decision` は申請者のID（`requester_id`）を受け取り、答えが出たらサーバーがそのIDへ通話で送ります。発信元は `CALL_BRIDGE_LOCAL_SYSTEM`・`CALL_BRIDGE_LOCAL_ID`（既定 `local`・`approval-box`、トークンに結び付いた値に合わせる）、宛先の所属は `CALL_BRIDGE_MEMBER_SYSTEM`（既定 `grokbot`）、接続先は `CALL_BRIDGE_URL`（既定 `https://call.kitepon.dev/mcp`）です。
+答えをAIへ通話で届けたい接続（GrokBotなど）は、[call-bridge](https://github.com/kitepon/grokbot-bridge) を使えます。`CALL_BRIDGE_CONNECTIONS`（接続のid、カンマ区切り）と `CALL_BRIDGE_HEADERS_FILE`（`Authorization: Bearer …` の行のファイル）を設定すると、その接続の `request_decision` は申請者のID（`requester_id`）を受け取り、答えが出たらサーバーがそのIDへ通話で送ります。発信元は `CALL_BRIDGE_LOCAL_SYSTEM`・`CALL_BRIDGE_LOCAL_ID`（既定 `local`・`approval-box`、トークンに結び付いた値に合わせる）、宛先の所属は `CALL_BRIDGE_MEMBER_SYSTEM`（既定 `grokbot`）、接続先は `CALL_BRIDGE_URL`（既定 `https://call.kitepon.dev/mcp`）です。行をファイルに置かず環境変数で渡す時は、`CALL_BRIDGE_HEADERS`（同じ行の中身）と `SECRETS_DIR`（コンテナの中の tmpfs の置き場）を設定します。入口が 600 のファイルへ移してから起こし、サーバーの環境には値を残しません。
 
 ## 開発
 
