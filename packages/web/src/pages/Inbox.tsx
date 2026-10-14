@@ -1,15 +1,15 @@
 import { linkProps } from "../router";
 import { loadOpen, useResource } from "../store";
-import { ago, clientLabel, deadlineText, URGENCY_LABEL } from "../format";
+import { ago, deadlineText, URGENCY_LABEL } from "../format";
 import type { Decision } from "../types";
+import { Source } from "./Source";
 
 export function DecisionCard({ d }: { d: Decision }) {
   const amended = d.history.at(-1)?.kind === "amended";
   return (
     <a class={`card urgency-${d.urgency}`} {...linkProps(`/d/${d.id}`)}>
       <div class="card-meta">
-        <span class="chip">{clientLabel(d.source.client)}</span>
-        <span class="session">{d.source.session_label}</span>
+        <Source source={d.source} />
         <span class="time">{ago(d.created_at)}</span>
       </div>
       <div class="card-title">{d.title}</div>

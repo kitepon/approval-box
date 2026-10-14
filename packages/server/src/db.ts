@@ -108,6 +108,7 @@ create table if not exists decisions (
   deadline text,
   client text not null,
   session_label text not null,
+  requester text,
   via text not null,
   test integer not null default 0,
   status text not null,
@@ -276,6 +277,11 @@ const MIGRATIONS: ((db: Db) => void)[] = [
   (db) => {
     const columns = all<{ name: string }>(db, "select name from pragma_table_info('attachments')").map(c => c.name);
     if (!columns.includes("purpose")) db.exec("alter table attachments add column purpose text not null default 'answer'");
+  },
+  // 6: 申請者の名前（AIの自己申告）。古いコネクタは送らないので、空を許す。
+  (db) => {
+    const columns = all<{ name: string }>(db, "select name from pragma_table_info('decisions')").map((c) => c.name);
+    if (!columns.includes("requester")) db.exec("alter table decisions add column requester text");
   },
 ];
 

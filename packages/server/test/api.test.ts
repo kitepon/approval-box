@@ -349,3 +349,48 @@ test("再開: 対象の申請だけ移管し、回答済みはその場で取得
   await ctx.call("POST", `/connector/v1/decisions/${second.json.decision_id}/cancel`, { token, body: { reason: "不要" } });
   assert.equal((await ctx.call("POST", `/connector/v1/decisions/${second.json.decision_id}/resume`, { token, body: route })).status, 409);
 });
+
+test("申請者と作業名: アプリには「誰から / 何の仕事」の一行と、分けた項目の両方を返す", async () => {
+  const ctx = setup();
+  const token = await paired(ctx);
+  const view = async (id: string) => (await ctx.call("GET", `/v1/decisions/${id}`, { token: ctx.session })).json.source;
+
+  // 申請者あり。今のアプリは session_label だけを出すので、そこへ申請者を入れて返す。
+  const named = await submit(ctx, token, { ...request, requester: " トロニー ", session_label: "BellTeam / 28回目の入れ替え" });
+  assert.equal(named.status, 200);
+  assert.equal(named.json.requester, "トロニー");
+  assert.equal(named.json.session_label, "BellTeam / 28回目の入れ替え", "AIへは、AIが書いた作業名のまま返す");
+  assert.deepEqual(await view(named.json.decision_id), {
+    client: "claude-code", session_label: "トロニー / BellTeam / 28回目の入れ替え", work_label: "BellTeam / 28回目の入れ替え",
+    requester: "トロニー", connection_label: "dev-pc", via: "connector",
+  });
+
+  // 作業名が申請者の名前で始まる時は、二重にしない。
+  const doubled = await submit(ctx, token, { ...request, title: "別の件1", requester: "サクラ", session_label: "サクラ / 鍵の片付け" });
+  assert.equal((await view(doubled.json.decision_id)).session_label, "サクラ / 鍵の片付け");
+
+  // 申請者を送らない古いコネクタの申請は、今までどおり。
+  const legacy = await submit(ctx, token, { ...request, title: "別の件2" });
+  assert.equal("requester" in legacy.json, false);
+  assert.deepEqual(await view(legacy.json.decision_id), {
+    client: "claude-code", session_label: "approval-box / server", work_label: "approval-box / server", connection_label: "dev-pc", via: "connector",
+  });
+
+  // 一覧（AI側）にも申請者が付く。同じ接続を分け合う席が、自分の申請を見分けられる。
+  const mine = (await ctx.call("GET", "/connector/v1/decisions", { token })).json.items as { title: string; requester?: string }[];
+  assert.deepEqual(mine.map((d) => d.requester ?? null).sort(), [null, "サクラ", "トロニー"]);
+
+  const long = await ctx.call("POST", "/connector/v1/decisions", { token, body: { ...request, title: "別の件3", requester: "あ".repeat(61) } });
+  assert.equal(long.status, 400);
+});
+
+test("答えを届ける文は、利用者へ件名で伝えるようAIへ添える", async () => {
+  const ctx = setup();
+  const token = await paired(ctx);
+  const created = await submit(ctx, token, request);
+  await ctx.call("POST", `/v1/decisions/${created.json.decision_id}/answer`, { token: ctx.session, body: { option_id: "b", version: 1 } });
+  const text = (await ctx.call("GET", "/connector/v1/deliveries", { token })).json.items[0].text as string;
+  assert.ok(text.startsWith(`[Approval Box] あなたが request_decision で出した申請 ${created.json.decision_id}「DBの移行をいま実行してよいか」に、利用者が答えました。`), text);
+  assert.ok(text.endsWith("利用者へこの申請の話をする時は、件名で伝えてください。アプリには件名・申請者・作業名が出て、申請のIDは出ません。IDは道具を呼ぶ時に使います。"), text);
+});
+

@@ -32,6 +32,7 @@ const INSTRUCTIONS = [
   "Approval Boxは、利用者（人間）の判断・承認・操作が要る時に使う。URLを開いての承認や、利用者の手で行う作業を頼む時も含む。その時は request_decision でも申請する。利用者が申請に気づきやすいので、強く推奨する。答えは利用者がスマホやWebで出し、この会話へ自動で届く。",
   "request_decision を呼ぶと、申請はすぐには受け付けられず、自分の申請の一覧と check_token が返る。一覧を見て、内容が変わった申請は amend_decision、要らなくなった申請は cancel_decision で先に済ませる。答えが出ていれば、その答えに従う。問題が無ければ、同じ申請に check_token を付けて出し直すと受け付けられる。",
   "申請したら答えを待って何度も呼ばない。答えは届くので、他の作業を続けるかターンを終えてよい。",
+  "利用者へ申請の話をする時は、件名で伝える。アプリには件名・申請者・作業名が出て、申請のID（K-…）は出ない。IDは道具を呼ぶ時に使う。",
   "利用者に「Approval Boxのsetup_testを実行して」と言われたら setup_test を呼ぶ。届いた答えに書かれた確認コードで confirm_setup_test を呼ぶ。",
 ].join("\n");
 
@@ -54,13 +55,14 @@ const TOOLS = [
         recommendation: { type: "string", description: "AIの推奨する選択肢のid" },
         urgency: { type: "string", enum: ["low", "normal", "high"] },
         deadline: { type: "string", description: "期限（ISO 8601）" },
-        session_label: { type: "string", description: "どの作業の話か（例: リポジトリ名 / 作業名）。省略すると作業フォルダ名" },
+        requester_name: { type: "string", description: "申請するあなた自身の名前（60字まで）。Botや担当としての名前を持つなら、その名前を書く。利用者はこれで、誰からの申請かを見分ける。名前を持たないAIは空文字にする（今までどおり、AIの種類と作業名で出る）" },
+        session_label: { type: "string", description: "何の仕事の申請か（例: プロジェクト名 / 作業名）。利用者はこれで、どの仕事の申請かを見分ける" },
         distinct_reason: { type: "string", description: "同じ件名の未決があるのに別件として出す時だけ、その理由" },
         image_paths: { type: "array", items: { type: "string" }, maxItems: 10, description: "申請に添えるローカル画像パス。10件/単体20MiB/合計50MiBまで。パス自体は人へ送らない" },
         request_attachment_ids: { type: "array", items: { type: "string" }, maxItems: 10 },
         check_token: { type: "string", description: "1回目の request_decision で返った確認の札。一覧を確かめ、直す・取り下げる申請が無いと判断した時に付ける" },
       },
-      required: ["title", "options"],
+      required: ["title", "options", "requester_name", "session_label"],
       additionalProperties: false,
     },
   },
@@ -193,6 +195,13 @@ async function channelFor(harness: Harness, clientName: string | undefined, meta
 
 /** Cursor・Grokへ返す、答えの受け取り方の案内。Cursor CLIのmodelはstructuredContentを読まないので本文に書く。 */
 /** 答えの届き方と確かめ方。AIが自分で呼んだ道具の返りで先に伝え、あとから届く文の出どころを判断できるようにする。 */
+/** 利用者への伝え方。アプリは申請のIDを出さないので、IDで言われても利用者はどの申請か分からない（クオの指摘 2026-10-14）。 */
+export const SPEAK_BY_TITLE = "利用者へこの申請の話をする時は、件名で伝えてください。アプリには件名・申請者・作業名が出て、申請のIDは出ません。IDは道具を呼ぶ時に使います。";
+/** 道具の返りの先頭に書く、申請の呼び名。件名を先に、IDは後ろに置く。 */
+export function named(decision: Record<string, unknown>): string {
+  return decision.title ? `「${decision.title}」（申請のID: ${decision.decision_id}）` : String(decision.decision_id);
+}
+
 const ARRIVAL = "答えは、あとでこの会話へ「[Approval Box]」で始まる文として自動で届きます。作業の途中なら、ほかの道具の結果や hook の通知と一緒に届くことがあります。届いた答えは get_decision で確かめられます。";
 
 function receiveGuide(harness: Harness, channelId: string): string {
@@ -223,7 +232,7 @@ function text(value: string, structured?: Record<string, unknown>, isError = fal
 function describe(items: Record<string, unknown>[]): string {
   if (!items.length) return "この端末から出した申請はありません。";
   return items.map((d) => {
-    const parts = [`- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version} 作業=${d.session_label}${d.this_session ? " (この会話)" : ""}`];
+    const parts = [`- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version}${d.requester ? ` 申請者=${d.requester}` : ""} 作業=${d.session_label}${d.this_session ? " (この会話)" : ""}`];
     if (d.answer_text) parts.push(`  答え: ${String(d.answer_text).split("\n").slice(1, 3).join(" / ")}`);
     if (d.cancel_reason) parts.push(`  取り下げ理由: ${d.cancel_reason}`);
     return parts.join("\n");
@@ -251,19 +260,22 @@ export async function runMcp() {
       if (name === "request_decision") {
         const channelId = await channelFor(harness, clientName, request.params._meta);
         lastChannel = channelId;
-        const {image_paths, ...rest} = args;
+        const {image_paths, requester_name, ...rest} = args;
         if (image_paths !== undefined && rest.request_attachment_ids !== undefined) throw new Error("image_pathsとrequest_attachment_idsは片方だけ指定してください。");
         const request_attachment_ids = image_paths !== undefined ? await uploadImagePaths(api,image_paths) : rest.request_attachment_ids;
         const body = {
           ...rest,
           ...(request_attachment_ids !== undefined ? {request_attachment_ids} : {}),
           client: CLIENT_OF[harness],
+          // 道具の一覧では両方とも必須。名前を持たないAI（一般の利用者の Claude Code など）は空文字で出すので、その時は送らない。
+          // 一覧を古いまま持つ client の申請も受け付けるため、無い時も断らない。
+          ...(typeof requester_name === "string" && requester_name.trim() ? { requester: requester_name.trim() } : {}),
           session_label: (args.session_label as string | undefined) || `${basename(process.cwd())} (${CLIENT_OF[harness]})`,
           route: { channel_id: channelId, harness },
         };
         try {
           const decision = await api.call("POST", "/decisions", body);
-          const message = `申請しました: ${decision.decision_id}「${decision.title}」。${ARRIVAL}待って呼び直さず、他の作業を続けるかターンを終えてください。`;
+          const message = `申請しました: ${named(decision)}。${SPEAK_BY_TITLE}${ARRIVAL}待って呼び直さず、他の作業を続けるかターンを終えてください。`;
           return announced(`${message}${receiveGuide(harness, channelId)}`, decision, channelId);
         } catch (error) {
           if (error instanceof ServerError && error.code === "confirm_required") {
@@ -288,18 +300,18 @@ export async function runMcp() {
         const channelId = await channelFor(harness, clientName, request.params._meta);
         const decision = await api.call("POST", `/decisions/${encodeURIComponent(String(decision_id))}/amend`, { ...rest, route: { channel_id: channelId, harness } });
         lastChannel = channelId;
-        return announced(`直しました: ${decision.decision_id} version=${decision.version}${receiveGuide(harness, channelId)}`, decision, channelId);
+        return announced(`直しました: ${named(decision)} version=${decision.version}${receiveGuide(harness, channelId)}`, decision, channelId);
       }
       if (name === "resume_decision") {
         const channelId = await channelFor(harness, clientName, request.params._meta);
         const decision = await api.call("POST", `/decisions/${encodeURIComponent(String(args.decision_id))}/resume`, { channel_id: channelId, harness });
         lastChannel = channelId;
-        const head = decision.answer_text ? String(decision.answer_text) : `再開しました: ${decision.decision_id}。${ARRIVAL}`;
+        const head = decision.answer_text ? String(decision.answer_text) : `再開しました: ${named(decision)}。${ARRIVAL}`;
         return announced(`${head}${decision.answer_text ? "" : receiveGuide(harness, channelId)}`, decision, channelId);
       }
       if (name === "cancel_decision") {
         const decision = await api.call("POST", `/decisions/${encodeURIComponent(String(args.decision_id))}/cancel`, { reason: args.reason });
-        return text(`取り下げました: ${decision.decision_id}\n\n${JSON.stringify(decision)}`, decision);
+        return text(`取り下げました: ${named(decision)}\n\n${JSON.stringify(decision)}`, decision);
       }
       if (name === "get_decision") {
         const id = encodeURIComponent(String(args.decision_id));

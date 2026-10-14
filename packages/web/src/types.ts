@@ -4,7 +4,8 @@ export type HistoryEntry = { at: string; kind: string; by: "ai" | "user"; note?:
 export type Decision = {
   id: string; title: string; context: string; options: Option[]; recommendation?: string;
   urgency: "low" | "normal" | "high" | string; deadline?: string;
-  source: { client: string; session_label: string; via: string; test?: boolean };
+  // session_label は「申請者 / 作業名」の一行（表示用）。work_label はAIが書いた作業名、requester は申請者の名前（AIの自己申告）、connection_label は接続（端末）の名前。
+  source: { client: string; session_label: string; work_label?: string; requester?: string; connection_label?: string; via: string; test?: boolean };
   status: "pending" | "held" | "answered" | "cancelled" | string;
   request_attachments?: Attachment[];
   answer?: { option_id?: string; text?: string; attachments?: Attachment[]; answered_at: string };

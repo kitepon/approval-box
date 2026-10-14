@@ -20,7 +20,7 @@ export type Answer = { option_id?: string; text?: string; attachments?: Attachme
 type Row = {
   id: string; user_id: string; connection_id: string | null; route: string | null;
   title: string; context: string; options: string; recommendation: string | null;
-  urgency: string; deadline: string | null; client: string; session_label: string; via: string; test: number;
+  urgency: string; deadline: string | null; client: string; session_label: string; requester: string | null; via: string; test: number;
   status: string; answer: string | null; delivery: string | null; delivery_id: string | null; delivery_detail: string | null; delivery_text: string | null;
   resume_phrase: string; cancel_reason: string | null; distinct_reason: string | null; amend_count: number;
   created_at: string; updated_at: string; version: number;
@@ -42,6 +42,8 @@ export const createSchema = z.object({
   urgency: z.enum(URGENCIES).default("normal"),
   deadline: z.iso.datetime({ offset: true }).optional(),
   session_label: z.string().trim().min(1).max(200),
+  /** 申請するAI自身の名前（自己申告）。0.1.25までのコネクタは送らない。 */
+  requester: z.string().trim().min(1).max(60).optional(),
   client: z.string().trim().min(1).max(40),
   route: z.object({ channel_id: z.string().min(1).max(100), harness: z.string().min(1).max(20) }).optional(),
   distinct_reason: z.string().trim().min(1).max(500).optional(),
@@ -75,6 +77,9 @@ export const answerSchema = z.object({
 
 const CHECK_TTL_MS = 30 * 60_000;
 
+/** AIが利用者へ申請の話をする時の伝え方。アプリは申請のIDを出さないので、IDで言われても利用者はどの申請か分からない（クオの指摘 2026-10-14）。 */
+export const SPEAK_BY_TITLE = "利用者へこの申請の話をする時は、件名で伝えてください。アプリには件名・申請者・作業名が出て、申請のIDは出ません。IDは道具を呼ぶ時に使います。";
+
 const urgencyRank: Record<string, number> = { high: 0, normal: 1, low: 2 };
 
 export class Decisions {
@@ -103,7 +108,12 @@ export class Decisions {
       ...(row.recommendation ? { recommendation: row.recommendation } : {}),
       urgency: row.urgency,
       ...(row.deadline ? { deadline: row.deadline } : {}),
-      source: { client: row.client, session_label: row.session_label, via: row.via, ...(row.test ? { test: true } : {}) },
+      source: {
+        client: row.client, session_label: displayLabel(row), work_label: row.session_label,
+        ...(row.requester ? { requester: row.requester } : {}),
+        ...this.connectionLabel(row),
+        via: row.via, ...(row.test ? { test: true } : {}),
+      },
       status: row.status,
       ...(row.answer ? { answer: JSON.parse(row.answer) as Answer } : {}),
       ...(row.delivery ? { delivery: row.delivery } : {}),
@@ -132,6 +142,7 @@ export class Decisions {
       context: row.context,
       request_attachments: this.requestAttachments(row.id),
       session_label: row.session_label,
+      ...(row.requester ? { requester: row.requester } : {}),
       this_session: !!routeChannel && route?.channel_id === routeChannel,
       ...(row.answer ? { answer: JSON.parse(row.answer) as Answer, answer_text: row.delivery_text } : {}),
       ...(row.delivery ? { delivery: row.delivery } : {}),
@@ -140,6 +151,13 @@ export class Decisions {
       created_at: row.created_at,
       updated_at: row.updated_at,
     };
+  }
+
+  /** どの端末（接続）から出た申請か。接続が消えていれば付けない。 */
+  private connectionLabel(row: Row): { connection_label?: string } {
+    if (!row.connection_id) return {};
+    const label = get<{ label: string }>(this.db, "select label from connections where id = ?", row.connection_id)?.label;
+    return label ? { connection_label: label } : {};
   }
 
   private requestAttachments(id: string): Attachment[] {
@@ -318,11 +336,11 @@ export class Decisions {
       const id = uniqueId(this.db);
       const at = now();
       run(this.db, `insert into decisions (id, user_id, connection_id, route, title, norm_title, context, options, recommendation, urgency, deadline,
-          client, session_label, via, test, status, resume_phrase, distinct_reason, created_at, updated_at, version)
-          values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, 1)`,
+          client, session_label, requester, via, test, status, resume_phrase, distinct_reason, created_at, updated_at, version)
+          values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, 1)`,
         id, conn.user_id, conn.id, input.route ? JSON.stringify(input.route) : null, input.title, norm, input.context,
         JSON.stringify(input.options), input.recommendation ?? null, input.urgency, input.deadline ?? null,
-        input.client, input.session_label, options.via ?? "connector", options.test ? 1 : 0, `Approval Box ${id} の答えを確認して続けて`, input.distinct_reason ?? null, at, at);
+        input.client, input.session_label, input.requester ?? null, options.via ?? "connector", options.test ? 1 : 0, `Approval Box ${id} の答えを確認して続けて`, input.distinct_reason ?? null, at, at);
       this.bindRequest(conn, id, input.request_attachment_ids ?? []);
       this.history(id, "created", "ai");
       const row = this.row(id)!;
@@ -524,6 +542,20 @@ export class Decisions {
   }
 }
 
+/**
+ * 一覧・通知に出す一行。「誰から / 何の仕事」。今のアプリは session_label だけを出すので、申請者をここへ入れて返す。
+ * 作業名が申請者の名前で始まる時は足さない（AIが作業名へ自分で名前を書いた申請を、二重にしない）。
+ * call-bridge の接続は、名前がAIの自己申告だと分かるように書く（マリアンの指摘。今までの形のまま）。
+ */
+export function displayLabel(row: Pick<Row, "session_label" | "requester" | "via" | "route">): string {
+  const work = row.session_label;
+  const who = row.requester;
+  if (!who || work.startsWith(who)) return work;
+  const route = row.route ? (JSON.parse(row.route) as Route) : null;
+  const declared = row.via === "remote" && route?.harness === SERVER_HARNESS;
+  return `${who}${declared ? "（申告）" : ""} / ${work}`;
+}
+
 function uniqueId(db: Db): string {
   for (;;) {
     const id = decisionId();
@@ -545,7 +577,7 @@ function deliveryText(row: Row, answer: Answer, option: Option | undefined, code
       `Approval Boxの confirm_setup_test を decision_id="${row.id}", code="${code}" で呼んでください。それでセットアップ確認が終わります。`);
   } else {
     const next = option ? "この答えに従って作業を続けてください。" : answer.text ? "この指示に従って作業を続けてください。" : "添付を確かめて作業を続けてください。";
-    lines.push("", next);
+    lines.push("", next, SPEAK_BY_TITLE);
   }
   return lines.join("\n");
 }

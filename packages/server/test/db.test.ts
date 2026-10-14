@@ -31,3 +31,22 @@ test("最初の形のdevices表を持つDBを開くと、行を保ったまま�
   const again = openDb(file); // 二度目に開いても移し直さない
   assert.equal(all(again, "select * from devices").length, 2);
 });
+
+test("申請者の列が無いDBを開くと、申請を保ったまま列が足される", () => {
+  const file = join(mkdtempSync(join(tmpdir(), "ab-db-")), "requester.db");
+  openDb(file).close();
+  const old = new DatabaseSync(file);
+  // 2026-10-14 より前の形へ戻す（requester の列が無く、版は5）。
+  old.exec(`insert into users (id, created_at) values ('u1', '2026-10-01T00:00:00Z');
+    insert into decisions (id, user_id, title, norm_title, context, options, urgency, client, session_label, via, status, resume_phrase, created_at, updated_at, version)
+      values ('K-OLD', 'u1', '前の申請', '前の申請', '', '[]', 'normal', 'codex', 'BellTeam / 入れ替え', 'connector', 'pending', 'r', '2026-10-13T00:00:00Z', '2026-10-13T00:00:00Z', 1);
+    alter table decisions drop column requester;
+    pragma user_version = 5;`);
+  old.close();
+  const db = openDb(file);
+  assert.deepEqual(all<{ id: string; session_label: string; requester: string | null }>(db, "select id, session_label, requester from decisions").map((r) => ({ ...r })),
+    [{ id: "K-OLD", session_label: "BellTeam / 入れ替え", requester: null }]);
+  db.close();
+  openDb(file).close(); // 二度目に開いても移し直さない
+});
+

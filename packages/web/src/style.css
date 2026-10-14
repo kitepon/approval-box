@@ -72,9 +72,11 @@ main { padding-top: 12px; }
 .card.urgency-high { border-left-color: var(--high); }
 .card.urgency-normal { border-left-color: var(--accent); }
 .card.closed { border-left-color: var(--line); }
-.card-meta { display: flex; gap: 8px; align-items: center; font-size: 0.82rem; color: var(--muted); min-width: 0; }
-.card-meta .session { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card-meta .time { flex: none; }
+/* 誰から・何の仕事かは、省かずに全部出す。AIの種類と時刻の下に、一行を取って置く。 */
+.card-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 0.82rem; color: var(--muted); min-width: 0; }
+.card-meta .session { order: 3; flex: 1 0 100%; min-width: 0; overflow-wrap: anywhere; }
+.card-meta .time { flex: none; margin-left: auto; }
+.card-meta .requester { color: var(--ink); font-weight: 700; }
 .chip { flex: none; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; color: var(--ink); font-weight: 600; }
 .card-title { font-weight: 700; margin-top: 4px; overflow-wrap: anywhere; }
 .card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

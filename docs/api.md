@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.28
+# Approval Box API（アプリ・Web版向け） v0.29
+
+v0.29（2026-10-14）: クオの指摘「誰から何の仕事での決裁申請かわからないことがある」。今ある項目の型は変えていない。①`source` に任意の `requester`（申請したAIの名前。AIの自己申告）、`work_label`（AIが書いた作業名そのまま）、`connection_label`（接続＝端末の名前）を足した。②`source.session_label` は「誰から / 何の仕事」の一行にした。申請者がある時は `申請者 / 作業名`。今のアプリは `session_label` だけを出すので、直さなくても申請者が出る。申請者を別の場所へ出すアプリは、`requester` と `work_label` を使う（`session_label` と並べて出すと名前が二重になる）。③鳴らす通知の `aps.alert` に `subtitle`（`session_label` と同じ一行）を足した。④AIが申請する時の `requester`（任意）を `POST /connector/v1/decisions` に足した。詳細は「決裁」と「更新の知らせ」。
 
 v0.28（2026-10-10）: 項目は変えていない。①想定外の取消（`cancelled`）も、送信元が再試行・再接続での回復を観測して `info`・`recovered` と `handling: retry_available | reconnecting` を付けた時は参考診断に留める。②サーバーは停止の合図（SIGTERM）で `GET /v1/events` と `GET /connector/v1/stream` を正しく閉じる。入れ替えの間に切断でなく正常終了が届くので、利用側は今までどおり再接続する。入れ替えの数秒は手前のプロキシが接続を待たせ、502を返さない。詳細は[diagnostics.md](diagnostics.md)。
 
@@ -56,7 +58,10 @@ Decision {
   deadline?: time,
   source: {
     client: "claude-code" | "codex" | "cursor" | "grok" | "claude.ai" | "chatgpt" | "other",
-    session_label: string,       // どのセッションの話か。一覧に必ず出す
+    session_label: string,       // 誰から・何の仕事の申請か（一行）。一覧に必ず出す。requester がある時は「requester / work_label」（v0.29）
+    requester?: string,          // 申請したAIの名前（60字まで）。AIの自己申告。0.1.25までのコネクタの申請には無い（v0.29）
+    work_label?: string,         // AIが書いた作業名そのまま（200字まで）。v0.29 より前のサーバーは返さない
+    connection_label?: string,   // 申請が出た接続（端末）の名前。接続が消えていれば無い（v0.29）
     via: "connector" | "remote"
   },
   status: "pending" | "held" | "answered" | "cancelled",
@@ -77,6 +82,13 @@ Decision {
   }]
 }
 ```
+
+`source` の「誰から・何の仕事」の決まり（v0.29）:
+
+- `session_label` はサーバーが組み立てる。`requester` があれば `requester / work_label`。`work_label` が `requester` で始まる時は `work_label` のまま（AIが作業名へ自分で名前を書いた申請を、二重にしない）。`requester` が無ければ `work_label` と同じ。
+- call-bridge で答えを届ける接続（GrokBot）は、今までどおり `名前（申告） / 作業名` の形にする。`requester` と `work_label` には、名前と作業名をそのまま入れる。
+- `requester` はAIの自己申告で、サーバーは確かめない。サーバーが知っている出どころは `connection_label`（接続）と `client`。
+- AIへは件名で話すよう伝えてある（コネクタ 0.1.26 から）。アプリが申請のID（`id`）を画面に出すかは、アプリが決める。
 
 - 添付: AIの背景（context）は文字だけ。利用者の答えには画像・書類を添付できる（v0.23、下の「添付」）。
 - 差戻し: 専用の操作は持たない。選択肢を選ばず `text` だけで答えれば、それが差戻し・指示し直しとしてAIへ届く。
@@ -161,11 +173,11 @@ Attachment {
 ## 更新の知らせ
 
 - 背景にいる時: プッシュ通知（APNs・FCM）。
-  - 表示文は件名だけ（背景は出さない）。
+  - 表示文は件名と、その下の「誰から / 何の仕事」の一行（背景は出さない）。
   - payload: `{ type: "decision.created" | "decision.updated", change?: "amended" | "cancelled" | "answered" | "delivery", decision_id, version }`。開いたら `/decisions/{id}` を取る。
   - 鳴らすのは created（件名）と amended（「修正: 件名」）だけ。cancelled・answered・delivery は音なしの更新（バッジと一覧の更新だけ）。
   - 表示文はサーバーが組み立てて渡す（`title`。created は件名、amended は「修正: 件名」）。音なしの更新には `title` を入れない。
-  - APNs: 鳴らす時は `aps.alert.title` と `aps.sound`、`aps.badge`。音なしは `aps.content-available: 1` と `aps.badge` だけ。どちらも `apns-push-type: alert`・priority 10 で送る（background にするとiOSが後回しにし、答えた後もバッジが残る）。独自のキー（type・change・decision_id・version）は aps の外に置く。
+  - APNs: 鳴らす時は `aps.alert.title`・`aps.alert.subtitle`（`source.session_label` と同じ一行。v0.29）と `aps.sound`、`aps.badge`。音なしは `aps.content-available: 1` と `aps.badge` だけ。どちらも `apns-push-type: alert`・priority 10 で送る（background にするとiOSが後回しにし、答えた後もバッジが残る）。独自のキー（type・change・decision_id・version）は aps の外に置く。
   - FCM: 全部データメッセージ（`notification` ブロックは使わない）。`data` の値は全部文字列で `{ type, change?, decision_id, version, badge, title? }`。`title` がある時だけアプリが通知を出す。鳴らす時は priority=high、音なしは normal。Androidの通知チャンネルは「新しい申請」「修正」の2つ。
   - アプリのバッジ: pending の件数。payload の `badge` に入れる。Androidのランチャーバッジは表示中の通知に結び付くため、音なしの更新だけでは数を変えられない（OSの制約。アプリ内の件数と、既存の通知の件数・削除は更新する）。
 - 前面にいる時: 前面へ戻った時に一覧を取り直す。即時に反映したい場合は `/events` を張ってよい。
@@ -294,7 +306,7 @@ message は利用者にそのまま見せてよい日本語の文。
   "recommendation": "b",
   "urgency": "high",
   "deadline": "2026-10-01T09:00:00Z",
-  "source": { "client": "claude-code", "session_label": "approval-box / server", "via": "connector" },
+  "source": { "client": "claude-code", "session_label": "ナユタ / approval-box / server", "requester": "ナユタ", "work_label": "approval-box / server", "connection_label": "bellteam", "via": "connector" },
   "status": "pending",
   "resume_phrase": "Approval Box K-1234 の答えを確認して続けて",
   "created_at": "2026-10-01T03:00:00Z",
@@ -308,6 +320,8 @@ message は利用者にそのまま見せてよい日本語の文。
 - 無し（無料体験の形は設計側の未決。決まったら `/me` に反映する）
 
 ## 変更履歴
+
+- v0.29 2026-10-14 クオの指摘2つ（「誰から何の仕事での決裁申請かわからないことがある」「IDなんて知らん」）: `source.requester`・`source.work_label`・`source.connection_label` を追加。`source.session_label` は「申請者 / 作業名」の一行。通知に `aps.alert.subtitle`。`POST /connector/v1/decisions` に任意の `requester`。AIへ返す文は件名を先に書き、利用者へは件名で伝えるよう添える。
 
 - v0.23 2026-10-03 クオの依頼（ベル経由）: 答えに画像・書類を複数添付できる。`POST/GET/DELETE /decisions/{id}/attachments`、answer の `attachment_ids`、`answer.attachments`、エラー 413 `too_large`・415 `unsupported_type`。添付だけの答えも可。添付は決裁と一緒に消える。
 - v0.22 2026-10-02 記述だけ直す（契約は変えていない）: 公式サーバーは1台で BILLING=store・Apple/Googleログイン。開発用sessionはアプリで使わない。`trial` は期限なし、体験の形が決まったら `trial_ends_at` を足す。

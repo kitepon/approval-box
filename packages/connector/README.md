@@ -51,6 +51,12 @@ Requires Node.js 20 or later. License: MIT.
 この機能はコネクタ0.1.13以降と対応サーバーを使います。会話を開き直しても、
 再開を指定するまでは元の会話が配送先です。答えは `get_decision` でも取得できます。
 
+### 誰から・何の仕事の申請か
+
+`request_decision` は `requester_name`（申請するAI自身の名前）と `session_label`（何の仕事の申請か）を必須で受けます。アプリの一覧と通知には「申請者 / 作業名」の一行が出ます。名前を持たないAIは `requester_name` を空文字にします。その申請は、AIの種類と作業名で出ます。
+
+AIには、利用者へ申請の話をする時は件名で伝えるよう返します。アプリは申請のID（`K-…`）を出しません。
+
 ### 申請に画像を添える
 
 `request_decision` に `image_paths: ["/absolute/path/screenshot.png"]` を指定すると、AIの画像を本文下に添えて申請します。10件、単体20MiB、合計50MiBまで。全画像を上げてから申請と通知を確定します。最初の確認の札を付けた出し直しでも同じ画像パスを渡してください。`amend_decision.changes.image_paths` は全置換、空配列で削除です。回答添付とは別の欄です。リモートMCPは `upload_request_image` のIDを `request_attachment_ids` に渡します。

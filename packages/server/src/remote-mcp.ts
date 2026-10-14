@@ -8,7 +8,7 @@ import type { Context } from "hono";
 import { z, ZodError } from "zod";
 import type { Accounts } from "./accounts.ts";
 import { type Attachments, MAX_FILE_BYTES, formatBytes } from "./attachments.ts";
-import { type Connection, Decisions, SERVER_HARNESS, amendSchema, createSchema } from "./decisions.ts";
+import { type Connection, Decisions, SERVER_HARNESS, SPEAK_BY_TITLE, amendSchema, createSchema } from "./decisions.ts";
 import { ApiError } from "./errors.ts";
 
 export type RemoteMcpOptions = {
@@ -22,17 +22,21 @@ const INSTRUCTIONS = [
   "Approval Boxは、利用者（人間）の判断・承認・操作が要る時に使う。URLを開いての承認や、利用者の手で行う作業を頼む時も含む。その時は request_decision でも申請する。利用者が申請に気づきやすいので、強く推奨する。答えは利用者がスマホやWebで出す。",
   "request_decision を呼ぶと、申請はすぐには受け付けられず、自分の申請の一覧と check_token が返る。一覧を見て、内容が変わった申請は amend_decision、要らなくなった申請は cancel_decision で先に済ませる。答えが出ていれば、その答えに従う。問題が無ければ、同じ申請に check_token を付けて出し直すと受け付けられる。",
   "答えが自分の会話へ届く設定なら、申請したあと答えを待って何度も呼ばない。届かない設定なら、利用者に「答えたら知らせてほしい」と伝え、知らされた時に get_decision で答えを取る。",
+  "利用者へ申請の話をする時は、件名で伝える。アプリには件名・申請者・作業名が出て、申請のID（K-…）は出ない。IDは道具を呼ぶ時に使う。",
 ].join("\n");
 
 const optionSchema = { type: "object", properties: { id: { type: "string" }, label: { type: "string" } }, required: ["id", "label"], additionalProperties: false };
 
 function tools(callBridge: boolean) {
-  const requester = callBridge
-    ? {
-      requester_id: { type: "string", description: "申請するあなた自身のID（電話帳のid）。答えはこのIDのあなたへ通話で届く" },
-      requester_name: { type: "string", description: "申請するあなた自身の名前（電話帳の名前）" },
-    }
-    : {};
+  const requester = {
+    ...(callBridge ? { requester_id: { type: "string", description: "申請するあなた自身のID（電話帳のid）。答えはこのIDのあなたへ通話で届く" } } : {}),
+    requester_name: {
+      type: "string",
+      description: callBridge
+        ? "申請するあなた自身の名前（電話帳の名前）。利用者はこれで、誰からの申請かを見分ける"
+        : "申請するあなた自身の名前（60字まで）。Botや担当としての名前を持つなら、その名前を書く。利用者はこれで、誰からの申請かを見分ける。名前を持たないAIは空文字にする（今までどおり、AIの種類と作業名で出る）",
+    },
+  };
   return [
     {
       name: "list_my_decisions",
@@ -52,13 +56,13 @@ function tools(callBridge: boolean) {
           recommendation: { type: "string", description: "AIの推奨する選択肢のid" },
           urgency: { type: "string", enum: ["low", "normal", "high"] },
           deadline: { type: "string", description: "期限（ISO 8601）" },
-          session_label: { type: "string", description: "どの作業の話か" },
           ...requester,
+          session_label: { type: "string", description: "何の仕事の申請か（例: プロジェクト名 / 作業名）。利用者はこれで、どの仕事の申請かを見分ける" },
           distinct_reason: { type: "string", description: "同じ件名の未決があるのに別件として出す時だけ、その理由" },
           request_attachment_ids: { type: "array", items: { type: "string" }, maxItems: 10, description: "upload_request_imageの返却ID。全画像が揃ってから申請する" },
           check_token: { type: "string", description: "1回目の request_decision で返った確認の札" },
         },
-        required: ["title", "options", "session_label", ...(callBridge ? ["requester_id", "requester_name"] : [])],
+        required: ["title", "options", "requester_name", "session_label", ...(callBridge ? ["requester_id"] : [])],
         additionalProperties: false,
       },
     },
@@ -115,7 +119,7 @@ type AiDecision = ReturnType<Decisions["toAi"]>;
 function describe(items: AiDecision[]): string {
   if (!items.length) return "この接続から出した申請はありません。";
   return items.map((d) => {
-    const parts = [`- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version} 作業=${d.session_label}`];
+    const parts = [`- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version}${d.requester ? ` 申請者=${d.requester}` : ""} 作業=${d.session_label}`];
     if ("answer_text" in d && d.answer_text) parts.push(`  答え: ${String(d.answer_text).split("\n").slice(1, 3).join(" / ")}`);
     if (d.cancel_reason) parts.push(`  取り下げ理由: ${d.cancel_reason}`);
     return parts.join("\n");
@@ -145,14 +149,15 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
       if (name === "request_decision") {
         const { requester_id: _id, requester_name: _name, ...rest } = args;
         let route: { channel_id: string; harness: string } | undefined;
-        let label = String(rest.session_label ?? "");
+        // 名前は申請したAIの自己申告。表示の組み立て（call-bridge の「（申告）」を含む）は displayLabel が持つ。
+        let requester = typeof _name === "string" && _name.trim() ? _name.trim() : undefined;
         if (callBridge) {
           const who = requesterSchema.parse(args);
           route = { channel_id: who.requester_id, harness: SERVER_HARNESS };
-          // 共有の接続なので、名前は申請したAIの自己申告。アプリでそう分かるように書く（マリアンの指摘）。
-          label = `${who.requester_name}（申告） / ${label}`.slice(0, 200);
+          requester = who.requester_name;
         }
-        const input = createSchema.parse({ ...rest, session_label: label, client: "other", ...(route ? { route } : {}) });
+        // call-bridge でない接続は、名前を持たないAIが空文字で出す。道具の一覧を古いまま持つ client が requester_name を送らなくても受け付ける。
+        const input = createSchema.parse({ ...rest, ...(requester ? { requester } : {}), client: "other", ...(route ? { route } : {}) });
         accounts.assertCanUse(conn.user_id);
         try {
           const row = decisions.create(conn, input, { via: "remote" });
@@ -160,7 +165,7 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
           const tail = callBridge
             ? "答えは、利用者が答えた時にApproval Boxからの通話であなたへ届きます。待って呼び直さず、他の作業を続けてください。"
             : `答えが出たら get_decision で取ってください。利用者に「${row.resume_phrase}」と言われた時が目安です。`;
-          return result(`申請しました: ${decision.decision_id}「${decision.title}」。${tail}\n\n${JSON.stringify(decision)}`, decision);
+          return result(`申請しました: 「${decision.title}」（申請のID: ${decision.decision_id}）。${SPEAK_BY_TITLE}${tail}\n\n${JSON.stringify(decision)}`, decision);
         } catch (error) {
           if (error instanceof ApiError && error.code === "confirm_required") {
             return result(`${error.message}\n\ncheck_token: ${String(error.extra.check_token)}`, { error: error.code, ...error.extra }, true);
@@ -176,12 +181,12 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
         const body = amendSchema.parse({ version: args.version, note: args.note, changes: args.changes });
         const decision = decisions.amend(conn, String(args.decision_id), body);
         attachments?.gc();
-        return result(`直しました: ${decision.decision_id} version=${decision.version}\n\n${JSON.stringify(decision)}`, decision);
+        return result(`直しました: 「${decision.title}」（申請のID: ${decision.decision_id}） version=${decision.version}\n\n${JSON.stringify(decision)}`, decision);
       }
       if (name === "cancel_decision") {
         const reason = z.string().trim().min(1).max(500).parse(args.reason);
         const decision = decisions.cancel(conn, String(args.decision_id), reason);
-        return result(`取り下げました: ${decision.decision_id}\n\n${JSON.stringify(decision)}`, decision);
+        return result(`取り下げました: 「${decision.title}」（申請のID: ${decision.decision_id}）\n\n${JSON.stringify(decision)}`, decision);
       }
       if (name === "get_decision") {
         const row = decisions.forConnection(conn, String(args.decision_id));

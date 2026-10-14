@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "../api";
 import { navigate } from "../router";
 import { bump, useBump } from "../store";
-import { ago, clientLabel, dateTime, deadlineText, DELIVERY_LABEL, FIELD_LABEL, URGENCY_LABEL } from "../format";
+import { ago, dateTime, deadlineText, DELIVERY_LABEL, FIELD_LABEL, URGENCY_LABEL } from "../format";
 import type { Decision } from "../types";
+import { Source } from "./Source";
 import { ACCEPT, RequestImages, AttachmentList, MAX_COUNT, useDraftAttachments } from "./Attachments";
 
 /** 背景はプレーンテキストで出す。リンクは押した時に確かめてから開く（AI経由で混じった文面への備え）。 */
@@ -82,8 +83,7 @@ export function DecisionView({ id }: { id: string }) {
       <button class="back" onClick={() => history.length > 1 ? history.back() : navigate("/")}>‹ 戻る</button>
       {notice && <p class="notice">{notice}</p>}
       <div class="card-meta">
-        <span class="chip">{clientLabel(d.source.client)}</span>
-        <span class="session">{d.source.session_label}</span>
+        <Source source={d.source} />
         <span class="time">{ago(d.created_at)}</span>
       </div>
       <h1>{d.title}</h1>
@@ -91,6 +91,7 @@ export function DecisionView({ id }: { id: string }) {
         <span class={`tag ${d.urgency === "high" ? "tag-high" : ""}`}>{URGENCY_LABEL[d.urgency] ?? d.urgency}</span>
         {d.deadline && <span class="tag">{deadlineText(d.deadline)}</span>}
         {d.source.test && <span class="tag tag-test">テスト</span>}
+        {d.source.connection_label && <span class="tag">接続: {d.source.connection_label}</span>}
         <span class="tag muted-tag">{d.id}</span>
       </div>
       {last?.kind === "amended" && last.by === "ai" && (

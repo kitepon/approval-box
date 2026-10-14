@@ -55,21 +55,44 @@ test("リモートMCP: Bearer無しは401、札の往復で申請し、get_decis
   const client = await mcpClient(ctx, issued.json.token);
   const listed = await client.listTools();
   const request = listed.tools.find((t) => t.name === "request_decision")!;
-  assert.equal("requester_id" in (request.inputSchema.properties ?? {}), false, "call-bridge で届けない接続には requester を求めない");
+  assert.equal("requester_id" in (request.inputSchema.properties ?? {}), false, "call-bridge で届けない接続には、通話の届け先（requester_id）を求めない");
+  // 誰から・何の仕事かは、どの接続でも道具の一覧で必須にして求める（クオの指摘 2026-10-14）。
+  assert.deepEqual(request.inputSchema.required, ["title", "options", "requester_name", "session_label"]);
 
-  const first = await tool(client, "request_decision", ask);
+  const named = { ...ask, requester_name: "Claude" };
+  const first = await tool(client, "request_decision", named);
   assert.equal(first.isError, true);
   assert.equal(first.structuredContent?.error, "confirm_required");
-  const created = await tool(client, "request_decision", { ...ask, check_token: first.structuredContent!.check_token });
+  const created = await tool(client, "request_decision", { ...named, check_token: first.structuredContent!.check_token });
   assert.equal(created.isError, undefined);
   const id = created.structuredContent!.decision_id as string;
   assert.match(created.content[0]!.text, /get_decision/);
+  // 利用者はIDを知らない。件名を先に書き、件名で伝えるよう添える。
+  assert.ok(created.content[0]!.text.startsWith(`申請しました: 「経費の区分を決めてほしい」（申請のID: ${id}）。利用者へこの申請の話をする時は、件名で伝えてください。`), created.content[0]!.text);
 
   const app = await ctx.call("GET", `/v1/decisions/${id}`, { token: ctx.session });
   assert.equal(app.json.source.via, "remote");
-  assert.equal(app.json.source.session_label, "Books 確認");
+  assert.equal(app.json.source.session_label, "Claude / Books 確認");
+  assert.equal(app.json.source.requester, "Claude");
+  assert.equal(app.json.source.work_label, "Books 確認");
+  assert.equal(app.json.source.connection_label, "Claude.ai");
 
-  const dup = await tool(client, "request_decision", { ...ask, check_token: (await tool(client, "request_decision", ask)).structuredContent!.check_token });
+  // 道具の一覧を古いまま持つ client は名前を送らない。その申請も受け付け、作業名だけを出す。
+  const legacy = await tool(client, "request_decision", { ...ask, title: "名前なしの件", check_token: (await tool(client, "request_decision", { ...ask, title: "名前なしの件" })).structuredContent!.check_token });
+  assert.equal(legacy.isError, undefined);
+  const legacySource = (await ctx.call("GET", `/v1/decisions/${legacy.structuredContent!.decision_id}`, { token: ctx.session })).json.source;
+  assert.equal(legacySource.session_label, "Books 確認");
+  assert.equal("requester" in legacySource, false);
+  await tool(client, "cancel_decision", { decision_id: legacy.structuredContent!.decision_id, reason: "試験の片付け" });
+  // 名前を持たないAIは空文字で出す。申請者を付けず、作業名だけを出す。
+  const nameless = await tool(client, "request_decision", { ...ask, title: "名前を持たないAIの件", requester_name: " ", check_token: (await tool(client, "request_decision", { ...ask, title: "名前を持たないAIの件", requester_name: " " })).structuredContent!.check_token });
+  assert.equal(nameless.isError, undefined, JSON.stringify(nameless));
+  const namelessSource = (await ctx.call("GET", `/v1/decisions/${nameless.structuredContent!.decision_id}`, { token: ctx.session })).json.source;
+  assert.equal(namelessSource.session_label, "Books 確認");
+  assert.equal("requester" in namelessSource, false);
+  await tool(client, "cancel_decision", { decision_id: nameless.structuredContent!.decision_id, reason: "試験の片付け" });
+
+  const dup = await tool(client, "request_decision", { ...named, check_token: (await tool(client, "request_decision", named)).structuredContent!.check_token });
   assert.equal(dup.structuredContent?.error, "duplicate_suspected");
 
   await ctx.call("POST", `/v1/decisions/${id}/answer`, { token: ctx.session, body: { option_id: "own", version: app.json.version } });
@@ -78,7 +101,8 @@ test("リモートMCP: Bearer無しは401、札の往復で申請し、get_decis
   assert.equal(got.structuredContent!.delivery, "fetched");
 
   const listedMine = await tool(client, "list_my_decisions");
-  assert.equal(listedMine.structuredContent!.items.length, 1);
+  assert.equal(listedMine.structuredContent!.items.length, 3, "答えた申請と、取り下げた名前なしの申請2つ");
+  assert.match(listedMine.content[0]!.text, /「経費の区分を決めてほしい」 status=answered version=\d+ 申請者=Claude 作業=Books 確認/);
   await client.close();
 });
 
@@ -92,7 +116,7 @@ test("call-bridge の接続: 申請者のIDで受け、答えを通話で届け�
 
   const client = await mcpClient(ctx, issued.json.token);
   const request = (await client.listTools()).tools.find((t) => t.name === "request_decision")!;
-  assert.deepEqual(request.inputSchema.required, ["title", "options", "session_label", "requester_id", "requester_name"]);
+  assert.deepEqual(request.inputSchema.required, ["title", "options", "requester_name", "session_label", "requester_id"]);
 
   const missing = await tool(client, "request_decision", ask);
   assert.equal(missing.isError, true);
@@ -105,7 +129,10 @@ test("call-bridge の接続: 申請者のIDで受け、答えを通話で届け�
   assert.match(created.content[0]!.text, /通話であなたへ届きます/);
 
   const app = await ctx.call("GET", `/v1/decisions/${id}`, { token: ctx.session });
+  // 共有の接続なので、名前がAIの自己申告だと分かる形で出す（今までと同じ表示）。分けた項目には、名前と作業名をそのまま入れる。
   assert.equal(app.json.source.session_label, "モダニア（申告） / Books 確認");
+  assert.equal(app.json.source.requester, "モダニア");
+  assert.equal(app.json.source.work_label, "Books 確認");
 
   await ctx.call("POST", `/v1/decisions/${id}/answer`, { token: ctx.session, body: { option_id: "biz", text: "今月分も同じで", version: app.json.version } });
   // コネクタの配送デーモンには渡さない

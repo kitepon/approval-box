@@ -2,7 +2,8 @@ import { useState } from "preact/hooks";
 import { api } from "../api";
 import { linkProps } from "../router";
 import { bump, loadClosed, useResource } from "../store";
-import { clientLabel, dateTime, DELIVERY_LABEL } from "../format";
+import { dateTime, DELIVERY_LABEL } from "../format";
+import { Source } from "./Source";
 
 export function History() {
   const { data, error, loading } = useResource(loadClosed);
@@ -26,8 +27,7 @@ export function History() {
         {data?.map((d) => (
           <a key={d.id} class="card closed" {...linkProps(`/d/${d.id}`)}>
             <div class="card-meta">
-              <span class="chip">{clientLabel(d.source.client)}</span>
-              <span class="session">{d.source.session_label}</span>
+              <Source source={d.source} />
               <span class="time">{dateTime(d.updated_at)}</span>
             </div>
             <div class="card-title">{d.title}</div>
