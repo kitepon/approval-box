@@ -1,0 +1,40 @@
+name: e2e-preflight
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/e2e/**"
+      - "packages/connector/**"
+      - "packages/server/**"
+      - "package*.json"
+      - ".github/workflows/e2e-preflight.yml"
+  pull_request:
+    paths:
+      - "tools/e2e/**"
+      - "packages/connector/**"
+      - "packages/server/**"
+      - "package*.json"
+      - ".github/workflows/e2e-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build -w packages/connector
+      - name: 4ハーネスの起動前処理と設定の保持を確かめる（AI起動なし）
+        run: node --test tools/e2e/parent-preflight.test.mjs

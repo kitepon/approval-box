@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Approval Boxの配送の実機試験。サーバーをこのprocessの中で立て、本物のAI（harness）にコネクタを試験用projectの中だけで登録し、
 // AIの申請 → 利用者の答え → AIの会話へ配送、を idle中・作業中・連続で確かめる。セットアップ確認（確認コードの往復）も通す。
-// 共有HOMEのユーザー設定（~/.claude/settings.json 等）には触れない。~/.approval-box の config.json だけ試験中に差し替えて戻す。
+// 共有HOMEのユーザー設定（~/.claude/settings.json 等）には触れない。コネクタの状態は試験専用の置き場へ向ける。
 // 使い方: npm run build -w packages/connector && node tools/e2e/parent-e2e.mjs <claude-code|codex-cli|cursor-cli|grok-cli>
 // E2E_REGISTRATION=installed（claude-code、APPROVAL_BOX_HOME 必須）: 試験用projectには登録せず、その端末に標準導入済みの登録だけを使う。
 // 状態は APPROVAL_BOX_HOME の隔離した置き場へ向ける。登録が二重にならず、束ねた1ファイル（tools/e2e/bundle.mjs）で別の端末でも走る。
@@ -48,8 +48,8 @@ const userId = accounts.createUser();
 const conn = accounts.createConnection(userId, "e2e", process.platform, [harness]);
 const connection = { id: conn.id, user_id: userId };
 
-// ---- コネクタの設定（~/.approval-box/config.json を試験中だけ差し替える）----
-const kbHome = process.env.APPROVAL_BOX_HOME ?? join(homedir(), ".approval-box");
+// ---- コネクタの設定（未指定なら試験用フォルダへ隔離する）----
+const kbHome = process.env.APPROVAL_BOX_HOME ?? join(work, "approval-box-home");
 const configFile = join(kbHome, "config.json");
 const saved = existsSync(configFile) ? `${configFile}.e2e-saved` : null;
 if (saved) copyFileSync(configFile, saved);
@@ -61,16 +61,15 @@ try { const lock = JSON.parse(readFileSync(join(kbHome, "state", "daemon.json"),
 // ---- 試験用project（AIへの登録はここだけ）----
 const project = join(work, "project");
 mkdirSync(project);
-// hookはAIの環境で動き、Aitermが使い回すtmuxの環境には APPROVAL_BOX_HOME が無いことがある。nodeを包んで必ず渡す。
-const kbNode = process.env.APPROVAL_BOX_HOME ? join(work, "node-kb") : node;
-if (process.env.APPROVAL_BOX_HOME) writeFileSync(kbNode, `#!/bin/sh\nAPPROVAL_BOX_HOME=${JSON.stringify(process.env.APPROVAL_BOX_HOME)} exec ${JSON.stringify(node)} "$@"\n`, { mode: 0o755 });
+// APPROVAL_BOX_HOMEはMCP設定とagent_launchのenv_varsで渡す（Windowsでもshell用のshimを使わない）。
+const kbNode = node;
 const mcp = { command: kbNode, args: [join(dist, "cli.mjs"), "mcp"] };
 // APPROVAL_BOX_HOME を渡して試験を走らせると、共有の ~/.approval-box（同じHOMEの他のAIが使う）に触れずに済む。
 // Codex・GrokはMCPへ環境変数を渡さないので、設定に明記する。
-const kbEnv = process.env.APPROVAL_BOX_HOME ? { APPROVAL_BOX_HOME: process.env.APPROVAL_BOX_HOME } : {};
+const kbEnv = { APPROVAL_BOX_HOME: kbHome };
 // 試験の状態の置き場（kbHome）を読むprofile。channelの記録を確かめる時に使う。
 const PROFILE_AT = { ...PROFILE, config_root: () => kbHome, state_root: () => join(kbHome, "state") };
-const tomlEnv = process.env.APPROVAL_BOX_HOME ? `env = { APPROVAL_BOX_HOME = ${JSON.stringify(process.env.APPROVAL_BOX_HOME)} }\n` : "";
+const tomlEnv = `env = { APPROVAL_BOX_HOME = ${JSON.stringify(kbHome)} }\n`;
 let codexHome = null;
 if (installed) {
   // 登録はしない。toolの許可だけを試験用projectへ置く。
@@ -87,25 +86,10 @@ if (installed) {
     hooks: steer.claudeParentHookEntries(PROFILE, { command: kbNode, script: join(dist, "approval-box-claude-hook.mjs") }) }, null, 1));
 } else if (harness === "codex-cli") {
   mkdirSync(join(project, ".codex"));
-  writeFileSync(join(project, ".codex", "config.toml"), `[mcp_servers.approval-box]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\nenv_vars = ["CODEX_HOME"]\n${tomlEnv}`);
-  // 作業中の割り込み（Steer）のhookは CODEX_HOME に入る。共有の設定に触れないよう、使い捨てのCODEX_HOMEを作り、認証だけ複製する。
-  const realCodexHome = process.env.CODEX_HOME ?? join(homedir(), ".codex");
-  codexHome = join(work, "codex-home");
-  mkdirSync(codexHome);
-  copyFileSync(join(realCodexHome, "auth.json"), join(codexHome, "auth.json"));
-  // 共有の~/.codexと同じく承認を求めない設定にする（MCPのtool承認で試験が止まらないように）。
-  writeFileSync(join(codexHome, "config.toml"), 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n');
-  // 前の試験が使い捨てのCODEX_HOMEでSteerを有効にしたまま落ちていたら、先に外す（共有の~/.codexには触れない）。
-  const recordFile = join(kbHome, "codex-parent-hooks", "config.json");
-  if (existsSync(recordFile)) {
-    const record = JSON.parse(readFileSync(recordFile, "utf8"));
-    if (record.enabled && record.codex_home.includes(`${tmpdir()}/kb-e2e-codex-cli-`)) {
-      if (existsSync(record.codex_home)) await steer.configureCodexSteer(PROFILE, "disable", { hook: record.hook, codex_home: record.codex_home });
-      else rmSync(recordFile);
-    }
-  }
-  const steered = await steer.configureCodexSteer(PROFILE, "enable", { hook: join(dist, "approval-box-codex-hook.mjs"), codex_home: codexHome });
-  log("codex steer", JSON.stringify(steered));
+  // 共通Steerの登録・承認があるCODEX_HOMEをそのまま使う。専用hookの登録も、認証の複製も行わない。
+  // 承認設定とMCP登録は試験projectだけへ置き、利用者のconfig.toml・hooks.jsonを変更しない。
+  codexHome = process.env.CODEX_HOME ?? join(homedir(), ".codex");
+  writeFileSync(join(project, ".codex", "config.toml"), `approval_policy = "never"\nsandbox_mode = "danger-full-access"\n[mcp_servers.approval-box]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify(mcp.args)}\nenv_vars = ["CODEX_HOME"]\n${tomlEnv}`);
 } else if (harness === "cursor-cli") {
   const cursorHome = join(project, ".cursor");
   mkdirSync(cursorHome);
@@ -132,7 +116,7 @@ const deliveryOf = (id) => decisions.toApi(decisions.forUser(userId, id)).delive
 // ---- Aitermで本物のAIを起動 ----
 const aitermCommand = JSON.parse(process.env.AITERM_CMD ?? '["aiterm-mcp"]');
 // 親のAitermとClaude Codeの印を外す。残すと、試験の会話が親の子として扱われる（配送の相関が混ざる、会話の記録が残らない）。
-const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AITERM_") && k !== "CLAUDECODE" && !k.startsWith("CLAUDE_CODE_") && k !== "CLAUDE_PID" && k !== "CLAUDE_EFFORT")), ...(codexHome ? { CODEX_HOME: codexHome } : {}) };
+const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("AITERM_") && k !== "CLAUDECODE" && !k.startsWith("CLAUDE_CODE_") && k !== "CLAUDE_PID" && k !== "CLAUDE_EFFORT")), APPROVAL_BOX_HOME: kbHome, ...(codexHome ? { CODEX_HOME: codexHome } : {}) };
 const client = new Client({ name: "approval-box-e2e", version: "1" });
 await client.connect(new StdioClientTransport({ command: aitermCommand[0], args: aitermCommand.slice(1), env, stderr: "ignore" }));
 const call = (name, args) => client.callTool({ name, arguments: args }, undefined, { timeout: 600_000 });
@@ -219,7 +203,7 @@ let sid = null;
 // 試験の前から居たprocess（pidと開始のidentity）。再起動の手順は、ここに居るprocessを落とさない。
 const existingBefore = new Set(harness === "claude-code" ? steer.readRuntimeProcesses().map((row) => `${row.pid} ${row.started_identity}`) : []);
 try {
-  const launch = await call("agent_launch", { harness, cwd: project, trust_project: true, ...(harness === "cursor-cli" ? { model: "auto" } : {}), ...(codexHome ? { env_vars: ["CODEX_HOME"] } : {}), ...(installed ? { env_vars: ["APPROVAL_BOX_HOME"] } : {}) });
+  const launch = await call("agent_launch", { harness, cwd: project, trust_project: true, ...(harness === "cursor-cli" ? { model: "auto" } : {}), env_vars: ["APPROVAL_BOX_HOME", ...(codexHome ? ["CODEX_HOME"] : [])] });
   if (launch.isError) throw new Error(clean(launch));
   sid = launch.structuredContent.session_id;
   log("session", sid);
@@ -383,7 +367,6 @@ try {
   await sleep(5000);
   try { const lock = JSON.parse(readFileSync(join(kbHome, "state", "daemon.json"), "utf8")); process.kill(lock.pid); } catch {}
   if (saved) { copyFileSync(saved, configFile); rmSync(saved); } else rmSync(configFile, { force: true });
-  if (codexHome) await steer.configureCodexSteer(PROFILE, "disable", { hook: join(dist, "approval-box-codex-hook.mjs"), codex_home: codexHome }).catch((e) => log("steer disable:", e.message));
   const table = process.platform === "win32"
     ? execFileSync("pwsh", ["-NoProfile", "-Command", "(Get-CimInstance Win32_Process).CommandLine"], { encoding: "utf8" })
     : execFileSync("ps", ["-eo", "args"], { encoding: "utf8" });

@@ -58,7 +58,8 @@ npx -y approval-box@latest setup --server https://<あなたのURL>
 npm install
 npm test                                   # サーバーのAPI試験
 npm run build -w packages/connector
+node --test tools/e2e/parent-preflight.test.mjs # AIを起動せず、試験用の登録と設定の保持を検査
 node tools/e2e/parent-e2e.mjs claude-code  # 本物のAIで配送を確かめる（codex-cli・cursor-cli・grok-cli も）
 ```
 
-`parent-e2e.mjs` は試験用のフォルダの中だけにAIを登録し、利用者の設定には触れません。`npx approval-box setup` を試す時は、使い捨てのHOMEに加えて `CODEX_HOME`・`GROK_HOME`・`CLAUDE_CONFIG_DIR`・`CURSOR_HOME` も使い捨て側へ向けてください。
+`parent-e2e.mjs` は試験用のフォルダの中だけにAIを登録し、利用者の設定には触れません。コネクタの状態は、`APPROVAL_BOX_HOME` を省くと試験用フォルダへ隔離します。指定する場合も試験専用の置き場を使ってください。Codexは、Aitermの共通Steerが標準導入された既存の `CODEX_HOME` を使います。試験は専用hookを登録せず、既存の設定・hook・認証を書き換えません。`npx approval-box setup` 自体を試す時は、使い捨てのHOMEに加えて `CODEX_HOME`・`GROK_HOME`・`CLAUDE_CONFIG_DIR`・`CURSOR_HOME` も使い捨て側へ向けてください。
