@@ -1,4 +1,4 @@
-import { t } from "../i18n.ts";
+import { systemMessage, t } from "../i18n.ts";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "../api";
 import { navigate } from "../router";
@@ -114,8 +114,8 @@ export function Pair({ code }: { code: string }) {
   return (
     <section>
       <h1>{t("端末を追加")}</h1>
-      {error && <p class="error">{error}</p>}
-      {done && <><p class="notice">{done}</p><button class="ghost" onClick={() => navigate("/connections")}>{t("接続へ")}</button></>}
+      {error && <p class="error">{systemMessage(error)}</p>}
+      {done && <><p class="notice">{systemMessage(done)}</p><button class="ghost" onClick={() => navigate("/connections")}>{t("接続へ")}</button></>}
       {info && !done && (
         <div class="panel">
           <p>{t("次の端末を、あなたのApproval Boxに追加しますか？")}</p>

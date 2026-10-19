@@ -1,4 +1,4 @@
-import { t } from "../i18n.ts";
+import { systemMessage, t, type UiMessage } from "../i18n.ts";
 import { useEffect, useState } from "preact/hooks";
 import { api, fetchAttachment, uploadAttachment } from "../api";
 import type { Attachment } from "../types";
@@ -35,7 +35,7 @@ export function bytes(size: number): string {
 export function useDraftAttachments(decisionId: string, open: boolean) {
   const [items, setItems] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | UiMessage | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -51,17 +51,17 @@ export function useDraftAttachments(decisionId: string, open: boolean) {
     let list = items;
     for (const file of [...files]) {
       const type = typeOf(file);
-      if (!type) { setError(t("{name}: この形式は付けられません。", { name: file.name })); continue; }
-      if (file.size > MAX_FILE) { setError(t("{name}: 1つのファイルは20MBまでです。", { name: file.name })); continue; }
-      if (list.length >= MAX_COUNT) { setError(t("添付は{count}ファイルまでです。", { count: MAX_COUNT })); break; }
-      if (list.reduce((n, a) => n + a.size, 0) + file.size > MAX_TOTAL) { setError(t("添付は合計50MBまでです。")); continue; }
+      if (!type) { setError({ key: "{name}: この形式は付けられません。", values: { name: file.name } }); continue; }
+      if (file.size > MAX_FILE) { setError({ key: "{name}: 1つのファイルは20MBまでです。", values: { name: file.name } }); continue; }
+      if (list.length >= MAX_COUNT) { setError({ key: "添付は{count}ファイルまでです。", values: { count: MAX_COUNT } }); break; }
+      if (list.reduce((n, a) => n + a.size, 0) + file.size > MAX_TOTAL) { setError({ key: "添付は合計50MBまでです。" }); continue; }
       setUploading((n) => n + 1);
       try {
         const added = await uploadAttachment(decisionId, file, file.name, type);
         list = [...list.filter((a) => a.id !== added.id), added];
         setItems(list);
       } catch (e) {
-        setError(`${file.name}: ${(e as Error).message}`);
+        setError({ key: "{name}: {message}", values: { name: file.name }, cause: (e as Error).message });
       } finally {
         setUploading((n) => n - 1);
       }
@@ -158,7 +158,7 @@ function RequestImage({decisionId,item}:{decisionId:string;item:Attachment}) {
   return <li class="attachment">
     {url ? <button class="ghost" onClick={()=>setExpanded(true)} aria-label={t("{name}を拡大", { name: item.name })}><img src={url} alt={item.name} onError={()=>setError(t("この画像はブラウザで表示できません。原本を保存して開いてください。"))}/></button> : <span>{t("画像を読み込み中…")}</span>}
     <button class="attachment-name" disabled={!url} onClick={()=>setExpanded(true)} title={t("拡大する")}>{item.name}<span class="muted"> {bytes(item.size)}</span></button>
-    {error&&<div role="alert">{error} <button onClick={()=>setRetry(n=>n+1)}>{t("再読込")}</button></div>}
+    {error&&<div role="alert">{systemMessage(error)} <button onClick={()=>setRetry(n=>n+1)}>{t("再読込")}</button></div>}
     {url&&<a href={url} download={item.name}>{t("原本を保存")}</a>}
     {expanded&&url&&<div class="image-overlay" role="dialog" aria-modal="true" aria-label={item.name} onKeyDown={e=>{if(e.key==="Escape")setExpanded(false);}}>
       <button autoFocus onClick={()=>setExpanded(false)}>{t("閉じる")}</button><img src={url} alt={item.name}/>

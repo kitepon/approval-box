@@ -1,4 +1,4 @@
-import { t } from "../i18n.ts";
+import { systemMessage, t } from "../i18n.ts";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "../api";
 import { navigate } from "../router";
@@ -48,7 +48,7 @@ export function DecisionView({ id }: { id: string }) {
     return () => { alive = false; };
   }, [id, tick]);
 
-  if (error) return <section><p class="error">{error}</p><button class="ghost" onClick={() => navigate("/")}>{t("受信一覧へ")}</button></section>;
+  if (error) return <section><p class="error">{systemMessage(error)}</p><button class="ghost" onClick={() => navigate("/")}>{t("受信一覧へ")}</button></section>;
   if (!decision) return <section><p class="muted">{t("読み込み中…")}</p></section>;
   const d = decision;
   const open = d.status === "pending" || d.status === "held";
@@ -83,7 +83,7 @@ export function DecisionView({ id }: { id: string }) {
   return (
     <section class="decision">
       <button class="back" onClick={() => history.length > 1 ? history.back() : navigate("/")}>{t("‹ 戻る")}</button>
-      {notice && <p class="notice">{notice}</p>}
+      {notice && <p class="notice">{systemMessage(notice)}</p>}
       <div class="card-meta">
         <Source source={d.source} />
         <span class="time">{ago(d.created_at)}</span>
@@ -125,7 +125,7 @@ export function DecisionView({ id }: { id: string }) {
             <span>{t("添付（画像・書類、{count}ファイル・合計50MBまで。任意）", { count: MAX_COUNT })}</span>
             <AttachmentList decisionId={d.id} items={drafts.items} onRemove={drafts.remove} />
             {drafts.uploading > 0 && <p class="muted">{t("アップロード中…")}</p>}
-            {drafts.error && <p class="error">{drafts.error}</p>}
+            {drafts.error && <p class="error">{systemMessage(drafts.error)}</p>}
             {drafts.items.length < MAX_COUNT && (
               <label class="file-pick">{t("ファイルを追加")} <input type="file" multiple accept={ACCEPT} disabled={busy} onChange={(e) => { const input = e.target as HTMLInputElement; void drafts.add(input.files).then(() => { input.value = ""; }); }} />
               </label>

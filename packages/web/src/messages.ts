@@ -1,5 +1,6 @@
 /** Japanese source messages are also stable catalog keys; user content never enters this catalog. */
 export const en = {
+  "{name}: {message}": "{name}: {message}",
   "サーバーにつながりません。通信を確かめてください。": "Cannot connect to the server. Check your connection.",
   "その他": "Other", "急ぎ": "Urgent", "通常": "Normal", "低": "Low",
   "AIへの配送待ち": "Waiting for delivery to AI", "AIへ届いた": "Delivered to AI", "届いたか不明": "Delivery unconfirmed", "AIが受け取った": "Received by AI",

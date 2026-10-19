@@ -98,3 +98,10 @@ for(const language of [
     await page.getByRole("button",{name:language.remove,exact:true}).click();await expect.poll(()=>prompts.length).toBe(1);expect(prompts[0]).toBe(language.prompt);expect(writes).toBe(0);
   } finally {await ctx.close();}
 });
+
+test("visible API errors follow a language change without a retry or loss of request content",async({page})=>{
+  await fixture(page);
+  await page.route("**/v1/decisions?**",route=>route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:{code:"internal",message:"A server error occurred. Please try again later."}})}));
+  await page.goto("/");await expect(page.getByText("A server error occurred. Please try again later.",{exact:true})).toBeVisible();
+  await page.getByRole("combobox").selectOption("ko");await expect(page.getByText("서버에 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.",{exact:true})).toBeVisible();
+});

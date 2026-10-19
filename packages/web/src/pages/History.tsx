@@ -1,4 +1,4 @@
-import { t } from "../i18n.ts";
+import { systemMessage, t } from "../i18n.ts";
 import { useState } from "preact/hooks";
 import { api } from "../api";
 import { linkProps } from "../router";
@@ -21,7 +21,7 @@ export function History() {
   return (
     <section>
       <h1>{t("既決")}</h1>
-      {error && <p class="error">{error}</p>}
+      {error && <p class="error">{systemMessage(error)}</p>}
       {loading && !data && <p class="muted">{t("読み込み中…")}</p>}
       {data && !data.length && <p class="muted">{t("まだ答えた申請はありません。")}</p>}
       <div class="cards">

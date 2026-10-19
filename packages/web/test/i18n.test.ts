@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveLocale, translate, setLanguage, locale } from "../src/i18n.ts";
+import { resolveLocale, translate, setLanguage, locale, systemMessage } from "../src/i18n.ts";
 import { en } from "../src/messages.ts";
 import { ko, zhHans, zhHant } from "../src/messages-east-asian.ts";
 import { ago, URGENCY_LABEL, deadlineText } from "../src/format.ts";
@@ -47,6 +47,7 @@ test("visible Japanese literals outside the catalog must use a translation key",
     const ast = ts.createSourceFile(file, readFileSync(new URL(file,root),"utf8"), ts.ScriptTarget.Latest, true);
     function visit(node: import("typescript").Node) {
       if (ts.isCallExpression(node) && ["t","labels"].includes(node.expression.getText(ast))) return;
+      if (ts.isPropertyAssignment(node) && node.name.getText(ast) === "key" && ts.isStringLiteral(node.initializer) && Object.hasOwn(en, node.initializer.text)) return;
       if ((ts.isStringLiteral(node) && japanese.test(node.text)) || (ts.isJsxText(node) && japanese.test(node.text) && !["日本語","한국어","简体中文","繁體中文"].includes(node.text.trim()))) missing.push(file+": "+node.getText(ast));
       if (ts.isTemplateExpression(node) && japanese.test(node.getText(ast))) missing.push(file+": "+node.getText(ast));
       ts.forEachChild(node,visit);
@@ -66,4 +67,23 @@ test("Korean and Chinese scripts/regions resolve in preference order and retain 
   for(const language of ["ko","zh-Hans","zh-Hant"] as const) {
     assert.ok(translate(language,"{name}を外す",{name:"原文 $& <tag> {count}"}).includes("原文 $& <tag> {count}"));
   }
+});
+
+
+test("stored product errors and structured upload errors render in the current language", () => {
+  try {
+    const name = "原文 $& <tag> {count}.png";
+    const error = { key: "{name}: {message}" as const, values: { name }, cause: "A server error occurred. Please try again later." };
+    for (const language of ["ja", "en", "ko", "zh-Hans", "zh-Hant"] as const) {
+      setLanguage(language);
+      const rendered = systemMessage(error);
+      assert.ok(rendered.startsWith(name + ": "));
+      assert.equal(rendered, name + ": " + systemMessage(error.cause));
+      if (language !== "en") assert.notEqual(systemMessage(error.cause), error.cause);
+      assert.equal(systemMessage("利用者の自由な本文 $& {count}"), "利用者の自由な本文 $& {count}");
+      assert.equal(systemMessage("Settings"), translate(language, "設定"));
+    }
+    setLanguage("ko");
+    assert.equal(systemMessage({ key: "{name}: この形式は付けられません。", values: { name } }), `${name}: 지원하지 않는 파일 형식입니다.`);
+  } finally { setLanguage("ja"); }
 });

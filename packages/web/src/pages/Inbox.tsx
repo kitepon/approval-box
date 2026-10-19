@@ -1,4 +1,4 @@
-import { t } from "../i18n.ts";
+import { systemMessage, t } from "../i18n.ts";
 import { linkProps } from "../router";
 import { loadOpen, useResource } from "../store";
 import { ago, deadlineText, URGENCY_LABEL } from "../format";
@@ -32,7 +32,7 @@ export function Inbox() {
   return (
     <section>
       <h1>Approval Box</h1>
-      {error && <p class="error">{error}</p>}
+      {error && <p class="error">{systemMessage(error)}</p>}
       {loading && !data && <p class="muted">{t("読み込み中…")}</p>}
       {data && !data.length && (
         <div class="empty">

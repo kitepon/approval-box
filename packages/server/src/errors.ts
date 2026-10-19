@@ -65,6 +65,30 @@ const fallback: Record<Exclude<Locale, "ja" | "en">, Record<ErrorCode, string>> 
   },
 };
 
+/** Resolve only known fixed product messages; never translate arbitrary response/user text. */
+export function fixedErrorTranslation(message: string, locale: Locale): string | undefined {
+  const catalogs = { en: errorMessagesEn, ko: errorMessagesKo, "zh-Hans": errorMessagesHans, "zh-Hant": errorMessagesHant };
+  for (const catalog of Object.values(catalogs)) {
+    for (const [key, value] of Object.entries(catalog)) {
+      if (message === key || message === value) return locale === "ja" ? key : catalogs[locale][key];
+    }
+  }
+  const japanese: Record<ErrorCode, string> = {
+    validation_failed: "入力内容を確かめて、もう一度お試しください。", unauthorized: "ログイン情報が無効か期限切れです。もう一度ログインしてください。",
+    subscription_expired: "契約の期限が切れています。", not_found: "項目が見つかりません。", conflict: "現在の状態と競合しています。最新の内容を確かめてください。",
+    setup_not_verified: "セットアップを確認してから続けてください。", duplicate_suspected: "似た申請があります。内容を確認してください。", confirm_required: "申請内容を確認してから続けてください。",
+    rate_limited: "要求が多すぎます。少し待ってお試しください。", too_large: "アップロードの大きさか添付の数が上限を超えています。", unsupported_type: "対応していないファイル形式です。", internal: "サーバーで問題が起きました。時間を置いて試してください。",
+  };
+  for (const catalog of [english, japanese, ...Object.values(fallback)]) {
+    const entry = Object.entries(catalog).find(([, value]) => value === message);
+    if (entry) {
+      const code = entry[0] as ErrorCode;
+      return locale === "ja" ? japanese[code] : locale === "en" ? english[code] : fallback[locale][code];
+    }
+  }
+  return undefined;
+}
+
 /** api.md の「エラー」の形で返す誤り。message は表示言語へ翻訳する固定の案内。code/extra は不変。 */
 export class ApiError extends Error {
   readonly code: ErrorCode;

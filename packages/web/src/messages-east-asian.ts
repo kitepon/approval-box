@@ -1,6 +1,7 @@
 import type { MessageKey } from "./messages.ts";
 
 export const ko: Record<MessageKey, string> = {
+  "{name}: {message}": "{name}: {message}",
   "サーバーにつながりません。通信を確かめてください。": "서버에 연결할 수 없습니다. 네트워크 연결을 확인해 주세요.",
   "その他": "기타",
   "急ぎ": "긴급",
@@ -160,6 +161,7 @@ export const ko: Record<MessageKey, string> = {
 };
 
 export const zhHans: Record<MessageKey, string> = {
+  "{name}: {message}": "{name}: {message}",
   "サーバーにつながりません。通信を確かめてください。": "无法连接服务器，请检查网络连接。",
   "その他": "其他",
   "急ぎ": "紧急",
@@ -319,6 +321,7 @@ export const zhHans: Record<MessageKey, string> = {
 };
 
 export const zhHant: Record<MessageKey, string> = {
+  "{name}: {message}": "{name}: {message}",
   "サーバーにつながりません。通信を確かめてください。": "無法連線至伺服器，請檢查網路連線。",
   "その他": "其他",
   "急ぎ": "緊急",

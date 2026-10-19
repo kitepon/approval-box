@@ -1,3 +1,4 @@
+import { fixedErrorTranslation } from "../../server/src/errors.ts";
 import { useEffect, useState } from "preact/hooks";
 import { en, type MessageKey } from "./messages.ts";
 import { ko, zhHans, zhHant } from "./messages-east-asian.ts";
@@ -58,4 +59,15 @@ export function relative(value: number, unit: Intl.RelativeTimeFormatUnit): stri
 }
 export function days(count: number): string {
   return new Intl.NumberFormat(locale(), { style: "unit", unit: "day", unitDisplay: "long" }).format(count);
+}
+
+export type UiMessage = { key: MessageKey; values?: Record<string, string | number>; cause?: string };
+const reverseMessages = new Map<string, MessageKey>();
+for (const key of Object.keys(en) as MessageKey[]) reverseMessages.set(key, key);
+for (const catalog of [en, ko, zhHans, zhHant]) for (const [key, value] of Object.entries(catalog)) reverseMessages.set(value, key as MessageKey);
+/** For product notices/errors only. Decision content and file names bypass translation. */
+export function systemMessage(message: string | UiMessage): string {
+  if (typeof message !== "string") return t(message.key, { ...message.values, ...(message.cause === undefined ? {} : { message: systemMessage(message.cause) }) });
+  const key = reverseMessages.get(message);
+  return key ? t(key) : fixedErrorTranslation(message, locale()) ?? message;
 }
