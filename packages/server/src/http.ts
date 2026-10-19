@@ -7,7 +7,7 @@ import { z, ZodError } from "zod";
 import type { Accounts } from "./accounts.ts";
 import type { AppStore } from "./appstore.ts";
 import { type Attachment, type Attachments, MAX_FILE_BYTES, contentDisposition, mediaType, readLimited } from "./attachments.ts";
-import { type Db, get, run } from "./db.ts";
+import { type Db, get, run, tx } from "./db.ts";
 import { ApiError } from "./errors.ts";
 import type { EventHub, UserEvent } from "./events.ts";
 import { Decisions, amendSchema, answerSchema, createSchema, routeSchema } from "./decisions.ts";
@@ -146,6 +146,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       if (typeof form.id_token !== "string") return back({ error: "apple_error" });
       const id = await verifyIdToken("apple", form.id_token, { audiences: [services.webLogin!.apple_services_id!], nonce: flow.nonce, ...(services.idKeys ? { keys: services.idKeys } : {}) });
       const signed = accounts.signInWithIdentity("apple", id.sub, id.email);
+      accounts.bindAuthFlow(state, signed.user.id);
       accounts.revokeSession(signed.session); // ここで作ったsessionは使わない。アプリには一度きりのコードを渡す
       return back({ code: accounts.createAppCode(signed.user.id, flow.code_challenge) });
     } catch (error) {
@@ -268,7 +269,14 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   v1.post("/pairing/:id/reject", (c) => idempotent(c, services, c.get("userId"), () => { accounts.rejectPairing(c.get("userId"), c.req.param("id")); return { ok: true }; }));
 
   v1.get("/me", (c) => c.json(accounts.me(c.get("userId"))));
-  v1.delete("/me", (c) => { accounts.deleteUser(c.get("userId")); sweep(); return c.json({ ok: true }); });
+  v1.delete("/me", (c) => {
+    const userId = c.get("userId"), ids = services.attachments?.userFileIds(userId) ?? [];
+    tx(services.db, () => {
+      accounts.deleteUser(userId);
+      services.attachments?.eraseFiles(ids);
+    });
+    return c.json({ ok: true });
+  });
   v1.get("/me/settings", (c) => c.json(accounts.settings(c.get("userId"))));
   v1.patch("/me/settings", async (c) => {
     const input = await body(c, z.object({ retention_days: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(365)]) }));

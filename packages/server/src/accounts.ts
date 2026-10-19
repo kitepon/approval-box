@@ -4,6 +4,7 @@ import { ApiError } from "./errors.ts";
 import type { EventHub } from "./events.ts";
 import { hash, normalizePairingCode, now, pairingCode, secret, uuid } from "./ids.ts";
 import type { Connection } from "./decisions.ts";
+import { Diagnostics } from "./diagnostics.ts";
 
 const SESSION_DAYS = 90;
 const PAIRING_MINUTES = 10;
@@ -97,6 +98,10 @@ export class Accounts {
     });
   }
 
+  bindAuthFlow(state: string, userId: string) {
+    run(this.db, "update auth_flows set link_user_id=? where state=?", userId, state);
+  }
+
   /**
    * AppleかGoogleで入る。そのIDのアカウントがあればそこへ、無ければ作る。
    * 同じIDならどの画面から入っても同じアカウント。違うIDなら別のアカウント（結ぶ・まとめる操作は無い。クオの裁定）。
@@ -115,7 +120,10 @@ export class Accounts {
   }
 
   deleteUser(userId: string) {
-    run(this.db, "delete from users where id = ?", userId);
+    tx(this.db, () => {
+      new Diagnostics(this.db).removeUser(userId);
+      run(this.db, "delete from users where id = ?", userId);
+    });
   }
 
   me(userId: string) {

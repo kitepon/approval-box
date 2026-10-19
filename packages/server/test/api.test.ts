@@ -298,7 +298,11 @@ test("ブラウザで始めるAppleのログイン: callbackで確かめ、code_
   const link = (extra: Record<string, string>) => app.request("/v1/auth/link", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code, ...extra }) });
   assert.equal((await link({})).status, 400); // verifier が無ければ使えない
   assert.equal((await link({ code_verifier: randomBytes(32).toString("base64url") })).status, 401);
-  assert.equal((await link({ code_verifier: verifier })).status, 200);
+  const linked = await link({ code_verifier: verifier });
+  assert.equal(linked.status, 200);
+  const signed = await linked.json() as { session: string };
+  const signedUser = accounts.userBySession(signed.session);
+  assert.equal(db.prepare("select link_user_id from auth_flows where state=?").get(started.state)?.link_user_id, signedUser);
   assert.equal((await link({ code_verifier: verifier })).status, 401); // 一度きり
   // 同じ state は二度使えない・nonce違いは通らない
   assert.equal((await callback({ state: started.state, id_token: idToken(auth.searchParams.get("nonce")!, "apple-w1") })).searchParams.get("error"), "unauthorized");

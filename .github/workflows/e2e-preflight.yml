@@ -38,3 +38,5 @@ jobs:
       - run: npm run build -w packages/connector
       - name: 4ハーネスの起動前処理と設定の保持を確かめる（AI起動なし）
         run: node --test tools/e2e/parent-preflight.test.mjs
+      - name: アカウント削除と旧DB移行を確かめる（本番利用なし）
+        run: node --test packages/server/test/account-deletion.test.ts

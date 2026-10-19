@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.29
+# Approval Box API（アプリ・Web版向け） v0.30
+
+v0.30（2026-10-19）: アカウント削除の補助記録・診断・添付を含む処理を修理。DELETE /meの形式と成功応答は変更なし。対象アカウントに属するイベント、API応答の控え、ペアリング、確認札、成功済み認証flow、個別診断制限も削除する。診断の保持原本を間引いた後も所有者を保持し、共有groupは他利用者の原本へ戻す。対象由来の文を分離できない共有groupの自由記述の調査注記・解決注記は消すが、共有groupの状態と他利用者の原本、無関係なgroupは保つ。ファイルを消せなければ成功を返さず、認証を残して再試行可能にする。
 
 v0.29（2026-10-14）: クオの指摘「誰から何の仕事での決裁申請かわからないことがある」。今ある項目の型は変えていない。①`source` に任意の `requester`（申請したAIの名前。AIの自己申告）、`work_label`（AIが書いた作業名そのまま）、`connection_label`（接続＝端末の名前）を足した。②`source.session_label` は「誰から / 何の仕事」の一行にした。申請者がある時は `申請者 / 作業名`。今のアプリは `session_label` だけを出すので、直さなくても申請者が出る。申請者を別の場所へ出すアプリは、`requester` と `work_label` を使う（`session_label` と並べて出すと名前が二重になる）。③鳴らす通知の `aps.alert` に `subtitle`（`session_label` と同じ一行）を足した。④AIが申請する時の `requester`（任意）を `POST /connector/v1/decisions` に足した。詳細は「決裁」と「更新の知らせ」。
 
@@ -41,7 +43,7 @@ v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ�
     4. Appleは結果を `https://<host>/auth/apple/callback` へform_postする。サーバーはid_token（aud はServices ID、nonce はサーバーが入れた値）を確かめ、`approvalbox://auth/apple?code=kll_…&state=…` へ303で戻す。失敗は `approvalbox://auth/apple?error=<code>&state=…`。`<code>` は `cancelled`（利用者が取り消した）・`apple_error`・`unauthorized`（期限切れ・照合失敗）。
     5. アプリは戻った `state` が覚えたものと同じか確かめる。そのうえで `POST /auth/link` `{ code, code_verifier }`（両方必須）で session に替える。この code は、始めたアプリの `code_verifier` と合う時だけ、一度だけ使える（15分）。利用者が手で入れるものではない。
     - Androidの戻り先 `approvalbox://auth/apple` は、アプリのintent filterで受ける。
-- 開発用session（`admin create-user`）は試験用。アプリの画面からは使わない。
+- 運用確認用の `admin session <既存user_id>` は、通常の新規登録・ログインの代わりに使わない。`admin create-user` は廃止済み。
 - 401 `unauthorized` を受けたらsessionを捨ててログインへ戻す。
 - `POST /auth/logout`（Bearer必須）→ `{ ok: true }`。そのsessionを失効させる。端末の通知を止めるなら、先に `DELETE /devices/{id}`。
 
@@ -259,6 +261,8 @@ setup: {
 | DELETE | `/decisions?status=answered,cancelled` | 設定の「データ削除」。既決（answered・cancelled）だけを消す → `{ deleted: int }`。pending・heldは消さない（AIが答えを待っているため）。アカウント・接続・端末は残る |
 | GET | `/me/settings` | `{ retention_days: 7 \| 30 \| 90 \| 365 }`（既定30。既決をこの日数で自動削除） |
 | PATCH | `/me/settings` | `{ retention_days }` → 更新後の settings |
+
+`DELETE /me` は200 `{ ok: true }`。成功後の既存session・接続tokenは401となる。同じApple/Google IDで再度ログインすると、新しいUUIDのアカウントを作る。対象利用者の本文・tokenを含む補助記録と添付実ファイル（対象IDの残った.partも含む）を削除する。ファイルの削除に失敗した場合は5xxで、DBの削除を取り消して既存sessionでの再試行を可能にする。途中まで消えたファイルは戻らないため、削除の再試行では見つからないファイルを成功扱いする。他利用者のファイルは消さない。未所属・未使用の認証flowやglobalの送信制限総数は共有の運用情報として残す。外部のApple/Googleアカウントやストア契約をこのAPIで削除・解約するものではない。
 
 | POST | `/billing/appstore/verify` | iOS: 購入直後に `{ jws }` を送る。jws は StoreKit 2 の `jwsRepresentation`（署名付きtransaction）そのまま → 更新後の `/me` |
 | POST | `/billing/play/verify` | Android: 購入直後に `{ product_id, purchase_token }` を送る → 更新後の `/me`。承認（acknowledge）はサーバーが行う |

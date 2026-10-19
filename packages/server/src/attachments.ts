@@ -100,6 +100,22 @@ export class Attachments {
     return { id: row.id, name: row.name, content_type: row.content_type, kind: row.kind, size: row.size, sha256: row.sha256, created_at: row.created_at };
   }
 
+  userFileIds(userId: string): string[] {
+    return all<{ id: string }>(this.db, "select id from attachments where user_id=? union select id from request_uploads where user_id=?", userId, userId).map(r => r.id);
+  }
+
+  /** DB削除と同じ取引内で使い、ファイルを消せない時は成功を返さず再試行を可能にする。 */
+  eraseFiles(ids: string[]) {
+    for (const id of ids) {
+      // 行のcommit後、原本のrename前に停止していた場合の.partも当人のファイル。
+      for (const name of [id, `${id}.part`]) {
+        try { unlinkSync(join(this.dir, name)); } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+      }
+    }
+  }
+
   private open(userId: string, decisionId: string) {
     const decision = get<{ user_id: string; status: string }>(this.db, "select user_id, status from decisions where id = ?", decisionId);
     if (!decision || decision.user_id !== userId) throw new ApiError("not_found", "その申請は見つかりません。");

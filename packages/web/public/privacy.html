@@ -56,7 +56,7 @@
 <li>答えへの添付は、その申請と一緒に、同じ期間で削除します。上げたけれど答えに使わなかった添付は、24時間で削除します。</li>
 <li>接続したパソコンのコネクタは、AIへ届ける前に添付をそのパソコンの <code>~/.approval-box/attachments/</code> に保存し、30日後に削除します。このファイルは利用者のパソコンの中にあり、運営者は扱いません。</li>
 <li>購入履歴は、契約の状態を保つため、アカウントを削除するまで残ります。</li>
-<li>診断イベントは30日間、または全体の最新10,000件まで保存します。アカウントを削除すると、そのイベントと重複を防ぐための受領記録も削除します。アカウントの識別子を含まない集約診断は、最後に受け取ってから120日間保存します。</li>
+<li>診断イベントは30日間、または全体の最新10,000件まで保存します。アカウントを削除すると、そのイベントと重複を防ぐための受領記録も削除します。BugHubへ渡す集約診断にはアカウントの識別子を含めず、最後に受け取ってから120日間保存します。アカウント削除時に集約からも対象の本文を除くため、サーバー内では利用者ごとの寄与と最新の診断要約の対応を、その利用者から最後に受け取ってから最大120日間保持します。削除時にはこの対応と本人の要約も消し、他の利用者と共有する集約は他の利用者の要約へ置き換えます。本人由来の文を分離できない調査注記も削除します。</li>
 </ul>
 
 <h2>削除</h2>
@@ -76,7 +76,7 @@
 <h1>Privacy Policy</h1>
 <p class="muted">Approval Box (iPhone and Android apps, web app, and official server) — Effective October 2, 2026; updated October 8, 2026 (AI request images)</p>
 <p>Approval Box collects requests from AI agents (such as Claude Code, Codex, Cursor and Grok) that need your decision, approval or action, and lets you answer them. It is operated by kitepon.dev. This policy covers the official server (approval-box.kitepon.dev). The operator does not handle data on servers you host yourself.</p>
-<p>Diagnostics are used to investigate and fix application failures and are aggregated in the operator’s BugHub without account identifiers. Raw events are retained for 30 days or the latest 10,000 events. Account deletion removes associated events and deduplication receipts. Aggregates without account identifiers are retained for 120 days after the latest receipt.</p>
+<p>Diagnostics are used to investigate and fix application failures and are sent to the operator’s BugHub without account identifiers. Raw events are retained for 30 days or the latest 10,000 events. Account deletion removes associated events and deduplication receipts. Aggregates are retained for 120 days after the latest receipt. To remove your content from an aggregate on account deletion, the server retains a mapping of each account’s contributions and latest diagnostic summary for up to 120 days after that account’s last contribution. Deletion removes your mapping and summary, replaces a shared aggregate with another account’s summary, and removes investigation notes where your content cannot be separated.</p>
 <h2>Information we collect</h2>
 <ul>
 <li><strong>Account</strong>: the user identifier from Sign in with Apple or Sign in with Google, and your email address if provided (a relay address if you choose Hide My Email).</li>

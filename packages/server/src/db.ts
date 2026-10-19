@@ -22,9 +22,17 @@ create table if not exists diagnostic_receipts (
  user_id text not null references users(id) on delete cascade, event_id text not null,
  payload_hash text not null, created_at text not null, primary key(user_id,event_id)
 );
+create index if not exists diagnostic_receipts_event on diagnostic_receipts(event_id,payload_hash);
 create table if not exists diagnostic_rate (
  bucket text not null, scope text not null, count integer not null, primary key(bucket,scope)
 );
+create table if not exists diagnostic_group_sources (
+ fingerprint text not null references diagnostic_groups(fingerprint) on delete cascade,
+ user_id text not null references users(id) on delete cascade,
+ occurrence_count integer not null, first_seen text not null, last_seen text not null,
+ payload text not null, primary key(fingerprint,user_id)
+);
+create index if not exists diagnostic_group_sources_user on diagnostic_group_sources(user_id,fingerprint);
 
 create table if not exists users (
   id text primary key,
@@ -54,7 +62,7 @@ create table if not exists auth_flows (
   state text primary key,
   provider text not null,
   nonce text not null,
-  link_user_id text,
+  link_user_id text references users(id) on delete cascade,
   code_challenge text not null,
   created_at text not null,
   expires_at text not null,
@@ -88,8 +96,8 @@ create table if not exists pairings (
   os text,
   clients text not null default '[]',
   status text not null,
-  user_id text,
-  connection_id text,
+  user_id text references users(id) on delete cascade,
+  connection_id text references connections(id) on delete cascade,
   token text,
   created_at text not null,
   expires_at text not null
@@ -139,14 +147,14 @@ create table if not exists history (
 create index if not exists history_decision on history(decision_id);
 create table if not exists events (
   id integer primary key autoincrement,
-  user_id text not null,
+  user_id text not null references users(id) on delete cascade,
   type text not null,
   data text not null,
   at text not null
 );
 create index if not exists events_user on events(user_id, id);
 create table if not exists idempotency (
-  user_id text not null,
+  user_id text not null references users(id) on delete cascade,
   key text not null,
   route text not null,
   status integer not null,
@@ -188,7 +196,7 @@ create table if not exists request_uploads (
 );
 create table if not exists request_checks (
   token_hash text primary key,
-  connection_id text not null,
+  connection_id text not null references connections(id) on delete cascade,
   created_at text not null,
   expires_at text not null,
   used_at text
@@ -282,6 +290,46 @@ const MIGRATIONS: ((db: Db) => void)[] = [
   (db) => {
     const columns = all<{ name: string }>(db, "select name from pragma_table_info('decisions')").map((c) => c.name);
     if (!columns.includes("requester")) db.exec("alter table decisions add column requester text");
+  },
+  // 7: 削除対象の補助記録を所有者へ結び、保持原本を間引いた後も診断の帰属を残す。
+  (db) => {
+    const owned: [string, string][] = [
+      ["events", "exists(select 1 from users where id=user_id)"],
+      ["idempotency", "exists(select 1 from users where id=user_id)"],
+      ["pairings", "(user_id is null or exists(select 1 from users where id=user_id)) and (connection_id is null or exists(select 1 from connections where id=connection_id))"],
+      ["request_checks", "exists(select 1 from connections where id=connection_id)"],
+      ["auth_flows", "link_user_id is null or exists(select 1 from users where id=link_user_id)"],
+    ];
+    for (const [name, predicate] of owned) {
+      // 定義はschema一か所に置く。これらの表を参照する外部キーはない。
+      const definition = schema.match(new RegExp(`create table if not exists ${name} \\([\\s\\S]*?\\n\\);`))![0];
+      const sequence = get<{ seq: number }>(db, "select seq from sqlite_sequence where name=?", name)?.seq;
+      db.exec(`alter table ${name} rename to deletion_legacy_${name}`);
+      db.exec(definition);
+      db.exec(`insert into ${name} select * from deletion_legacy_${name} where ${predicate}`);
+      db.exec(`drop table deletion_legacy_${name}`);
+      if (sequence !== undefined) {
+        const updated = run(db, "update sqlite_sequence set seq=max(seq,?) where name=?", sequence, name);
+        if (!updated.changes) run(db, "insert into sqlite_sequence(name,seq) values (?,?)", name, sequence);
+      }
+    }
+    db.exec("create index if not exists events_user on events(user_id,id)");
+    // 旧callbackの消費済みflowは所有者を復元できない。再利用不能であり、未使用のflowや発行済みアプリコードには影響しない。
+    run(db, "delete from auth_flows where link_user_id is null and used_at is not null");
+    db.exec(`insert or ignore into diagnostic_group_sources
+      select d.fingerprint,d.user_id,count(*),min(d.received_at),max(d.received_at),
+        (select latest.payload from diagnostics latest where latest.fingerprint=d.fingerprint and latest.user_id=d.user_id and latest.received_at>=g.first_seen order by latest.received_at desc,latest.id desc limit 1)
+      from diagnostics d join diagnostic_groups g on g.fingerprint=d.fingerprint
+      where d.received_at>=g.first_seen group by d.fingerprint,d.user_id`);
+    // 原本が間引かれていても、最新payloadの所有者は長期保持の受領記録から復元できる。
+    for (const group of all<{ fingerprint: string; first_seen: string; last_seen: string; payload: string }>(db, "select * from diagnostic_groups")) {
+      const eventId = (JSON.parse(group.payload) as { event_id?: string }).event_id;
+      for (const owner of all<{ user_id: string }>(db, "select user_id from diagnostic_receipts where event_id=? and payload_hash=?", eventId ?? "", hash(group.payload))) {
+        run(db, "insert or ignore into diagnostic_group_sources values (?,?,0,?,?,?)", group.fingerprint, owner.user_id, group.first_seen, group.last_seen, group.payload);
+      }
+    }
+    db.exec("delete from diagnostic_groups where not exists(select 1 from diagnostic_group_sources s where s.fingerprint=diagnostic_groups.fingerprint)");
+    db.exec("delete from diagnostic_rate where scope<>'global' and not exists(select 1 from users where id=scope)");
   },
 ];
 
