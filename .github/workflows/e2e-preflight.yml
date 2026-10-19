@@ -39,7 +39,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run typecheck
-      - name: 日本語と英語の選択・補間・端末別通知を確かめる
+      - name: 表示言語の選択・補間・端末別通知を確かめる
         run: node --test packages/web/test/i18n.test.ts packages/server/test/locale.test.ts
       - name: 4ハーネスの起動前処理と設定の保持を確かめる（AI起動なし）
         run: node --test tools/e2e/parent-preflight.test.mjs

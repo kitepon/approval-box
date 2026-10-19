@@ -1,3 +1,4 @@
+import type { Locale } from "./locales.ts";
 // アプリへのプッシュ通知（今はiPhone＝APNsだけ。Android＝FCMは後で足す）。形は api.md の「更新の知らせ」。
 // 申請が来た・直された時だけ鳴らし、取り下げ・回答・配送は音なしでバッジと一覧だけを更新する。
 import { connect, type ClientHttp2Session } from "node:http2";
@@ -77,7 +78,7 @@ export class Notifier {
   async handle(userId: string, event: UserEvent) {
     if (event.type !== "decision.created" && event.type !== "decision.updated") return;
     const { decision_id: id, version, change } = event.data as { decision_id: string; version: number; change?: string };
-    const devices = all<{ id: string; apns_token: string; apns_env: string | null; locale: string }>(this.db, "select id, apns_token, apns_env, locale from devices where user_id = ? and platform = 'ios' and apns_token is not null", userId);
+    const devices = all<{ id: string; apns_token: string; apns_env: string | null; locale: Locale }>(this.db, "select id, apns_token, apns_env, locale from devices where user_id = ? and platform = 'ios' and apns_token is not null", userId);
     if (!devices.length) return;
     const decision = get<{ title: string; session_label: string; requester: string | null; via: string; route: string | null }>(this.db,
       "select title, session_label, requester, via, route from decisions where id = ?", id);
@@ -88,7 +89,7 @@ export class Notifier {
     const headers = { "apns-push-type": "alert", "apns-priority": "10" };
     await Promise.all(devices.map(async (device) => {
       // Translate fixed product text only; titles and requester labels remain verbatim.
-      const title = !loud || !decision ? undefined : event.type === "decision.created" ? decision.title : `${device.locale === "en" ? "Updated" : "修正"}: ${decision.title}`;
+      const title = !loud || !decision ? undefined : event.type === "decision.created" ? decision.title : `${({ ja: "修正", en: "Updated", ko: "수정", "zh-Hans": "已修改", "zh-Hant": "已修改" })[device.locale] ?? "修正"}: ${decision.title}`;
       const payload = title
         ? { aps: { alert: { title, subtitle: displayLabel(decision!) }, sound: "default", badge }, ...custom }
         : { aps: { "content-available": 1, badge }, ...custom };

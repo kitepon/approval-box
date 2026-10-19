@@ -11,6 +11,8 @@ import { Notifier } from "../src/push.ts";
 import { onboarding } from "../src/onboarding.ts";
 import { ApiError } from "../src/errors.ts";
 import { createApp } from "../src/http.ts";
+import { errorMessagesEn } from "../src/error-messages-en.ts";
+import { errorMessagesKo, errorMessagesHans, errorMessagesHant } from "../src/error-messages-east-asian.ts";
 import { requestLocale } from "../src/locale.ts";
 
 test("language negotiation honors quality, region and exclusions; legacy defaults to Japanese", () => {
@@ -39,11 +41,12 @@ test("HTTP error codes and structured fields stay stable across languages; devic
     const bad = await send("fr"); assert.equal(bad.status,400); assert.match((await bad.json()).error.message,/Check the request/);
   } finally { db.close(); }
 });
-test("two devices receive localized fixed push text while request content and silent updates stay intact", async () => {
+test("five device locales receive localized fixed push text while request content and silent updates stay intact", async () => {
   const { db, events, accounts, userId } = setup();
   try {
     const ja = accounts.registerDevice(userId, { platform:"ios",apns_token:"j" });
     accounts.registerDevice(userId, { platform:"ios",apns_token:"e",locale:"en" });
+    for (const locale of ["ko", "zh-Hans", "zh-Hant"] as const) accounts.registerDevice(userId,{platform:"ios",apns_token:locale,locale});
     // A legacy re-registration must not reset the explicit English preference.
     accounts.registerDevice(userId, { platform:"ios",apns_token:"e" });
     assert.equal(get<{locale:string}>(db,"select locale from devices where id=?",ja.id)?.locale,"ja");
@@ -59,6 +62,7 @@ test("two devices receive localized fixed push text while request content and si
     await notifier.handle(userId,{id:1,type:"decision.updated",data:{decision_id:d.id,version:2,change:"amended"}});
     assert.equal(sent.find(s=>s.token==="e")!.payload.aps.alert.title,"Updated: 日本語 request $&");
     assert.equal(sent.find(s=>s.token==="j")!.payload.aps.alert.title,"修正: 日本語 request $&");
+    for(const [token,prefix] of [["ko","수정"],["zh-Hans","已修改"],["zh-Hant","已修改"]]) assert.equal(sent.find(s=>s.token===token)!.payload.aps.alert.title,`${prefix}: 日本語 request $&`);
     assert.equal(sent[0]!.payload.aps.alert.subtitle,"名前 / 作業");
     sent.length=0;
     await notifier.handle(userId,{id:2,type:"decision.updated",data:{decision_id:d.id,version:3,change:"answered"}});
@@ -74,7 +78,7 @@ test("schema 7 device migration preserves existing fields and defaults only the 
     accounts.registerDevice(id,{platform:"ios",apns_token:"fixture",apns_env:"sandbox"});
     db.exec("alter table devices drop column locale; pragma user_version=7");
     const before=all(db,"select * from devices");db.close();db=openDb(file);
-    assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version,8);
+    assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version,9);
     const after=all<Record<string,unknown>>(db,"select * from devices");assert.equal(after[0]!.locale,"ja");
     assert.deepEqual(after.map(({locale,...rest})=>rest),before.map(row=>({...row as object})));db.close();
   } finally { rmSync(dir,{recursive:true,force:true}); }
@@ -91,4 +95,37 @@ test("onboarding translates fixed instructions without changing commands or prot
   const e=new ApiError("conflict","申請の内容が変わっています。最新の version で直してください。",{decision:{title:"原文"}});
   assert.equal(e.body("en").error.message,"The request has changed. Update it using the latest version.");
   assert.deepEqual(e.body("en").error.decision,{title:"原文"});
+});
+
+test("Korean and Chinese HTTP errors and instructions keep protocol data unchanged", async () => {
+  const {db,app,session}=setup();
+  try {
+    for(const [tag,locale,message] of [["ko-KR","ko","로그인해 주세요."],["zh-CN","zh-Hans","请登录。"],["zh-TW","zh-Hant","請登入。"],["zh-Hant-CN","zh-Hant","請登入。"]]) {
+      assert.equal(requestLocale(`fr,${tag};q=0.8,en;q=0.5`),locale);
+      const response=await app.request("/v1/me",{headers:{"Accept-Language":tag!}});
+      assert.equal(response.status,401);assert.equal(response.headers.get("content-language"),locale);
+      assert.deepEqual(await response.json(),{error:{code:"unauthorized",message}});
+      const device=await app.request("/v1/devices",{method:"POST",headers:{authorization:`Bearer ${session}`,"content-type":"application/json"},body:JSON.stringify({platform:"ios",apns_token:tag,locale})});
+      assert.equal(device.status,200);
+      const guide=await app.request("/v1/onboarding",{headers:{authorization:`Bearer ${session}`,"accept-language":tag!}});
+      assert.equal(guide.status,200);const data=await guide.json();assert.equal(data[0].client,"claude-code");assert.equal(data[0].steps[0].copy,"npx -y approval-box@latest setup --server https://example.test");
+    }
+    for(const catalog of [errorMessagesKo,errorMessagesHans,errorMessagesHant]) assert.deepEqual(Object.keys(catalog).sort(),Object.keys(errorMessagesEn).sort());
+  } finally {db.close();}
+});
+test("schema 8 locale constraint upgrade preserves all old device values and allows new locales", () => {
+  const dir=mkdtempSync(join(tmpdir(),"approval-locale8-")),file=join(dir,"db.sqlite");
+  try {
+    let db=openDb(file);const accounts=new Accounts(db,new EventHub(db),"off"),id=accounts.createUser();
+    accounts.registerDevice(id,{platform:"ios",apns_token:"j",apns_env:"sandbox"});accounts.registerDevice(id,{platform:"ios",apns_token:"e",apns_env:"production",locale:"en"});
+    const definition=get<{sql:string}>(db,"select sql from sqlite_master where name='devices'")!.sql;
+    db.exec("alter table devices rename to prior_devices");db.exec(definition.replace(",'ko','zh-Hans','zh-Hant'",""));
+    db.exec("insert into devices select * from prior_devices; drop table prior_devices; pragma user_version=8");
+    const before=all(db,"select * from devices order by id");db.close();db=openDb(file);
+    assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version,9);
+    assert.deepEqual(all(db,"select * from devices order by id"),before);
+    const updated=new Accounts(db,new EventHub(db),"off");updated.registerDevice(id,{platform:"ios",apns_token:"e",locale:"zh-Hant"});
+    assert.equal(get<{locale:string}>(db,"select locale from devices where apns_token='e'")?.locale,"zh-Hant");
+    updated.registerDevice(id,{platform:"ios",apns_token:"e"});assert.equal(get<{locale:string}>(db,"select locale from devices where apns_token='e'")?.locale,"zh-Hant");db.close();
+  } finally {rmSync(dir,{recursive:true,force:true});}
 });

@@ -73,3 +73,28 @@ test("English navigation and account controls fit a narrow phone screen",async({
     expect(box).not.toBeNull();expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(321);
   }
 });
+
+for(const language of [
+  {tag:"ko-KR",code:"ko",settings:"설정",send:"글로만 답변",remove:"계정과 모든 데이터 삭제",prompt:"확인을 위해 ‘삭제’를 입력해 주세요"},
+  {tag:"zh-CN",code:"zh-Hans",settings:"设置",send:"仅发送文字",remove:"删除账号及所有数据",prompt:"请输入“删除”以确认"},
+  {tag:"zh-TW",code:"zh-Hant",settings:"設定",send:"僅傳送文字",remove:"刪除帳號及所有資料",prompt:"請輸入「刪除」以確認"},
+]) test(`${language.code}: auto-detection, UI, literal content, drafts, persistence and confirmation`,async({browser})=>{
+  const ctx=await browser.newContext({locale:language.tag,viewport:{width:320,height:740}});const page=await ctx.newPage();
+  try {
+    await fixture(page);const headers:string[]=[];
+    page.on("request",req=>{if(new URL(req.url()).pathname==="/v1/me")headers.push(req.headers()["accept-language"]!);});
+    await page.goto("/d/K-TEST01");await expect(page.locator("html")).toHaveAttribute("lang",language.code);
+    await expect(page.getByRole("heading",{name:title})).toBeVisible();await expect(page.getByText(context,{exact:true})).toBeVisible();
+    await expect(page.getByRole("button",{name:language.send,exact:true})).toBeVisible();await page.getByRole("textbox").fill("답변 原文 $& <tag>");
+    await page.getByRole("combobox").selectOption("en");await expect(page.getByRole("button",{name:"Send text",exact:true})).toBeVisible();
+    await page.getByRole("combobox").selectOption(language.code);await expect(page.getByRole("textbox")).toHaveValue("답변 原文 $& <tag>");
+    await page.reload();await expect(page.getByRole("combobox")).toHaveValue(language.code);
+    await page.getByRole("link",{name:language.settings}).click();await expect(page.getByRole("heading",{name:language.settings,exact:true})).toBeVisible();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await expect.poll(()=>headers).toContain(language.code);
+    const prompts:string[]=[];let writes=0;
+    page.on("request",req=>{if(req.method()==="DELETE")writes++;});
+    page.on("dialog",async dialog=>{if(dialog.type()==="confirm")await dialog.accept();else{prompts.push(dialog.message());await dialog.accept("wrong");}});
+    await page.getByRole("button",{name:language.remove,exact:true}).click();await expect.poll(()=>prompts.length).toBe(1);expect(prompts[0]).toBe(language.prompt);expect(writes).toBe(0);
+  } finally {await ctx.close();}
+});

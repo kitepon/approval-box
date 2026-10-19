@@ -66,6 +66,6 @@ node tools/e2e/parent-e2e.mjs claude-code  # 本物のAIで配送を確かめる
 
 ### 表示言語 / Display language
 
-Web版は日本語と英語に対応します。画面上部の「言語 / Language」で「システムに合わせる・日本語・English」を選択できます。選択はブラウザへ保存され、システム設定ではブラウザの優先言語に追随します。未対応言語は日本語で表示します。申請・選択肢・回答などの本文は翻訳しません。Apple/Androidアプリの対応は各配布版の案内を確認してください。
+Web版は日本語・英語・韓国語・中国語（簡体字/繁体字）に対応します。画面上部の「言語 / Language」で「システムに合わせる・日本語・English・한국어・简体中文・繁體中文」を選択できます。選択はブラウザへ保存され、システム設定ではブラウザの優先言語に追随します。未対応言語は日本語で表示します。申請・選択肢・回答などの本文は翻訳しません。Apple/Androidアプリの対応は各配布版の案内を確認してください。
 
-The web app supports Japanese and English. Choose Use system language, 日本語, or English from Language at the top of the screen. Your choice is saved in the browser. Unsupported languages fall back to Japanese. Request content, options, and answers remain in their original language. Check the release notes for language support in each native app build.
+The web app supports Japanese, English, Korean, and Chinese (Simplified and Traditional). Choose Use system language, 日本語, English, 한국어, 简体中文, or 繁體中文 from Language at the top of the screen. Your choice is saved in the browser. Unsupported languages fall back to Japanese. Request content, options, and answers remain in their original language. Check the release notes for language support in each native app build.

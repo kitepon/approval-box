@@ -1,3 +1,4 @@
+import { LOCALES } from "./locales.ts";
 import { requestLocale } from "./locale.ts";
 import { Diagnostics, diagnosticsAdmin, readDiagnostic } from "./diagnostics.ts";
 import { type KeySource, type Provider, verifyIdToken } from "./oidc.ts";
@@ -258,7 +259,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   v1.post("/devices", async (c) => {
     const input = await body(c, z.object({
       platform: z.enum(["ios", "android", "web"]),
-      locale: z.enum(["ja", "en"]).optional(),
+      locale: z.enum(LOCALES).optional(),
       apns_token: z.string().min(1).max(400).optional(),
       apns_env: z.enum(["sandbox", "production"]).optional(),
       fcm_token: z.string().min(1).max(4096).optional(),

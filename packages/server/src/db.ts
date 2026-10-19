@@ -226,6 +226,7 @@ create table if not exists devices (
   push_key text not null,
   apns_token text,
   apns_env text,
+  locale text not null default 'ja' check(locale in ('ja','en','ko','zh-Hans','zh-Hant')),
   fcm_token text,
   web_push_subscription text,
   created_at text not null,
@@ -335,6 +336,16 @@ const MIGRATIONS: ((db: Db) => void)[] = [
   (db) => {
     const columns = all<{ name: string }>(db, "select name from pragma_table_info('devices')").map(c => c.name);
     if (!columns.includes("locale")) db.exec("alter table devices add column locale text not null default 'ja' check(locale in ('ja','en'))");
+  },
+  // 9: Extend the per-device locale constraint, preserving IDs, targets and preferences.
+  (db) => {
+    const definition = get<{ sql: string }>(db, "select sql from sqlite_master where name='devices'")?.sql ?? "";
+    if (definition.includes("'zh-Hant'")) return;
+    db.exec("alter table devices rename to locale_legacy_devices");
+    db.exec(DEVICES);
+    db.exec(`insert into devices (id,user_id,platform,push_key,apns_token,apns_env,fcm_token,web_push_subscription,created_at,updated_at,locale)
+      select id,user_id,platform,push_key,apns_token,apns_env,fcm_token,web_push_subscription,created_at,updated_at,locale from locale_legacy_devices`);
+    db.exec("drop table locale_legacy_devices");
   },
 ];
 

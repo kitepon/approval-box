@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.32
+# Approval Box API（アプリ・Web版向け） v0.33
+
+v0.33（2026-10-19）: オーナー指定の日本語・英語・韓国語・中国語へ拡張。中国語は簡体字/繁体字を区別し、端末 `locale` の任意enumは `ja | en | ko | zh-Hans | zh-Hant`。`Accept-Language` は同じ5 localeと地域タグに対応。中国語は明示scriptを優先、CN/SG/単独zhはHans、TW/HK/MOはHant。q優先度と対応言語の優先順を使い、対応が無ければja。既存端末のID/token/言語値を保持してschema9へ制約を拡張。未指定再登録は以前の値を維持する。固定UI/エラー/接続案内/通知接頭辞のみ翻訳し、申請/選択肢/回答本文やAPI識別値は変更しない。
 
 v0.32（2026-10-19）: 日本語/英語の表示に対応。APIエラーは `Accept-Language` のja/en（地域タグ・q優先順位対応）でmessageを選び、未指定/未対応は従来の日本語。英語は固定文の辞書（未収録の動的文はcode別案内）で、code・HTTP status・構造化extraは不変。冪等再送は言語を変えても初回応答をそのまま返す。`POST /devices`へ任意 `locale: "ja" | "en"` を追加。旧登録の日本語を維持し、同じ宛先の再登録では未指定なら既存値保持、指定なら更新。APNsの固定修正接頭辞を端末別に切り替え、申請件名・送信者・作業名は翻訳しない。言語変更/OS言語変更時は同じ端末tokenでlocaleを再登録する。`GET /onboarding`の固定案内も同じヘッダーで切り替える（コマンドとclient IDは不変）。DB schema8の追加列のみ。
 
@@ -253,7 +255,7 @@ setup: {
 
 | メソッド | パス | 内容 |
 |---|---|---|
-| POST | `/devices` | `{ platform: "ios" \| "android" \| "web", apns_token?, apns_env?: "sandbox" \| "production", locale?: "ja" \| "en", fcm_token?, web_push_subscription? }` → `{ id }` |
+| POST | `/devices` | `{ platform: "ios" \| "android" \| "web", apns_token?, apns_env?: "sandbox" \| "production", locale?: "ja" \| "en" \| "ko" \| "zh-Hans" \| "zh-Hant", fcm_token?, web_push_subscription? }` → `{ id }` |
 | DELETE | `/devices/{id}` | 解除（ログアウト時に呼ぶ） |
 
 ## アカウントと課金

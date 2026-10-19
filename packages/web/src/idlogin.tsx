@@ -41,14 +41,14 @@ export function IdLogin({ onDone, skip = [] }: { onDone: (r: Result) => void; sk
     if (!config?.google_client_id || skip.includes("google") || !googleRef.current) return;
     loadScript("https://accounts.google.com/gsi/client").then(() => {
       window.google!.accounts.id.initialize({ client_id: config.google_client_id, callback: (r: { credential: string }) => send("/auth/google", { id_token: r.credential }) });
-      window.google!.accounts.id.renderButton(googleRef.current!, { theme: "outline", size: "large", text: "signin_with", locale: language, width: 280 });
+      window.google!.accounts.id.renderButton(googleRef.current!, { theme: "outline", size: "large", text: "signin_with", locale: language === "zh-Hans" ? "zh-CN" : language === "zh-Hant" ? "zh-TW" : language, width: 280 });
     }).catch(() => setError(t("Googleのログインを読み込めませんでした。")));
   }, [config, language]);
 
   async function apple() {
     setError(null);
     try {
-      await loadScript(`https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/${locale() === "en" ? "en_US" : "ja_JP"}/appleid.auth.js`);
+      await loadScript(`https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/${({ ja: "ja_JP", en: "en_US", ko: "ko_KR", "zh-Hans": "zh_CN", "zh-Hant": "zh_TW" })[locale()]}/appleid.auth.js`);
       window.AppleID!.auth.init({ clientId: config!.apple_services_id, scope: "", redirectURI: `${location.origin}/auth/apple/callback`, usePopup: true });
       const r = await window.AppleID!.auth.signIn();
       await send("/auth/apple", { identity_token: r.authorization.id_token });
