@@ -77,21 +77,21 @@ export class Notifier {
   async handle(userId: string, event: UserEvent) {
     if (event.type !== "decision.created" && event.type !== "decision.updated") return;
     const { decision_id: id, version, change } = event.data as { decision_id: string; version: number; change?: string };
-    const devices = all<{ id: string; apns_token: string; apns_env: string | null }>(this.db, "select id, apns_token, apns_env from devices where user_id = ? and platform = 'ios' and apns_token is not null", userId);
+    const devices = all<{ id: string; apns_token: string; apns_env: string | null; locale: string }>(this.db, "select id, apns_token, apns_env, locale from devices where user_id = ? and platform = 'ios' and apns_token is not null", userId);
     if (!devices.length) return;
     const decision = get<{ title: string; session_label: string; requester: string | null; via: string; route: string | null }>(this.db,
       "select title, session_label, requester, via, route from decisions where id = ?", id);
     const badge = get<{ n: number }>(this.db, "select count(*) as n from decisions where user_id = ? and status = 'pending'", userId)?.n ?? 0;
     const loud = event.type === "decision.created" || change === "amended";
-    const title = !loud || !decision ? undefined : event.type === "decision.created" ? decision.title : `修正: ${decision.title}`;
     const custom = { type: event.type, ...(change ? { change } : {}), decision_id: id, version };
-    // 件名の下に「誰から / 何の仕事」を出す。件名だけでは、どの申請か分からない事がある（クオの指摘 2026-10-14）。
-    const payload = title
-      ? { aps: { alert: { title, subtitle: displayLabel(decision!) }, sound: "default", badge }, ...custom }
-      : { aps: { "content-available": 1, badge }, ...custom };
     // 音なしでもバッジは変えるので alert として送る。background はiOSが後回しや間引きをし、バッジが古いまま残る
     const headers = { "apns-push-type": "alert", "apns-priority": "10" };
     await Promise.all(devices.map(async (device) => {
+      // Translate fixed product text only; titles and requester labels remain verbatim.
+      const title = !loud || !decision ? undefined : event.type === "decision.created" ? decision.title : `${device.locale === "en" ? "Updated" : "修正"}: ${decision.title}`;
+      const payload = title
+        ? { aps: { alert: { title, subtitle: displayLabel(decision!) }, sound: "default", badge }, ...custom }
+        : { aps: { "content-available": 1, badge }, ...custom };
       const env = device.apns_env === "sandbox" ? "sandbox" : "production";
       const result = await this.send(env, device.apns_token, headers, payload);
       // tokenは書かない。届かない時に、Appleの返事を後から辿れるようにする

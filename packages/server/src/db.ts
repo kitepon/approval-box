@@ -331,6 +331,11 @@ const MIGRATIONS: ((db: Db) => void)[] = [
     db.exec("delete from diagnostic_groups where not exists(select 1 from diagnostic_group_sources s where s.fingerprint=diagnostic_groups.fingerprint)");
     db.exec("delete from diagnostic_rate where scope<>'global' and not exists(select 1 from users where id=scope)");
   },
+  // 8: Notification locale is per-device. Legacy registrations retain Japanese.
+  (db) => {
+    const columns = all<{ name: string }>(db, "select name from pragma_table_info('devices')").map(c => c.name);
+    if (!columns.includes("locale")) db.exec("alter table devices add column locale text not null default 'ja' check(locale in ('ja','en'))");
+  },
 ];
 
 function migrate(db: Db) {

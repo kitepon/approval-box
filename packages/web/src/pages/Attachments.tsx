@@ -1,3 +1,4 @@
+import { t } from "../i18n.ts";
 import { useEffect, useState } from "preact/hooks";
 import { api, fetchAttachment, uploadAttachment } from "../api";
 import type { Attachment } from "../types";
@@ -50,10 +51,10 @@ export function useDraftAttachments(decisionId: string, open: boolean) {
     let list = items;
     for (const file of [...files]) {
       const type = typeOf(file);
-      if (!type) { setError(`${file.name}: この形式は付けられません。`); continue; }
-      if (file.size > MAX_FILE) { setError(`${file.name}: 1つのファイルは20MBまでです。`); continue; }
-      if (list.length >= MAX_COUNT) { setError(`添付は${MAX_COUNT}ファイルまでです。`); break; }
-      if (list.reduce((n, a) => n + a.size, 0) + file.size > MAX_TOTAL) { setError("添付は合計50MBまでです。"); continue; }
+      if (!type) { setError(t("{name}: この形式は付けられません。", { name: file.name })); continue; }
+      if (file.size > MAX_FILE) { setError(t("{name}: 1つのファイルは20MBまでです。", { name: file.name })); continue; }
+      if (list.length >= MAX_COUNT) { setError(t("添付は{count}ファイルまでです。", { count: MAX_COUNT })); break; }
+      if (list.reduce((n, a) => n + a.size, 0) + file.size > MAX_TOTAL) { setError(t("添付は合計50MBまでです。")); continue; }
       setUploading((n) => n + 1);
       try {
         const added = await uploadAttachment(decisionId, file, file.name, type);
@@ -122,12 +123,12 @@ function AttachmentItem({ decisionId, item, onRemove }: { decisionId: string; it
 
   return (
     <li class="attachment">
-      {url ? <img src={url} alt={item.name} onClick={save} /> : <span class="attachment-icon">{item.kind === "image" ? "画像" : "書類"}</span>}
-      <button class="attachment-name" onClick={save} title="保存する">
+      {url ? <img src={url} alt={item.name} onClick={save} /> : <span class="attachment-icon">{item.kind === "image" ? t("画像") : t("書類")}</span>}
+      <button class="attachment-name" onClick={save} title={t("保存する")}>
         {item.name}
-        <span class="muted">{bytes(item.size)}{failed ? "・取れませんでした" : ""}</span>
+        <span class="muted">{bytes(item.size)}{failed ? t("・取れませんでした") : ""}</span>
       </button>
-      {onRemove && <button class="ghost small attachment-remove" onClick={() => onRemove(item.id)} aria-label={`${item.name}を外す`}>外す</button>}
+      {onRemove && <button class="ghost small attachment-remove" onClick={() => onRemove(item.id)} aria-label={t("{name}を外す", { name: item.name })}>{t("外す")}</button>}
     </li>
   );
 }
@@ -135,7 +136,7 @@ function AttachmentItem({ decisionId, item, onRemove }: { decisionId: string; it
 /** AI申請画像。回答下書きと分離し、認証取得/整合性確認後に拡大する。 */
 export function RequestImages({decisionId,items}:{decisionId:string;items:Attachment[]}) {
   if (!items.length) return null;
-  return <div class="request-images"><h2>AIの添付画像</h2><ul class="attachments">{items.map(a=><RequestImage key={a.id} decisionId={decisionId} item={a}/>)}</ul></div>;
+  return <div class="request-images"><h2>{t("AIの添付画像")}</h2><ul class="attachments">{items.map(a=><RequestImage key={a.id} decisionId={decisionId} item={a}/>)}</ul></div>;
 }
 function RequestImage({decisionId,item}:{decisionId:string;item:Attachment}) {
   const [url,setUrl]=useState<string|null>(null);
@@ -146,21 +147,21 @@ function RequestImage({decisionId,item}:{decisionId:string;item:Attachment}) {
     let alive=true;let made:string|null=null;
     setUrl(null);setError(null);
     fetchAttachment(decisionId,item.id).then(async blob=>{
-      if(blob.size!==item.size) throw new Error("画像の大きさが一致しません。");
+      if(blob.size!==item.size) throw new Error(t("画像の大きさが一致しません。"));
       const digest=await crypto.subtle.digest("SHA-256",await blob.arrayBuffer());
       const hex=[...new Uint8Array(digest)].map(n=>n.toString(16).padStart(2,"0")).join("");
-      if(hex!==item.sha256) throw new Error("画像を確認できませんでした。");
+      if(hex!==item.sha256) throw new Error(t("画像を確認できませんでした。"));
       if(alive){made=URL.createObjectURL(blob);setUrl(made);}
     }).catch(e=>alive&&setError((e as Error).message));
     return ()=>{alive=false;if(made)URL.revokeObjectURL(made);};
   },[decisionId,item.id,item.sha256,retry]);
   return <li class="attachment">
-    {url ? <button class="ghost" onClick={()=>setExpanded(true)} aria-label={`${item.name}を拡大`}><img src={url} alt={item.name} onError={()=>setError("この画像はブラウザで表示できません。原本を保存して開いてください。")}/></button> : <span>画像を読み込み中…</span>}
-    <button class="attachment-name" disabled={!url} onClick={()=>setExpanded(true)} title="拡大する">{item.name}<span class="muted"> {bytes(item.size)}</span></button>
-    {error&&<div role="alert">{error} <button onClick={()=>setRetry(n=>n+1)}>再読込</button></div>}
-    {url&&<a href={url} download={item.name}>原本を保存</a>}
+    {url ? <button class="ghost" onClick={()=>setExpanded(true)} aria-label={t("{name}を拡大", { name: item.name })}><img src={url} alt={item.name} onError={()=>setError(t("この画像はブラウザで表示できません。原本を保存して開いてください。"))}/></button> : <span>{t("画像を読み込み中…")}</span>}
+    <button class="attachment-name" disabled={!url} onClick={()=>setExpanded(true)} title={t("拡大する")}>{item.name}<span class="muted"> {bytes(item.size)}</span></button>
+    {error&&<div role="alert">{error} <button onClick={()=>setRetry(n=>n+1)}>{t("再読込")}</button></div>}
+    {url&&<a href={url} download={item.name}>{t("原本を保存")}</a>}
     {expanded&&url&&<div class="image-overlay" role="dialog" aria-modal="true" aria-label={item.name} onKeyDown={e=>{if(e.key==="Escape")setExpanded(false);}}>
-      <button autoFocus onClick={()=>setExpanded(false)}>閉じる</button><img src={url} alt={item.name}/>
+      <button autoFocus onClick={()=>setExpanded(false)}>{t("閉じる")}</button><img src={url} alt={item.name}/>
     </div>}
   </li>;
 }

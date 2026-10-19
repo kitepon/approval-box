@@ -1,3 +1,4 @@
+import { t } from "../i18n.ts";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "../api";
 import { navigate } from "../router";
@@ -13,8 +14,8 @@ function CopyLine({ text }: { text: string }) {
     <div class="copyline">
       <code>{text}</code>
       <button class="ghost small" onClick={async () => {
-        try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { prompt("コピーしてください", text); }
-      }}>{copied ? "済" : "コピー"}</button>
+        try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { prompt(t("コピーしてください"), text); }
+      }}>{copied ? t("済") : t("コピー")}</button>
     </div>
   );
 }
@@ -22,10 +23,10 @@ function CopyLine({ text }: { text: string }) {
 export function SetupGuide() {
   return (
     <div class="panel">
-      <h2>はじめに: PCにコネクタを入れる</h2>
-      <p>AI（Claude Code・Codex・Cursor・Grok）を使っているPCで、次を実行してください。</p>
+      <h2>{t("はじめに: PCにコネクタを入れる")}</h2>
+      <p>{t("AI（Claude Code・Codex・Cursor・Grok）を使っているPCで、次を実行してください。")}</p>
       <CopyLine text={INSTALL} />
-      <p class="muted">画面にQRコードとコードが出たら、下の「端末を追加」で読み取るか、コードを入力します。</p>
+      <p class="muted">{t("画面にQRコードとコードが出たら、下の「端末を追加」で読み取るか、コードを入力します。")}</p>
     </div>
   );
 }
@@ -47,20 +48,20 @@ export function Connections() {
   const [testing, setTesting] = useState<string | null>(null);
 
   async function revoke(c: Connection) {
-    if (!confirm(`「${c.label}」の接続を外します。この端末のAIはApproval Boxを使えなくなります。`)) return;
+    if (!confirm(t("「{name}」の接続を外します。この端末のAIはApproval Boxを使えなくなります。", { name: c.label }))) return;
     try { await api("DELETE", `/connections/${c.id}`); bump(); } catch (e) { alert((e as Error).message); }
   }
 
   return (
     <section>
-      <h1>接続</h1>
+      <h1>{t("接続")}</h1>
       <div class="panel">
-        <h2>端末を追加</h2>
+        <h2>{t("端末を追加")}</h2>
         <form class="row" onSubmit={(e) => { e.preventDefault(); if (code.trim()) navigate(`/pair?c=${encodeURIComponent(code.trim())}`); }}>
           <input class="code-input" value={code} onInput={(e) => setCode((e.target as HTMLInputElement).value)} placeholder="ABCD-EFGH" autocomplete="off" autocapitalize="characters" />
-          <button class="primary" type="submit">次へ</button>
+          <button class="primary" type="submit">{t("次へ")}</button>
         </form>
-        <p class="muted">PCで <code>npx -y approval-box@latest setup</code> を実行すると出るコードです。QRコードはスマホのカメラで読めます。</p>
+        <p class="muted">{t("PCで次のコマンドを実行すると出るコードです。QRコードはスマホのカメラで読めます。")} <code>{INSTALL}</code></p>
       </div>
 
       {conns.data && !conns.data.length && <SetupGuide />}
@@ -75,19 +76,19 @@ export function Connections() {
             </div>
             <ul class="checks">{checks.map(checkLine)}</ul>
             <div class="row">
-              <button class="ghost" onClick={() => setTesting(c.id)}>接続テスト</button>
-              <button class="ghost danger" onClick={() => revoke(c)}>外す</button>
+              <button class="ghost" onClick={() => setTesting(c.id)}>{t("接続テスト")}</button>
+              <button class="ghost danger" onClick={() => revoke(c)}>{t("外す")}</button>
             </div>
             {testing === c.id && (
-              <p class="notice">テストしたいAIを開いて「<strong>Approval Boxのsetup_testを実行して</strong>」と言ってください。テストの申請が受信一覧に届くので、答えるとAIへ届き、ここが「確認済み」になります。</p>
+              <p class="notice">{t("テストしたいAIに次のように伝えてください。")} <strong>{t("Approval Boxのsetup_testを実行して")}</strong>{t("テストの申請に答えると、AIが受け取り、ここが「確認済み」になります。")}</p>
             )}
           </div>
         );
       })}
 
       <div class="panel">
-        <h2>チャットのAI（Claude・ChatGPT）</h2>
-        <p class="muted">Claude.ai・ChatGPTのコネクタからの接続は準備中です。</p>
+        <h2>{t("チャットのAI（Claude・ChatGPT）")}</h2>
+        <p class="muted">{t("Claude.ai・ChatGPTのコネクタからの接続は準備中です。")}</p>
       </div>
     </section>
   );
@@ -105,28 +106,28 @@ export function Pair({ code }: { code: string }) {
   async function decide(claim: boolean) {
     try {
       await api("POST", `/pairing/${info!.pairing_id}/${claim ? "claim" : "reject"}`);
-      setDone(claim ? "追加しました。PCの画面でセットアップが続きます。" : "断りました。この端末は追加されません。");
+      setDone(claim ? t("追加しました。PCの画面でセットアップが続きます。") : t("断りました。この端末は追加されません。"));
       bump();
     } catch (e) { setError((e as Error).message); }
   }
 
   return (
     <section>
-      <h1>端末を追加</h1>
+      <h1>{t("端末を追加")}</h1>
       {error && <p class="error">{error}</p>}
-      {done && <><p class="notice">{done}</p><button class="ghost" onClick={() => navigate("/connections")}>接続へ</button></>}
+      {done && <><p class="notice">{done}</p><button class="ghost" onClick={() => navigate("/connections")}>{t("接続へ")}</button></>}
       {info && !done && (
         <div class="panel">
-          <p>次の端末を、あなたのApproval Boxに追加しますか？</p>
+          <p>{t("次の端末を、あなたのApproval Boxに追加しますか？")}</p>
           <dl class="pairing">
-            <dt>端末名</dt><dd>{info.device_name}</dd>
+            <dt>{t("端末名")}</dt><dd>{info.device_name}</dd>
             {info.os && <><dt>OS</dt><dd>{info.os}</dd></>}
-            <dt>使うAI</dt><dd>{info.clients.map(clientLabel).join("・") || "—"}</dd>
+            <dt>{t("使うAI")}</dt><dd>{info.clients.map(clientLabel).join("・") || "—"}</dd>
           </dl>
-          <p class="muted">自分で approval-box の setup を実行した覚えがなければ「心当たりがない」を押してください。</p>
+          <p class="muted">{t("自分で approval-box の setup を実行した覚えがなければ「心当たりがない」を押してください。")}</p>
           <div class="row">
-            <button class="primary" onClick={() => decide(true)}>この端末を追加</button>
-            <button class="ghost danger" onClick={() => decide(false)}>心当たりがない</button>
+            <button class="primary" onClick={() => decide(true)}>{t("この端末を追加")}</button>
+            <button class="ghost danger" onClick={() => decide(false)}>{t("心当たりがない")}</button>
           </div>
         </div>
       )}

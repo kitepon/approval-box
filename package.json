@@ -2,11 +2,22 @@
   "name": "approval-box-monorepo",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/server", "packages/web", "packages/connector"],
+  "workspaces": [
+    "packages/server",
+    "packages/web",
+    "packages/connector"
+  ],
   "scripts": {
     "build": "npm run build -w packages/server -w packages/web -w packages/connector",
     "test": "npm test -w packages/server -w packages/connector",
-    "typecheck": "npm run typecheck -w packages/server -w packages/connector"
+    "typecheck": "npm run typecheck -w packages/server -w packages/web -w packages/connector",
+    "test:web": "node --test packages/web/test/*.test.ts",
+    "test:web:browser": "playwright test -c packages/web/playwright.config.ts"
   },
-  "engines": { "node": ">=22.13" }
+  "engines": {
+    "node": ">=22.13"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1"
+  }
 }

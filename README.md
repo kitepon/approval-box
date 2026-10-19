@@ -63,3 +63,9 @@ node tools/e2e/parent-e2e.mjs claude-code  # 本物のAIで配送を確かめる
 ```
 
 `parent-e2e.mjs` は試験用のフォルダの中だけにAIを登録し、利用者の設定には触れません。コネクタの状態は、`APPROVAL_BOX_HOME` を省くと試験用フォルダへ隔離します。指定する場合も試験専用の置き場を使ってください。Codexは、Aitermの共通Steerが標準導入された既存の `CODEX_HOME` を使います。試験は専用hookを登録せず、既存の設定・hook・認証を書き換えません。`npx approval-box setup` 自体を試す時は、使い捨てのHOMEに加えて `CODEX_HOME`・`GROK_HOME`・`CLAUDE_CONFIG_DIR`・`CURSOR_HOME` も使い捨て側へ向けてください。
+
+### 表示言語 / Display language
+
+Web版は日本語と英語に対応します。画面上部の「言語 / Language」で「システムに合わせる・日本語・English」を選択できます。選択はブラウザへ保存され、システム設定ではブラウザの優先言語に追随します。未対応言語は日本語で表示します。申請・選択肢・回答などの本文は翻訳しません。Apple/Androidアプリの対応は各配布版の案内を確認してください。
+
+The web app supports Japanese and English. Choose Use system language, 日本語, or English from Language at the top of the screen. Your choice is saved in the browser. Unsupported languages fall back to Japanese. Request content, options, and answers remain in their original language. Check the release notes for language support in each native app build.

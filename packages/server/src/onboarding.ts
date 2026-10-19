@@ -12,8 +12,17 @@ const CLIENTS: { client: string; name: string; note?: string }[] = [
   { client: "grok", name: "Grok" },
 ];
 
-export function onboarding(publicUrl: string): Guide[] {
+export function onboarding(publicUrl: string, locale: "ja" | "en" = "ja"): Guide[] {
   const command = `npx -y approval-box@latest setup --server ${publicUrl}`;
+  if (locale === "en") return CLIENTS.map(({ client, name }) => ({
+    client, title: `Set up ${name}`,
+    steps: [
+      { text: "Run this command in a terminal on your computer. It registers Approval Box with Claude Code, Codex, Cursor, and Grok (Node.js 20 or later required).", copy: command },
+      { text: "Scan the QR code or enter the code under Add a device on this screen. On a headless computer, use the command from Issue token." },
+      { text: `Restart ${name} and ask:`, copy: "Run Approval Box setup_test" },
+      { text: `Answer the test request. Setup is complete when your answer reaches ${name}.${client === "codex" ? " To receive answers while working, close all open Codex windows and reopen them." : client === "cursor" ? " Cursor may ask once for permission to run the command that receives your answer. Allow it to continue." : ""}` },
+    ],
+  }));
   return CLIENTS.map(({ client, name, note }) => ({
     client,
     title: `${name}を登録する`,

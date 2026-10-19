@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.31
+# Approval Box API（アプリ・Web版向け） v0.32
+
+v0.32（2026-10-19）: 日本語/英語の表示に対応。APIエラーは `Accept-Language` のja/en（地域タグ・q優先順位対応）でmessageを選び、未指定/未対応は従来の日本語。英語は固定文の辞書（未収録の動的文はcode別案内）で、code・HTTP status・構造化extraは不変。冪等再送は言語を変えても初回応答をそのまま返す。`POST /devices`へ任意 `locale: "ja" | "en"` を追加。旧登録の日本語を維持し、同じ宛先の再登録では未指定なら既存値保持、指定なら更新。APNsの固定修正接頭辞を端末別に切り替え、申請件名・送信者・作業名は翻訳しない。言語変更/OS言語変更時は同じ端末tokenでlocaleを再登録する。`GET /onboarding`の固定案内も同じヘッダーで切り替える（コマンドとclient IDは不変）。DB schema8の追加列のみ。
 
 v0.31（2026-10-19）: アプリ診断の固定error_domainに`UNErrorDomain`を追加受理する。通知APIの例外を`other`と分けて保存できるようにし、自由なdomainやNSError.userInfoは受け付けない。既存の原本・fingerprint規則・重大度の既定値・診断schema版は変更しない。旧`other`を後から通知許可拒否へ読み替えず、通知の実害・許可状態・回復は送信元の観測を根拠に評価する。詳細は[diagnostics.md](diagnostics.md)。
 
@@ -251,7 +253,7 @@ setup: {
 
 | メソッド | パス | 内容 |
 |---|---|---|
-| POST | `/devices` | `{ platform: "ios" \| "android" \| "web", apns_token?, apns_env?: "sandbox" \| "production", fcm_token?, web_push_subscription? }` → `{ id }` |
+| POST | `/devices` | `{ platform: "ios" \| "android" \| "web", apns_token?, apns_env?: "sandbox" \| "production", locale?: "ja" \| "en", fcm_token?, web_push_subscription? }` → `{ id }` |
 | DELETE | `/devices/{id}` | 解除（ログアウト時に呼ぶ） |
 
 ## アカウントと課金

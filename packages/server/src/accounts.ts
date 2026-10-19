@@ -201,17 +201,17 @@ export class Accounts {
 
   // ---- 通知を受ける端末（アプリ・Web Push）。同じ宛先（tokenやsubscription）は同じidに上書きする ----
 
-  registerDevice(userId: string, input: { platform: "ios" | "android" | "web"; apns_token?: string; apns_env?: "sandbox" | "production"; fcm_token?: string; web_push_subscription?: unknown }) {
+  registerDevice(userId: string, input: { platform: "ios" | "android" | "web"; locale?: "ja" | "en"; apns_token?: string; apns_env?: "sandbox" | "production"; fcm_token?: string; web_push_subscription?: unknown }) {
     const subscription = input.web_push_subscription === undefined ? null : JSON.stringify(input.web_push_subscription);
     const key = input.platform === "ios" ? input.apns_token : input.platform === "android" ? input.fcm_token : subscription;
     if (!key) throw new ApiError("validation_failed", input.platform === "ios" ? "apns_token が要ります。" : input.platform === "android" ? "fcm_token が要ります。" : "web_push_subscription が要ります。");
     const pushKey = `${input.platform}:${hash(key)}`;
-    const existing = get<{ id: string }>(this.db, "select id from devices where user_id = ? and push_key = ?", userId, pushKey);
+    const existing = get<{ id: string; locale: "ja" | "en" }>(this.db, "select id, locale from devices where user_id = ? and push_key = ?", userId, pushKey);
     const id = existing?.id ?? uuid();
-    run(this.db, `insert into devices (id, user_id, platform, push_key, apns_token, apns_env, fcm_token, web_push_subscription, created_at, updated_at)
-      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      on conflict(user_id, push_key) do update set apns_env = excluded.apns_env, updated_at = excluded.updated_at`,
-      id, userId, input.platform, pushKey, input.apns_token ?? null, input.apns_env ?? null, input.fcm_token ?? null, subscription, now(), now());
+    run(this.db, `insert into devices (id, user_id, platform, push_key, apns_token, apns_env, fcm_token, web_push_subscription, created_at, updated_at, locale)
+      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      on conflict(user_id, push_key) do update set apns_env = excluded.apns_env, updated_at = excluded.updated_at, locale = excluded.locale`,
+      id, userId, input.platform, pushKey, input.apns_token ?? null, input.apns_env ?? null, input.fcm_token ?? null, subscription, now(), now(), input.locale ?? existing?.locale ?? "ja");
     return { id };
   }
 

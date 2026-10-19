@@ -124,7 +124,7 @@ test("schema6 migration removes orphan replies/payloads and preserves living dia
   run(db, "insert into diagnostic_groups (fingerprint,severity,message_template,occurrence_count,first_seen,last_seen,status,payload) values ('orphan','high','old',2,'2000','2000','resolved',?)", JSON.stringify({ ...input, event_id: randomUUID() }));
   db.exec("pragma user_version=6"); db.close();
   db = openDb(file);
-  assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 7);
+  assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 8);
   assert.equal(get(db, "select * from idempotency where user_id='gone'"), undefined);
   assert.equal(get(db, "select * from diagnostic_groups where fingerprint='orphan'"), undefined);
   assert.deepEqual(all(db, "select * from diagnostic_groups"), before);

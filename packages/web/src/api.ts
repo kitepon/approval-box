@@ -1,3 +1,4 @@
+import { t, locale } from "./i18n.ts";
 import type { ApiErrorBody, Attachment } from "./types";
 
 const SESSION_KEY = "approval-box.session";
@@ -23,7 +24,7 @@ let onUnauthorized: () => void = () => {};
 export const setUnauthorizedHandler = (fn: () => void) => { onUnauthorized = fn; };
 
 export async function api<T>(method: string, path: string, body?: unknown, options: { idempotent?: boolean } = {}): Promise<T> {
-  const headers: Record<string, string> = { "content-type": "application/json" };
+  const headers: Record<string, string> = { "content-type": "application/json", "accept-language": locale() };
   const session = getSession();
   if (session) headers.authorization = `Bearer ${session}`;
   if (options.idempotent ?? method !== "GET") headers["idempotency-key"] = crypto.randomUUID();
@@ -35,7 +36,7 @@ export async function api<T>(method: string, path: string, body?: unknown, optio
       response = await fetch(`/v1${path}`, { method, headers: { ...headers, ...(key ? { "idempotency-key": key } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
     } catch (error) {
       if (attempt === 0 && key) continue;
-      throw new ApiError(0, { code: "network", message: "サーバーにつながりません。通信を確かめてください。" });
+      throw new ApiError(0, { code: "network", message: t("サーバーにつながりません。通信を確かめてください。") });
     }
     const text = await response.text();
     const json = text ? JSON.parse(text) : {};
@@ -60,11 +61,11 @@ export async function uploadAttachment(decisionId: string, file: Blob, name: str
     let response: Response;
     try {
       response = await fetch(`/v1/decisions/${encodeURIComponent(decisionId)}/attachments?name=${encodeURIComponent(name)}`, {
-        method: "POST", headers: { authorization: `Bearer ${getSession() ?? ""}`, "content-type": contentType, "idempotency-key": key }, body: file,
+        method: "POST", headers: { "accept-language": locale(), authorization: `Bearer ${getSession() ?? ""}`, "content-type": contentType, "idempotency-key": key }, body: file,
       });
     } catch {
       if (attempt === 0) continue;
-      throw new ApiError(0, { code: "network", message: "サーバーにつながりません。通信を確かめてください。" });
+      throw new ApiError(0, { code: "network", message: t("サーバーにつながりません。通信を確かめてください。") });
     }
     if (response.ok) return (await response.json()) as Attachment;
     if (response.status >= 500 && attempt === 0) continue;
@@ -76,9 +77,9 @@ export async function uploadAttachment(decisionId: string, file: Blob, name: str
 export async function fetchAttachment(decisionId: string, attachmentId: string): Promise<Blob> {
   let response: Response;
   try {
-    response = await fetch(`/v1/decisions/${encodeURIComponent(decisionId)}/attachments/${encodeURIComponent(attachmentId)}`, { headers: { authorization: `Bearer ${getSession() ?? ""}` } });
+    response = await fetch(`/v1/decisions/${encodeURIComponent(decisionId)}/attachments/${encodeURIComponent(attachmentId)}`, { headers: { "accept-language": locale(), authorization: `Bearer ${getSession() ?? ""}` } });
   } catch {
-    throw new ApiError(0, { code: "network", message: "サーバーにつながりません。通信を確かめてください。" });
+    throw new ApiError(0, { code: "network", message: t("サーバーにつながりません。通信を確かめてください。") });
   }
   if (!response.ok) throw await failure(response);
   return response.blob();
@@ -95,7 +96,7 @@ export function subscribeEvents(onEvent: (type: string, data: Record<string, unk
       try {
         controller = new AbortController();
         const response = await fetch("/v1/events", {
-          headers: { authorization: `Bearer ${getSession() ?? ""}`, accept: "text/event-stream", ...(lastId ? { "last-event-id": String(lastId) } : {}) },
+          headers: { "accept-language": locale(), authorization: `Bearer ${getSession() ?? ""}`, accept: "text/event-stream", ...(lastId ? { "last-event-id": String(lastId) } : {}) },
           signal: controller.signal,
         });
         if (response.status === 401) { setSession(null); onUnauthorized(); return; }

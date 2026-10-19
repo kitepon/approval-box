@@ -7,6 +7,7 @@ on:
       - "tools/e2e/**"
       - "packages/connector/**"
       - "packages/server/**"
+      - "packages/web/**"
       - "package*.json"
       - ".github/workflows/e2e-preflight.yml"
   pull_request:
@@ -14,6 +15,7 @@ on:
       - "tools/e2e/**"
       - "packages/connector/**"
       - "packages/server/**"
+      - "packages/web/**"
       - "package*.json"
       - ".github/workflows/e2e-preflight.yml"
   workflow_dispatch:
@@ -35,10 +37,25 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
-      - run: npm run build -w packages/connector
+      - run: npm run build
+      - run: npm run typecheck
+      - name: 日本語と英語の選択・補間・端末別通知を確かめる
+        run: node --test packages/web/test/i18n.test.ts packages/server/test/locale.test.ts
       - name: 4ハーネスの起動前処理と設定の保持を確かめる（AI起動なし）
         run: node --test tools/e2e/parent-preflight.test.mjs
       - name: アカウント削除と旧DB移行を確かめる（本番利用なし）
         run: node --test packages/server/test/account-deletion.test.ts
       - name: 診断の入力境界・原本保持・集計を確かめる（本番利用なし）
         run: node --test packages/server/test/diagnostics.test.ts
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:web:browser

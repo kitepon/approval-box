@@ -1,3 +1,4 @@
+import { requestLocale } from "./locale.ts";
 import { Diagnostics, diagnosticsAdmin, readDiagnostic } from "./diagnostics.ts";
 import { type KeySource, type Provider, verifyIdToken } from "./oidc.ts";
 import { onboarding } from "./onboarding.ts";
@@ -62,7 +63,7 @@ async function idempotent(c: Context, services: Services, userId: string, fn: ()
   } catch (error) {
     if (!(error instanceof ApiError) || error.status >= 500 || error.code === "rate_limited") throw error;
     status = error.status;
-    payload = error.body();
+    payload = error.body(requestLocale(c.req.header("Accept-Language")));
   }
   const text = JSON.stringify(payload);
   if (key) run(services.db, "insert or replace into idempotency (user_id, key, route, status, body, created_at) values (?, ?, ?, ?, ?, ?)", userId, key, route, status, text, now());
@@ -93,17 +94,20 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   const app = new Hono();
 
   app.onError((error, c) => {
+    const locale = requestLocale(c.req.header("Accept-Language"));
+    c.header("Content-Language", locale);
+    c.header("Vary", "Accept-Language");
     if (error instanceof ApiError) {
       if (error.retryAfter) c.header("Retry-After", String(error.retryAfter));
-      return c.json(error.body(), error.status as 400);
+      return c.json(error.body(locale), error.status as 400);
     }
     if (error instanceof ZodError) {
       const issue = error.issues[0];
       const where = issue?.path.length ? `${issue.path.join(".")}: ` : "";
-      return c.json(new ApiError("validation_failed", `入力が正しくありません。${where}${issue?.message ?? ""}`).body(), 400);
+      return c.json(new ApiError("validation_failed", `入力が正しくありません。${where}${issue?.message ?? ""}`).body(locale), 400);
     }
     console.error(error);
-    return c.json(new ApiError("internal", "サーバーで問題が起きました。時間を置いて試してください。").body(), 500);
+    return c.json(new ApiError("internal", "サーバーで問題が起きました。時間を置いて試してください。").body(locale), 500);
   });
 
   const diagnostics = new Diagnostics(services.db);
@@ -254,6 +258,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   v1.post("/devices", async (c) => {
     const input = await body(c, z.object({
       platform: z.enum(["ios", "android", "web"]),
+      locale: z.enum(["ja", "en"]).optional(),
       apns_token: z.string().min(1).max(400).optional(),
       apns_env: z.enum(["sandbox", "production"]).optional(),
       fcm_token: z.string().min(1).max(4096).optional(),
@@ -262,7 +267,11 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(accounts.registerDevice(c.get("userId"), input));
   });
   v1.delete("/devices/:id", (c) => { accounts.removeDevice(c.get("userId"), c.req.param("id")); return c.json({ ok: true }); });
-  v1.get("/onboarding", (c) => c.json(onboarding(services.publicUrl)));
+  v1.get("/onboarding", (c) => {
+    const locale = requestLocale(c.req.header("Accept-Language"));
+    c.header("Content-Language", locale); c.header("Vary", "Accept-Language");
+    return c.json(onboarding(services.publicUrl, locale));
+  });
 
   v1.get("/pairing/lookup", (c) => c.json(accounts.lookupPairing(c.req.query("code") ?? "")));
   v1.post("/pairing/:id/claim", (c) => idempotent(c, services, c.get("userId"), () => accounts.claimPairing(c.get("userId"), c.req.param("id"))));
