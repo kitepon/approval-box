@@ -40,3 +40,5 @@ jobs:
         run: node --test tools/e2e/parent-preflight.test.mjs
       - name: アカウント削除と旧DB移行を確かめる（本番利用なし）
         run: node --test packages/server/test/account-deletion.test.ts
+      - name: 診断の入力境界・原本保持・集計を確かめる（本番利用なし）
+        run: node --test packages/server/test/diagnostics.test.ts

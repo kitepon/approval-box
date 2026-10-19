@@ -29,6 +29,31 @@ test("authenticated diagnostics: exact receipt, replay, conflict, bounded typed 
  for(const body of [{...x.event(),session:"secret"},{...x.event(),diagnostic_log:{...event.diagnostic_log,message:"secret"}},{...x.event(),diagnostic_log:{...event.diagnostic_log,decoding_path:["raw_user_value"]}},{...x.event(),diagnostic_log:{...event.diagnostic_log,stack_frames:[{binary_uuid:randomUUID(),offset:-1,sample_count:1}]}},{...x.event(),diagnostic_log:{...event.diagnostic_log,error_code:1.2}}]) assert.equal((await x.send(body)).status,400);
  assert.equal((await x.send({...x.event(),padding:"x".repeat(17000)})).status,413);
 });
+test("UserNotifications domain stays distinct from legacy other without inferring impact",async()=>{
+ const x=setup();
+ const original={event_id:"00000000-0000-4000-8000-000000000001",occurred_at:"2026-10-01T00:00:00Z",code:"processing_failed",module:"processing",app_version:"0.1.0(25)",device_type:"Mac",os_version:"27.0.0",diagnostic_log:{operation:"notifications.authorization",error_domain:"other",error_code:1,handling:"unassessed",user_visible:true}};
+ const legacy=diagnosticSchema.parse(original);
+ assert.equal(diagnosticFingerprint(legacy),"77a6e8d97a1c0b86ca35641568e79abe98485d21ba600a10854bc4f6652e44ca");
+ assert.equal((await x.send(original)).status,202);
+ const preserved={...original,event_id:randomUUID(),diagnostic_log:{...original.diagnostic_log,error_domain:"UNErrorDomain"}};
+ assert.equal((await x.send(preserved)).status,202);
+ assert.equal((await x.send({...preserved,event_id:randomUUID(),diagnostic_log:{...preserved.diagnostic_log,error_domain:"private account detail"}})).status,400);
+ let groups=await (await x.admin("/logs?status=all&limit=500")).json();
+ assert.equal(groups.length,2);
+ const old=groups.find((g:any)=>g.fingerprint===diagnosticFingerprint(legacy));
+ assert.equal(old.severity,"high");assert.equal(old.occurrence_count,1);assert.equal(old.status,"open");
+ const notification=groups.find((g:any)=>JSON.parse(g.diagnostic_log).error_domain==="UNErrorDomain");
+ assert.equal(notification.severity,"high");assert.equal(notification.status,"open");
+ assert.equal(notification.diagnostic_context.impact_assessment,undefined);
+ const assessed={...preserved,event_id:randomUUID(),diagnostic_log:{...preserved.diagnostic_log,impact_assessment:{severity:"warn",recovery:"unknown",summary:"許可要求が例外終了。登録処理へ進まず、実機の回復は未確認。"}}};
+ assert.equal((await x.send(assessed)).status,202);
+ groups=await (await x.admin("/logs?status=all&limit=500")).json();
+ const updated=groups.find((g:any)=>g.fingerprint===notification.fingerprint);
+ assert.equal(updated.occurrence_count,2);assert.equal(updated.severity,"warn");assert.equal(updated.status,"open");
+ assert.equal(updated.diagnostic_context.impact_assessment.recovery,"unknown");
+ const saved=get<{payload:string;severity:string}>(x.db,"select payload,severity from diagnostics where event_id=?",original.event_id)!;
+ assert.deepEqual(JSON.parse(saved.payload),original);assert.equal(saved.severity,"high");
+});
 test("LAN socket and host required: reject proxy paths, spoofing, wrong/missing bearer",async()=>{
  const x=setup();assert.equal((await x.admin("/logs")).status,200);
  for(const options of [{host:"approval-box.kitepon.dev"},{remote:"203.0.113.1"},{headers:{"x-forwarded-for":"192.168.1.1"}},{headers:{"cf-ray":"a"}},{token:"wrong"}])assert.notEqual((await x.admin("/logs",undefined,options)).status,200);
