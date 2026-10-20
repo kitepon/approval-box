@@ -246,6 +246,7 @@ setup: {
 | POST | `/pairing/{pairing_id}/claim` | アプリ | 利用者が「この端末を追加」を押した時。自分のアカウントに結ぶ → `{ connection_id }` |
 | POST | `/pairing/{pairing_id}/reject` | アプリ | 「心当たりがない」を押した時 |
 
+- コネクタの接続トークンを省くのは `POST /connector/v1/pairing` と `GET /connector/v1/pairing/{pairing_id}` に一致する要求だけ。後者は `X-Poll-Secret` で確かめる。それ以外は未知の経路や、申請IDに `pairing` を含む要求も接続トークンが必要。
 - QRの中身は `qr_url`（`https://<host>/pair?c=ABCD-EFGH`）。アプリはこのURLを読んだらコードを取り出して lookup する。アプリが入っていない端末のカメラで読んだ時は、Web版のペアリング画面が開く。
 - 確認画面には端末名・OS・使うAIを出し、「この端末を追加」「心当たりがない」の2つを置く（他人のコードを打たされる詐欺への備え）。
 - コードは大文字英字と数字（紛らわしい0・O・1・Iは使わない）。打つ時はハイフンと大小文字を無視する。

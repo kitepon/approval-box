@@ -311,12 +311,13 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   app.route("/v1", v1);
 
   // ================= コネクタ（AI側）=================
-  const conn = new Hono<{ Variables: { conn: ReturnType<Accounts["connectionByToken"]> } }>();
-  conn.post("/pairing", async (c) => {
+  // 接続トークンを持たない端末に公開するのは、この2経路だけ。
+  const pairing = new Hono();
+  pairing.post("/pairing", async (c) => {
     const input = await body(c, z.object({ device_name: z.string().trim().min(1).max(100), os: z.string().max(20).optional(), clients: z.array(z.string().max(40)).max(10).default([]) }));
     return c.json(accounts.startPairing(input.device_name, input.os ?? null, input.clients, services.publicUrl));
   });
-  conn.get("/pairing/:id", async (c) => {
+  pairing.get("/pairing/:id", async (c) => {
     const deadline = Date.now() + 25_000;
     for (;;) {
       const result = accounts.pollPairing(c.req.param("id"), c.req.header("x-poll-secret"));
@@ -324,10 +325,12 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   });
+  app.route("/connector/v1", pairing);
+
+  // 上の公開経路に一致しなかった要求は、未知の経路も含めて必ず認証する。
+  const conn = new Hono<{ Variables: { conn: ReturnType<Accounts["connectionByToken"]> } }>();
   conn.use("*", async (c, next) => {
-    if (!c.req.path.includes("/pairing")) {
-      c.set("conn", accounts.connectionByToken(bearer(c)));
-    }
+    c.set("conn", accounts.connectionByToken(bearer(c)));
     await next();
   });
   const routeChannel = (c: Context) => c.req.query("channel_id") || undefined;
