@@ -31,6 +31,8 @@ npx -y approval-box@latest setup
 
 ## 自分でサーバーを立てる
 
+1Passwordなど特定の秘密管理サービスは必要ありません。鍵は環境変数やファイルで渡せます。管理用の診断APIについては [docs/diagnostics.md](docs/diagnostics.md) を参照してください。
+
 ログインは、AppleかGoogleのどちらかが要ります（ログイン用のURLやパスワードはありません）。
 
 - Apple: Apple Developerで Services ID を作り、ドメインと Return URL（`https://<あなたのURL>/auth/apple/callback`）を登録します。`APPLE_WEB_SERVICES_ID` にそのIDを入れます。
