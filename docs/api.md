@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.33
+# Approval Box API（アプリ・Web版向け） v0.34
+
+v0.34（2026-10-23）: アプリ診断の固定error_domainに`com.apple.AuthenticationServices.AuthorizationError`（Apple SDKの`ASAuthorizationErrorDomain`）を追加受理する。元の種別と数値codeを保存し、任意domainや`NSError.userInfo`は引き続き拒否する。旧`other`の原本・受領記録・groupとfingerprint規則、重大度の既定値、診断schema版1・DB版9は維持する。codeだけから取消や根因を決めず、診断報告の修理と実際の認証回復を分けて評価する。詳細は[diagnostics.md](diagnostics.md)。
 
 v0.33（2026-10-19）: オーナー指定の日本語・英語・韓国語・中国語へ拡張。中国語は簡体字/繁体字を区別し、端末 `locale` の任意enumは `ja | en | ko | zh-Hans | zh-Hant`。`Accept-Language` は同じ5 localeと地域タグに対応。中国語は明示scriptを優先、CN/SG/単独zhはHans、TW/HK/MOはHant。q優先度と対応言語の優先順を使い、対応が無ければja。既存端末のID/token/言語値を保持してschema9へ制約を拡張。未指定再登録は以前の値を維持する。固定UI/エラー/接続案内/通知接頭辞のみ翻訳し、申請/選択肢/回答本文やAPI識別値は変更しない。
 

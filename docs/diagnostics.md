@@ -6,6 +6,8 @@ Send `Content-Type: application/json` and `Idempotency-Key: <event_id>`. The key
 
 API v0.31 also accepts the fixed `error_domain: "UNErrorDomain"` for UserNotifications errors. Send this value only when the original error has that domain; keep its numeric code. Do not replace an old `other` domain using the code alone, and do not send arbitrary domain strings or `NSError.userInfo`. `notifications.authorization` errors with no impact assessment retain the existing `high` fallback; neither this fallback nor an error code proves a product defect or a person's permission choice. Normal denial and an authorization API throwing an error are different outcomes. Record only observed authorization state, registration progress, UI effects and recovery in the bounded impact assessment when available; keep recovery unknown when it was not observed. Schema version remains 1, and existing receipts, fingerprints and stored originals are unchanged.
 
+API v0.34 also accepts the single fixed Apple authorization domain `com.apple.AuthenticationServices.AuthorizationError` (`ASAuthorizationErrorDomain`). Preserve that value and the numeric code only when present in the original error. Arbitrary domains, including `AKAuthenticationError`, and `NSError.userInfo` remain rejected. A new `processing_failed` / `auth.apple` diagnostic with this domain is stored separately from legacy `other` with the same code. This reporting change leaves old originals, receipts, groups, fingerprint rules, fallback severity and schema version 1 unchanged. A code alone does not establish cancellation or root cause; OS authorization completion does not establish a successful server login or application session recovery.
+
 ```json
 {
   "event_id": "7198e131-f0ae-43d9-82cf-1b35eb7b9c1a",

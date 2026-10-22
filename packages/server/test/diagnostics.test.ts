@@ -29,6 +29,43 @@ test("authenticated diagnostics: exact receipt, replay, conflict, bounded typed 
  for(const body of [{...x.event(),session:"secret"},{...x.event(),diagnostic_log:{...event.diagnostic_log,message:"secret"}},{...x.event(),diagnostic_log:{...event.diagnostic_log,decoding_path:["raw_user_value"]}},{...x.event(),diagnostic_log:{...event.diagnostic_log,stack_frames:[{binary_uuid:randomUUID(),offset:-1,sample_count:1}]}},{...x.event(),diagnostic_log:{...event.diagnostic_log,error_code:1.2}}]) assert.equal((await x.send(body)).status,400);
  assert.equal((await x.send({...x.event(),padding:"x".repeat(17000)})).status,413);
 });
+test("Apple authorization domain and code survive HTTP acceptance without rewriting legacy diagnostics",async()=>{
+ const x=setup();
+ const original={event_id:"00000000-0000-4000-8000-000000000002",occurred_at:"2026-10-01T00:00:00Z",code:"processing_failed",module:"processing",app_version:"0.1.0(34)",device_type:"Mac",os_version:"27.0.0",diagnostic_log:{operation:"auth.apple",error_domain:"other",error_code:1000,handling:"unassessed",user_visible:true}};
+ const legacy=diagnosticSchema.parse(original), fingerprint=diagnosticFingerprint(legacy);
+ assert.equal(fingerprint,"ad474eabf0bab0c39a507b984d0fe02b627b14cfefbb2159f62a40222f39adfc");
+ assert.equal((await x.send(original)).status,202);
+ const snapshot=()=>({
+  raw:all(x.db,"select * from diagnostics where fingerprint=?",fingerprint),
+  group:all(x.db,"select * from diagnostic_groups where fingerprint=?",fingerprint),
+  sources:all(x.db,"select * from diagnostic_group_sources where fingerprint=?",fingerprint),
+  receipt:all(x.db,"select * from diagnostic_receipts where event_id=?",original.event_id),
+ });
+ const before=snapshot();
+ const preserved={...original,event_id:randomUUID(),diagnostic_log:{...original.diagnostic_log,error_domain:"com.apple.AuthenticationServices.AuthorizationError"}};
+ const response=await x.send(preserved);assert.equal(response.status,202);
+ assert.deepEqual(await response.json(),{event_id:preserved.event_id,accepted:true,duplicate:false});
+ assert.equal((await (await x.send(preserved)).json()).duplicate,true);
+ const saved=get<{payload:string}>(x.db,"select payload from diagnostics where event_id=?",preserved.event_id)!;
+ assert.deepEqual(JSON.parse(saved.payload),preserved);
+ const groups=await (await x.admin("/logs?status=all&limit=500")).json();
+ assert.equal(groups.length,2);
+ const apple=groups.find((g:any)=>JSON.parse(g.diagnostic_log).error_domain===preserved.diagnostic_log.error_domain);
+ assert.notEqual(apple.fingerprint,fingerprint);assert.equal(apple.severity,"high");assert.equal(apple.status,"open");assert.equal(apple.occurrence_count,1);
+ assert.equal(JSON.parse(apple.diagnostic_log).error_code,1000);
+ assert.equal(apple.diagnostic_context.impact_assessment,undefined);
+ for(const diagnostic_log of [
+  {...preserved.diagnostic_log,error_domain:"AKAuthenticationError"},
+  {...preserved.diagnostic_log,error_domain:"arbitrary private domain"},
+  {...preserved.diagnostic_log,userInfo:{detail:"private value"}},
+ ]) assert.equal((await x.send({...preserved,event_id:randomUUID(),diagnostic_log})).status,400);
+ assert.equal(all(x.db,"select * from diagnostics").length,2);
+ assert.deepEqual(snapshot(),before);
+ assert.deepEqual(JSON.parse((before.raw[0] as {payload:string}).payload),original);
+ assert.equal((before.group[0] as {severity:string}).severity,"high");
+ assert.equal((before.group[0] as {status:string}).status,"open");
+ assert.equal((before.group[0] as {occurrence_count:number}).occurrence_count,1);
+});
 test("UserNotifications domain stays distinct from legacy other without inferring impact",async()=>{
  const x=setup();
  const original={event_id:"00000000-0000-4000-8000-000000000001",occurred_at:"2026-10-01T00:00:00Z",code:"processing_failed",module:"processing",app_version:"0.1.0(25)",device_type:"Mac",os_version:"27.0.0",diagnostic_log:{operation:"notifications.authorization",error_domain:"other",error_code:1,handling:"unassessed",user_visible:true}};
