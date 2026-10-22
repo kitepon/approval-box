@@ -27,6 +27,10 @@ This is not an Alpine/musl recipe.
 
 CI builds `--target checks` for type/build and the server suite, then builds the
 default final product and checks its Node version and bundled/effective roots.
+It also rejects an incorrect archive and a forged signed manifest whose edited
+checksum matches that archive, and boots the product with a fresh tmpfs, no
+network, no production data or secrets, then checks public/auth boundaries and
+SIGTERM shutdown.
 Existing server shutdown tests need `--test-force-exit` after their assertions.
 This does not test real login, purchases, notifications or connector delivery.
 A production update still requires the deployment conditions and audit handoff;

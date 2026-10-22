@@ -72,6 +72,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Reject a corrupt archive and a forged checksum manifest
+        run: |
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-x64.tar.xz -o "$RUNNER_TEMP/node.tar.xz"
+          sh tools/deploy/node-release/test-verification.sh "$RUNNER_TEMP/node.tar.xz"
       - name: Build and test with the verified production Node runtime
         run: |
           docker build --platform linux/amd64 --target checks -t approval-box-checks .
@@ -83,3 +87,5 @@ jobs:
             const roots = [...tls.rootCertificates, ...tls.getCACertificates("default")];
             if (roots.some(pem => new X509Certificate(pem).fingerprint256.replaceAll(":", "") === "86A1ECBA089C4A8D3BBE2734C612BA341D813E043CF9E8A862CD5C57A36BBE6B")) throw new Error("emSign G3 remains");
           '
+      - name: Boot the product without production data or secrets
+        run: docker run --rm -i --network none --read-only --tmpfs /tmp:rw,nosuid,nodev,mode=1777 --cap-drop ALL --security-opt no-new-privileges --entrypoint node approval-box-runtime - < tools/deploy/server-image-smoke.cjs
