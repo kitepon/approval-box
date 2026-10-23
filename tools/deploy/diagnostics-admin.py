@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Read/update a sanitized diagnostic group on main-server without printing keys.
-The admin key comes from the environment, loaded from the secret store by `op run`:
-  op run --env-file=$HOME/approval-box/deploy/admin.op.env -- env -u OP_SERVICE_ACCOUNT_TOKEN python3 - <event UUID> inspect|resolve|reopen
+"""Read/update a sanitized diagnostic group without printing keys.
+Supply APPROVALBOX_ADMIN_KEY in the environment using your chosen provisioning method.
+1Password and its CLI are not required. After setting the environment variable:
+  python3 - <event UUID> inspect|resolve|reopen
+The target is the official operator's LAN endpoint; see docs/diagnostics.md.
 """
 import json
 import os
@@ -15,7 +17,7 @@ if action not in ('inspect', 'resolve', 'reopen'):
     raise SystemExit('Unknown action')
 key = os.environ.get('APPROVALBOX_ADMIN_KEY', '').strip()
 if not key:
-    raise SystemExit('APPROVALBOX_ADMIN_KEY is not set; run under op run (see the usage above).')
+    raise SystemExit('APPROVALBOX_ADMIN_KEY is not set; supply the admin key in the environment (see the usage above).')
 base = 'http://192.168.1.2:18871/api/admin/logs'
 headers = {'Authorization':'Bearer '+key,'Content-Type':'application/json'}
 with urllib.request.urlopen(urllib.request.Request(base+'?status=all&limit=500',headers=headers),timeout=10) as response:

@@ -1,5 +1,5 @@
 # セルフホスト用。PUBLIC_URL を自分の公開URLに変える。
-# 最初の管理者: docker compose exec server node server/dist/main.js admin create-user
+# 利用者のアカウントはAppleかGoogleでの初回ログイン時に作られる。設定はREADMEを参照。
 services:
   server:
     build: .

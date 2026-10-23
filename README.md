@@ -6,6 +6,15 @@ AIが人間の判断・承認・操作を求める時に、Approval Boxへも申
 
 Cursor・Grokでは、申請道具が返すコマンドで背景の受信処理を起動します。Cursorのhookは受信口と会話を結び付け、答えは背景受信が届けます。受信処理が答えを返すまで動かしておきます。
 
+## 利用先とできること
+
+- [Web版を開く](https://approval-box.kitepon.dev/) — ブラウザから申請を確認し、回答・保留・履歴の管理ができます。
+- [iPhone・iPadアプリ](https://apps.apple.com/app/id6818175213) — App Storeで公開しています。
+- AIからの申請には、申請者と作業名、選択肢、画像を添えられます。人は選択肢や文章で答え、回答に画像・書類も添えられます。
+- Web版は日本語・英語・韓国語・中国語（簡体字/繁体字）に対応します。申請・選択肢・回答の本文は翻訳せずに表示します。
+
+最近の変更は [更新履歴](CHANGELOG.md)、利用上の問い合わせや不具合は [GitHub Issues](https://github.com/kitepon/approval-box/issues) を参照してください。この公開リポジトリにはサーバー・Web版・コネクタが含まれます。ネイティブアプリのソースは含まれません。
+
 ## 使い方
 
 ```sh
@@ -30,6 +39,8 @@ npx -y approval-box@latest setup
 答えをAIの会話へ届ける部分は [aiterm-steer-delivery](https://github.com/kitepon/aiterm-steer-delivery) を使っています。
 
 ## 自分でサーバーを立てる
+
+1Passwordなど特定の秘密管理サービスは必要ありません。鍵は環境変数やファイルで渡せます。管理用の診断APIについては [docs/diagnostics.md](docs/diagnostics.md) を参照してください。
 
 ログインは、AppleかGoogleのどちらかが要ります（ログイン用のURLやパスワードはありません）。
 
