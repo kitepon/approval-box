@@ -51,8 +51,8 @@ jobs:
         run: node --test packages/server/test/account-deletion.test.ts
       - name: 診断の入力境界・原本保持・集計を確かめる（本番利用なし）
         run: node --test packages/server/test/diagnostics.test.ts
-      - name: コネクタの認証境界と公開ペアリングを確かめる（本番利用なし）
-        run: node --test packages/server/test/connector-auth.test.ts
+      - name: APIの一覧順・認証境界・公開ペアリングを確かめる（本番利用なし）
+        run: node --test packages/server/test/api.test.ts packages/server/test/connector-auth.test.ts
 
   browser:
     runs-on: ubuntu-latest
