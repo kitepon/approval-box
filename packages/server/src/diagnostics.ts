@@ -64,6 +64,36 @@ function assessmentNote(input: Diagnostic, at: string): DiagnosticInvestigation 
   if (!a) return undefined;
   return {summary: `送信元の影響評価（環境原因・アプリ欠陥の断定ではありません）: ${a.summary}`, evidence: [`handling=${d.handling ?? "unassessed"}; severity=${a.severity}; recovery=${a.recovery}; event_id=${input.event_id}`], updated_at: at};
 }
+const operationLabels: Record<Diagnostic["diagnostic_log"]["operation"], string> = {
+  "decisions.list": "承認一覧取得", "decisions.detail": "承認詳細取得", "decisions.answer": "承認回答", "decisions.hold": "承認保留", "decisions.unhold": "保留解除", "decisions.delete": "承認削除",
+  "attachments.list": "添付一覧取得", "attachments.upload": "添付送信", "attachments.download": "添付取得", "attachments.delete": "添付削除",
+  "auth.apple": "Appleログイン", "auth.google": "Googleログイン", "auth.logout": "ログアウト", "account.get": "アカウント取得", "account.settings": "設定更新", "account.delete": "アカウント削除",
+  "devices.register": "端末登録", "devices.delete": "端末登録解除", "connections.list": "接続一覧取得", "connections.delete": "接続削除", "tokens.list": "トークン一覧取得", "tokens.create": "トークン作成", "tokens.delete": "トークン削除",
+  "onboarding": "初期設定", "pairing.lookup": "ペアリング照会", "pairing.claim": "ペアリング承認", "pairing.reject": "ペアリング拒否", "billing.verify": "購入検証", "events": "承認更新の監視",
+  "storekit.environment": "購入環境取得", "storekit.purchase": "購入", "storekit.restore": "購入復元", "storekit.updates": "購入更新の監視", "session.read": "セッション読取り", "session.save": "セッション保存", "session.clear": "セッション消去",
+  "notifications.authorization": "通知許可要求", "notifications.register": "通知登録", "notifications.badge": "通知バッジ更新", "attachments.preview": "添付表示", "attachments.read": "添付読取り", "app.operation": "アプリ処理", "app.crash": "アプリ異常終了", "app.hang": "アプリ応答監視",
+};
+/** 読取り用の説明だけを作る。欠測は補完せず、受付・保存・集約の判定に使わない。 */
+function diagnosticReportSummary(input: Diagnostic): string {
+  const d = input.diagnostic_log;
+  const failure = {api_failed: "API処理失敗", decoding_failed: "デコード失敗", processing_failed: "処理失敗", crash: "クラッシュ", hang: "応答停止", cancelled: "取消"}[input.code];
+  const details = [
+    d.http_method,
+    d.http_status === undefined ? undefined : `HTTP ${d.http_status}`,
+    d.response_format === undefined ? undefined : `応答形式=${d.response_format}`,
+    d.error_domain === undefined ? undefined : `domain=${d.error_domain}`,
+    d.error_code === undefined ? undefined : `code=${d.error_code}`,
+    d.decoding_kind === undefined ? undefined : `decode=${d.decoding_kind}`,
+    d.cancellation === undefined ? undefined : `取消種別=${d.cancellation}`,
+    d.signal === undefined ? undefined : `signal=${d.signal}`,
+    d.exception_type === undefined ? undefined : `exception_type=${d.exception_type}`,
+    d.exception_code === undefined ? undefined : `exception_code=${d.exception_code}`,
+    d.hang_duration_ms === undefined ? undefined : `停止時間=${d.hang_duration_ms}ms`,
+  ].filter(v => v !== undefined).join("、");
+  const handling = d.handling ?? "不明（未送信）";
+  const recovery = d.impact_assessment?.recovery ?? "不明（未送信）";
+  return `${operationLabels[d.operation]}（${d.operation}）: ${failure}（${details || "詳細不明"}）。対処=${handling}、回復=${recovery}、利用者への表示=${d.user_visible ? "あり" : "なし"}。${input.device_type} / ${input.app_version}`;
+}
 function severity(input: Diagnostic) {
   if (input.diagnostic_log.impact_assessment) return input.diagnostic_log.impact_assessment.severity;
   if (input.code === "crash") return "fatal";
@@ -178,7 +208,7 @@ export function diagnosticsAdmin(diagnostics: Diagnostics, token?: string) {
         if (note.evidence.length < 20) note.evidence.push(source.evidence[0]!);
         note.updated_at = note.updated_at > source.updated_at ? note.updated_at : source.updated_at;
       }
-      return {fingerprint:r.fingerprint,severity:r.severity,message_template:r.message_template,occurrence_count:r.occurrence_count,last_seen:r.last_seen,status:r.status,module:`${p.module}.${p.device_type}`,category:p.code,app_version:p.app_version,diagnostic_log:JSON.stringify(p.diagnostic_log),diagnostic_log_version:p.app_version,diagnostic_log_received_at:r.last_seen,diagnostic_context:{diagnostic_schema_version:1,device_type:p.device_type,os_version:p.os_version,occurred_at:p.occurred_at,event_id:p.event_id,...p.diagnostic_log},...(note ? {investigation: note} : {})};
+      return {fingerprint:r.fingerprint,severity:r.severity,message_template:diagnosticReportSummary(p),occurrence_count:r.occurrence_count,last_seen:r.last_seen,status:r.status,module:`${p.module}.${p.device_type}`,category:p.code,app_version:p.app_version,diagnostic_log:JSON.stringify(p.diagnostic_log),diagnostic_log_version:p.app_version,diagnostic_log_received_at:r.last_seen,diagnostic_context:{diagnostic_schema_version:1,device_type:p.device_type,os_version:p.os_version,occurred_at:p.occurred_at,event_id:p.event_id,...p.diagnostic_log},...(note ? {investigation: note} : {})};
     }));
   });
   app.patch("/logs/:fingerprint/investigation",async c=>{
