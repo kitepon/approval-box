@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Accounts } from "../src/accounts.ts";
-import { openDb } from "../src/db.ts";
+import { openDb, run } from "../src/db.ts";
 import { Decisions } from "../src/decisions.ts";
 import { EventHub } from "../src/events.ts";
 import { createApp } from "../src/http.ts";
@@ -23,7 +23,7 @@ function setup(billing: "off" | "store" = "store") {
     const text = await res.text();
     return { status: res.status, json: text ? JSON.parse(text) : null };
   };
-  return { app, accounts, call, session, userId };
+  return { db, app, accounts, call, session, userId };
 }
 
 async function paired(ctx: ReturnType<typeof setup>) {
@@ -49,6 +49,69 @@ async function submit(ctx: ReturnType<typeof setup>, token: string, body: Record
 }
 
 const request = { title: "DBの移行をいま実行してよいか", context: "停止は30秒", options: [{ id: "a", label: "いま実行" }, { id: "b", label: "夜間" }], recommendation: "b", urgency: "high", session_label: "approval-box / server", client: "claude-code", route: { channel_id: "ch-1", harness: "claude" } };
+
+
+test("一覧は時差と小数秒を含む期限の実時刻順にし、急ぎ度・保留・期限なし・ページ送りを保つ", async () => {
+  const ctx = setup(), token = await paired(ctx);
+  const cases = [
+    { title: "期限なし通常", urgency: "normal" },
+    { title: "一時UTC", deadline: "2026-10-27T01:00:00Z" },
+    { title: "翌日表記の十時UTC", deadline: "2026-10-28T00:00:00+14:00" },
+    { title: "細かい小数秒の後", deadline: "2026-10-27T00:30:00.0002Z" },
+    { title: "同時刻の古い申請", deadline: "2026-10-27T00:40:00.1Z" },
+    { title: "九時UTC", deadline: "2026-10-27T04:00:00-05:00" },
+    { title: "細かい小数秒の先", deadline: "2026-10-27T09:30:00.000100+09:00" },
+    { title: "保留の零時UTC", deadline: "2026-10-27T09:00:00+09:00", held: true },
+    { title: "同時刻の新しい申請", deadline: "2026-10-27T09:40:00.100+09:00" },
+    { title: "急ぎ度highの期限なし", urgency: "high" },
+    { title: "急ぎ度lowの早い期限", urgency: "low", deadline: "2026-10-26T00:00:00Z" },
+  ];
+  for (const [index, item] of cases.entries()) {
+    const created = await submit(ctx, token, { ...request, title: item.title, urgency: item.urgency ?? "normal", ...(item.deadline ? { deadline: item.deadline } : {}) });
+    assert.equal(created.status, 200);
+    const id = created.json.decision_id;
+    run(ctx.db, "update decisions set created_at=? where id=?", `2026-10-26T00:00:00.${String(index).padStart(3, "0")}Z`, id);
+    if (item.held) assert.equal((await ctx.call("POST", `/v1/decisions/${id}/hold`, { token: ctx.session })).status, 200);
+  }
+  const expected = ["急ぎ度highの期限なし", "保留の零時UTC", "細かい小数秒の先", "細かい小数秒の後", "同時刻の古い申請", "同時刻の新しい申請", "一時UTC", "九時UTC", "翌日表記の十時UTC", "期限なし通常", "急ぎ度lowの早い期限"];
+  const full = await ctx.call("GET", "/v1/decisions?status=pending,held", { token: ctx.session });
+  assert.equal(full.status, 200);
+  assert.deepEqual(full.json.items.map((d: { title: string }) => d.title), expected);
+  for (const item of cases) {
+    const listed = full.json.items.find((d: { title: string }) => d.title === item.title);
+    assert.equal(listed.deadline, item.deadline);
+    assert.equal(listed.status, item.held ? "held" : "pending");
+  }
+  const pages: string[] = [];
+  let cursor = "0";
+  do {
+    const page = await ctx.call("GET", `/v1/decisions?status=pending,held&limit=3&cursor=${cursor}`, { token: ctx.session });
+    assert.equal(page.status, 200);
+    pages.push(...page.json.items.map((d: { title: string }) => d.title));
+    cursor = page.json.next_cursor;
+  } while (cursor !== undefined);
+  assert.deepEqual(pages, expected);
+});
+
+test("時差付き期限の修正は一覧へ反映し、既決の一覧は更新日時の新しい順を保つ", async () => {
+  const ctx = setup(), token = await paired(ctx);
+  const first = await submit(ctx, token, { ...request, title: "先に出した申請", deadline: "2026-10-27T02:00:00Z" });
+  const second = await submit(ctx, token, { ...request, title: "後に出した申請", deadline: "2026-10-27T01:00:00Z" });
+  assert.equal(first.status, 200); assert.equal(second.status, 200);
+  const id = first.json.decision_id, otherId = second.json.decision_id;
+  const amended = await ctx.call("POST", `/connector/v1/decisions/${id}/amend`, { token, body: { version: 1, note: "期限を早める", changes: { deadline: "2026-10-27T09:00:00+09:00" } } });
+  assert.equal(amended.status, 200);
+  const list = await ctx.call("GET", "/v1/decisions", { token: ctx.session });
+  assert.deepEqual(list.json.items.map((d: { id: string }) => d.id), [id, otherId]);
+  assert.equal(list.json.items[0].deadline, "2026-10-27T09:00:00+09:00");
+  assert.equal((await ctx.call("POST", `/v1/decisions/${id}/answer`, { token: ctx.session, body: { version: 2, option_id: "a" } })).status, 200);
+  assert.equal((await ctx.call("POST", `/connector/v1/decisions/${otherId}/cancel`, { token, body: { reason: "不要" } })).status, 200);
+  run(ctx.db, "update decisions set updated_at=? where id=?", "2026-10-26T01:00:00Z", id);
+  run(ctx.db, "update decisions set updated_at=? where id=?", "2026-10-26T02:00:00Z", otherId);
+  const closed = await ctx.call("GET", "/v1/decisions?status=answered,cancelled", { token: ctx.session });
+  assert.equal(closed.status, 200);
+  assert.deepEqual(closed.json.items.map((d: { id: string }) => d.id), [otherId, id]);
+});
 
 test("申請・重複検知・修正・回答・配送", async () => {
   const ctx = setup();

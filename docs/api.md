@@ -120,7 +120,7 @@ Decision {
 | POST | `/decisions/{id}/unhold` | 保留を戻す。応答はDecision |
 | GET | `/events` | SSE（下記） |
 
-- 並び順: pending・held は 急ぎ度（high→low）、期限の近い順、古い順。answered・cancelled は updated_at の新しい順。
+- 並び順: pending・held は 急ぎ度（high→low）、期限の近い順、古い順。answered・cancelled は updated_at の新しい順。 期限は時差と小数秒を反映した実時刻で比べ、期限なしは期限ありの後、同じ時刻は作成の古い順とする。保存・返却する期限の表記は変えない。
 - 書き込み（answer・hold・unhold）には `Idempotency-Key: <UUID>` を付ける。通信が切れて送り直しても二重に答えない。
 - answer の `version` がサーバー側と違えば409 `conflict`（AIが内容を直した、Webで先に答えた等）。古い内容のまま答えさせないため、versionは必須。応答の `error.decision` に最新のDecisionが入るので、それで画面を差し替える。
 - 取り下げ（cancelled）と修正（amended）はAI側だけが行う。アプリからは行わない。
