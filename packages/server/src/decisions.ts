@@ -82,6 +82,16 @@ export const SPEAK_BY_TITLE = "利用者へこの申請の話をする時は、�
 
 const urgencyRank: Record<string, number> = { high: 0, normal: 1, low: 2 };
 
+function compareDeadlines(a: string | null, b: string | null) {
+  if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1;
+  const milliseconds = Date.parse(a) - Date.parse(b);
+  if (milliseconds) return milliseconds;
+  // Date.parse truncates sub-millisecond digits that the input schema accepts.
+  const fractionA = (a.match(/\.(\d+)/)?.[1] ?? "").replace(/0+$/, "");
+  const fractionB = (b.match(/\.(\d+)/)?.[1] ?? "").replace(/0+$/, "");
+  return fractionA < fractionB ? -1 : fractionA > fractionB ? 1 : 0;
+}
+
 export class Decisions {
   private readonly db: Db;
   private readonly events: EventHub;
@@ -208,7 +218,7 @@ export class Decisions {
     const openOnly = statuses.every((s) => OPEN.includes(s));
     rows.sort(openOnly
       ? (a, b) => (urgencyRank[a.urgency]! - urgencyRank[b.urgency]!)
-        || ((a.deadline ?? "9999") < (b.deadline ?? "9999") ? -1 : (a.deadline ?? "9999") > (b.deadline ?? "9999") ? 1 : 0)
+        || compareDeadlines(a.deadline, b.deadline)
         || (a.created_at < b.created_at ? -1 : 1)
       : (a, b) => (a.updated_at < b.updated_at ? 1 : -1));
     const page = rows.slice(cursor, cursor + limit);
