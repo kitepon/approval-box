@@ -19,6 +19,49 @@ function setup() {
  const admin=(path:string,body?:unknown,options:{host?:string,remote?:string,token?:string,headers?:Record<string,string>,method?:string}={})=>app.request(`http://${options.host ?? "192.168.1.2:18871"}/api/admin${path}`,{method:options.method ?? (body ? "POST":"GET"),headers:{authorization:`Bearer ${options.token ?? "test-secret"}`,"content-type":"application/json",...options.headers},...(body ? {body:JSON.stringify(body)} : {})},{incoming:{socket:{remoteAddress:options.remote ?? "192.168.1.9"}}});
  return {db,user,app,event,send,admin};
 }
+test("admin report context preserves legacy acceptance, raw data, grouping and lifecycle", async () => {
+ const x=setup();
+ const event={...x.event(),code:"api_failed",module:"api",diagnostic_log:{operation:"decisions.list",user_visible:false}};
+ assert.equal((await x.send(event)).status,202);
+ const fingerprint=diagnosticFingerprint(diagnosticSchema.parse(event));
+ const snapshot=()=>({raw:all(x.db,"select * from diagnostics"),groups:all(x.db,"select * from diagnostic_groups"),receipts:all(x.db,"select * from diagnostic_receipts"),sources:all(x.db,"select * from diagnostic_group_sources"),notes:all(x.db,"select * from diagnostic_investigations")});
+ const before=snapshot();
+ const row=(await (await x.admin("/logs")).json())[0];
+ assert.equal(row.fingerprint,fingerprint);assert.equal(row.severity,"high");assert.equal(row.status,"open");assert.equal(row.occurrence_count,1);
+ assert.match(row.message_template,/承認一覧取得（decisions\.list）: API処理失敗（詳細不明）/);
+ assert.match(row.message_template,/対処=不明（未送信）、回復=不明（未送信）、利用者への表示=なし/);
+ assert.equal(row.investigation,undefined);
+ assert.deepEqual(row.diagnostic_context,{diagnostic_schema_version:1,device_type:event.device_type,os_version:event.os_version,occurred_at:event.occurred_at,event_id:event.event_id,...event.diagnostic_log});
+ assert.deepEqual(JSON.parse((before.raw[0] as {payload:string}).payload),event);
+ assert.deepEqual(snapshot(),before);
+ await x.admin("/logs/resolve",{fingerprint});
+ assert.equal((await x.send(event)).status,202);
+ assert.equal((await (await x.admin("/logs")).json())[0].status,"resolved");
+ assert.equal((await x.send({...event,event_id:randomUUID()})).status,202);
+ const next=(await (await x.admin("/logs")).json())[0];
+ assert.equal(next.status,"open");assert.equal(next.severity,"high");assert.equal(next.occurrence_count,2);
+});
+test("admin report describes observed failures and state without interpreting private codes", async () => {
+ const x=setup();
+ const cases=[
+  {code:"api_failed",module:"api",diagnostic_log:{operation:"decisions.list",http_method:"GET",http_status:502,response_format:"html",handling:"unassessed",user_visible:true,impact_assessment:{severity:"high",recovery:"unknown",summary:"通信失敗後の回復は不明"}}},
+  {code:"processing_failed",module:"processing",diagnostic_log:{operation:"auth.apple",error_domain:"com.apple.AuthenticationServices.AuthorizationError",error_code:1000,user_visible:true}},
+  {code:"crash",module:"metrickit",diagnostic_log:{operation:"app.crash",signal:0,exception_type:0,exception_code:0,user_visible:false}},
+  {code:"hang",module:"metrickit",diagnostic_log:{operation:"app.hang",hang_duration_ms:0,user_visible:false}}
+ ];
+ for(const c of cases)assert.equal((await x.send({...x.event(),...c})).status,202);
+ const rows=await (await x.admin("/logs")).json();
+ const api=rows.find((r:any)=>r.category==="api_failed");
+ assert.match(api.message_template,/承認一覧取得（decisions\.list）: API処理失敗（GET、HTTP 502、応答形式=html）/);
+ assert.match(api.message_template,/対処=unassessed、回復=unknown、利用者への表示=あり/);
+ assert.equal(api.severity,"high");assert.equal(api.investigation.summary,"送信元の影響評価（環境原因・アプリ欠陥の断定ではありません）: 通信失敗後の回復は不明");
+ const auth=rows.find((r:any)=>r.category==="processing_failed");
+ assert.match(auth.message_template,/Appleログイン（auth\.apple）: 処理失敗（domain=com\.apple\.AuthenticationServices\.AuthorizationError、code=1000）/);
+ assert.doesNotMatch(auth.message_template,/取消|回復=recovered|原因/);
+ assert.equal(auth.severity,"high");
+ assert.match(rows.find((r:any)=>r.category==="crash").message_template,/signal=0、exception_type=0、exception_code=0/);
+ assert.match(rows.find((r:any)=>r.category==="hang").message_template,/停止時間=0ms/);
+});
 test("authenticated diagnostics: exact receipt, replay, conflict, bounded typed payload",async()=>{
  const x=setup(), event=x.event();
  assert.equal((await x.send(event,"")).status,401);

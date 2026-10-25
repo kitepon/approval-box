@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.34
+# Approval Box API（アプリ・Web版向け） v0.35
+
+v0.35（2026-10-25）: 管理GETの既存`message_template`へ、保存済診断の処理名・失敗内容・対処/回復の観測状態を自動表示する。未送信の詳細は不明と表示し、診断の受付・登録条件、重大度、原本、fingerprint、回数、状態、DB版9は維持する。元の保存値は書換えず、出力時だけ説明を生成する。詳細は[diagnostics.md](diagnostics.md)。
 
 v0.34（2026-10-23）: アプリ診断の固定error_domainに`com.apple.AuthenticationServices.AuthorizationError`（Apple SDKの`ASAuthorizationErrorDomain`）を追加受理する。元の種別と数値codeを保存し、任意domainや`NSError.userInfo`は引き続き拒否する。旧`other`の原本・受領記録・groupとfingerprint規則、重大度の既定値、診断schema版1・DB版9は維持する。codeだけから取消や根因を決めず、診断報告の修理と実際の認証回復を分けて評価する。詳細は[diagnostics.md](diagnostics.md)。
 
