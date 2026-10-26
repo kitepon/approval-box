@@ -50,6 +50,24 @@ async function submit(ctx: ReturnType<typeof setup>, token: string, body: Record
 
 const request = { title: "DBの移行をいま実行してよいか", context: "停止は30秒", options: [{ id: "a", label: "いま実行" }, { id: "b", label: "夜間" }], recommendation: "b", urgency: "high", session_label: "approval-box / server", client: "claude-code", route: { channel_id: "ch-1", harness: "claude" } };
 
+test("同じIdempotency-Keyの同時回答は同じ成功応答を返し、保存は1回に留める", async (t) => {
+  const ctx = setup(), token = await paired(ctx);
+  t.after(() => ctx.db.close());
+  const created = await submit(ctx, token, request);
+  const id = created.json.decision_id;
+  const key = "22222222-2222-4222-8222-222222222222";
+  const options = { token: ctx.session, body: { option_id: "a", text: "同じ回答", version: 1 }, headers: { "idempotency-key": key } };
+  const responses = await Promise.all([
+    ctx.call("POST", `/v1/decisions/${id}/answer`, options),
+    ctx.call("POST", `/v1/decisions/${id}/answer`, options),
+  ]);
+  assert.deepEqual(responses.map((response) => response.status), [200, 200]);
+  assert.deepEqual(responses[0]!.json, responses[1]!.json);
+  assert.equal(responses[0]!.json.answer.text, options.body.text);
+  assert.equal(ctx.db.prepare("select count(*) n from history where decision_id=? and kind='answered'").get(id)?.n, 1);
+  assert.equal(ctx.db.prepare("select status from idempotency where user_id=? and key=?").get(ctx.userId, key)?.status, 200);
+});
+
 
 test("一覧は時差と小数秒を含む期限の実時刻順にし、急ぎ度・保留・期限なし・ページ送りを保つ", async () => {
   const ctx = setup(), token = await paired(ctx);

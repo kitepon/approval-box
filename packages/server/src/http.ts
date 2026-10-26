@@ -46,8 +46,8 @@ async function body<T extends z.ZodType>(c: Context, schema: T): Promise<z.infer
   return schema.parse(raw);
 }
 
-/** 書き込みの冪等キー。同じキーの送り直しには、初回の応答をそのまま返す。 */
-async function idempotent(c: Context, services: Services, userId: string, fn: () => unknown | Promise<unknown>) {
+/** 書き込みの冪等キー。同期の変更処理と初回応答の記録の間では実行を譲らない。 */
+function idempotent(c: Context, services: Services, userId: string, fn: () => Record<string, unknown>) {
   const key = c.req.header("idempotency-key");
   const route = `${c.req.method} ${c.req.path}`;
   if (key) {
@@ -60,7 +60,7 @@ async function idempotent(c: Context, services: Services, userId: string, fn: ()
   let status = 200;
   let payload: unknown;
   try {
-    payload = await fn();
+    payload = fn();
   } catch (error) {
     if (!(error instanceof ApiError) || error.status >= 500 || error.code === "rate_limited") throw error;
     status = error.status;
