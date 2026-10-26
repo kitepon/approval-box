@@ -84,6 +84,8 @@ jobs:
             const tls = require("node:tls");
             const { X509Certificate } = require("node:crypto");
             if (process.version !== "v24.22.1") throw new Error(process.version);
+            const npm = require("/usr/local/lib/node_modules/npm/package.json").version;
+            if (npm !== "11.21.1") throw new Error(`npm ${npm}`);
             const roots = [...tls.rootCertificates, ...tls.getCACertificates("default")];
             if (roots.some(pem => new X509Certificate(pem).fingerprint256.replaceAll(":", "") === "86A1ECBA089C4A8D3BBE2734C612BA341D813E043CF9E8A862CD5C57A36BBE6B")) throw new Error("emSign G3 remains");
           '

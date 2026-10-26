@@ -14,7 +14,7 @@ USER root
 RUN rm -rf /usr/local/bin/node /usr/local/bin/nodejs /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/include/node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack
 COPY --from=node-release /verified-node/ /usr/local/
 ENV NODE_VERSION=24.22.1
-RUN test "$(node --version)" = "v24.22.1" && npm --version
+RUN test "$(node --version)" = "v24.22.1" && test "$(npm --version)" = "11.21.1"
 
 # Approval Box サーバー（Web版を同梱）。docker compose up -d で受信画面まで揃う。
 FROM verified-node AS build
