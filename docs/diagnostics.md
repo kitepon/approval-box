@@ -54,6 +54,14 @@ App code belongs to the private apps repository maintained by Bell; server chang
 
 The public reverse proxy also blocks `/api/admin` and `/api/admin/*` with 404 before forwarding. Stream `tools/deploy/block-public-admin.py` to `ssh main-server python3 -` to reproduce this deployment rule. It changes only the Approval Box virtual host, backs up the prior file, validates/reloads Caddy and restores the prior configuration on failure.
 
+## Optional answer request-key digest (2026-10-27)
+
+API v0.36 accepts optional `diagnostic_log.request_key_sha256`: exactly 64 lowercase hexadecimal characters. For an answer POST that fails with `URLError.timedOut` (`NSURLErrorDomain`, `-1001`), the native client can report the SHA256 of the exact UTF-8 bytes of the `Idempotency-Key` string it set on that request. Do not normalize case or hyphens, reconstruct the key from the body, or include the original key, answer, session, decision ID or URL. Other failures and requests omit the field. This digest is distinct from the diagnostic event ID and the diagnostic upload's own idempotency key.
+
+The field is optional for all existing diagnostics and is excluded from fingerprints, severity and grouping rules. Retained raw diagnostics and the existing administrator projections preserve it. Do not rewrite existing outbox bodies, event IDs or received records to add it: identical retries still match their receipts, while changing a received event still conflicts. Deploy server acceptance before distributing a client that emits this field; older strict schemas reject unknown fields.
+
+An operator can hash retained answer `idempotency.key` values for the reporting user and compare the digests. A matching saved status supplies evidence about server persistence, not client receipt or recovery. No match remains unknown: a digest only identifies the request handed to the transport, and missing records may reflect non-arrival, deletion or retention. The server adds no automatic lookup, recovery classification, new table or collector. This addition does not establish the cause or recovery of an earlier diagnostic that omitted the digest.
+
 ## Optional processing trigger (2026-10-06)
 
 `diagnostic_log.trigger` is optional and identifies the entry point that started the business processing which produced the diagnosis. Allowed values: `initial_refresh`, `foreground_refresh`, `toolbar_refresh`, `pull_refresh`, `notification_refresh`, `login`, `answer`, `hold`, `load_more`, `events`. It is distinct from HTTP request purpose. Internal list and badge requests inherit the outer processing trigger; clients keep it per Task (TaskLocal), and omit it when unclassified. No free text, URL, ID, session or body is accepted. Unknown keys and enum values still return 400.

@@ -20,6 +20,7 @@ export const diagnosticSchema = z.strictObject({
   diagnostic_log: z.strictObject({
     trigger: z.enum(["initial_refresh","foreground_refresh","toolbar_refresh","pull_refresh","notification_refresh","login","answer","hold","load_more","events"]).optional(),
     operation: z.enum(OPERATIONS), http_method: z.enum(["GET","POST","PATCH","DELETE"]).optional(),
+    request_key_sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     http_status: integer.min(100).max(599).optional(), response_format: z.enum(["json","html","empty","other"]).optional(),
     error_domain: z.enum(["NSURLErrorDomain","NSCocoaErrorDomain","UNErrorDomain","com.apple.AuthenticationServices.AuthorizationError","DecodingError","HTTP","StoreKit","MetricKit","other"]).optional(),
     error_code: integer.optional(), decoding_kind: z.enum(["typeMismatch","valueNotFound","keyNotFound","dataCorrupted"]).optional(),
