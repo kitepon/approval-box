@@ -5,6 +5,14 @@ base with the official Node v24.22.1 glibc release. The same stage supplies the
 build, checks and runtime stages. `docker build .` and the existing Compose build
 need no private local files or prebuilt runtime image.
 
+The installer replaces only the release's bundled npm with official npm 11.21.1
+from https://registry.npmjs.org/npm/-/npm-11.21.1.tgz. Its SHA512 is pinned from
+the registry's `dist.integrity` before extraction; a mismatch stops the build.
+Node 24.22.1 satisfies npm's `^20.17.0 || >=22.9.0` requirement. All three
+stages use this npm for the existing locked install/build/prune operations;
+the product image CI checks both exact Node and npm versions. Updating npm
+requires reviewing the version, registry integrity and runtime check together.
+
 `SHASUMS256.txt.asc` is from https://nodejs.org/dist/v24.22.1/ .
 `nodejs-release-keyring.kbx` is the public keyring retrieved from
 https://github.com/nodejs/release-keys (gpg/pubring.kbx), SHA256
