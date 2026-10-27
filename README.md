@@ -65,6 +65,8 @@ npx -y approval-box@latest setup --server https://<あなたのURL>
 
 ## 開発
 
+通信不良時の待機と復帰を含む開発ルールは [AGENTS.md](AGENTS.md) を参照してください。
+
 ```sh
 npm install
 npm test                                   # サーバーのAPI試験
