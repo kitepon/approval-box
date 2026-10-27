@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { openDb, all, get, run } from "../src/db.ts";
 import { Accounts } from "../src/accounts.ts";
 import { EventHub } from "../src/events.ts";
@@ -17,8 +17,42 @@ function setup() {
  const event=()=>({event_id:randomUUID(),occurred_at:new Date().toISOString(),code:"cancelled",module:"processing",app_version:"0.1.0(14)",device_type:"iPhone",os_version:"27.0.0",diagnostic_log:{operation:"app.operation",user_visible:false,cancellation:"system"}});
  const send=(body:unknown,authorization=token)=>app.request("http://192.168.1.2:18871/v1/diagnostics",{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${authorization}`},body:JSON.stringify(body)});
  const admin=(path:string,body?:unknown,options:{host?:string,remote?:string,token?:string,headers?:Record<string,string>,method?:string}={})=>app.request(`http://${options.host ?? "192.168.1.2:18871"}/api/admin${path}`,{method:options.method ?? (body ? "POST":"GET"),headers:{authorization:`Bearer ${options.token ?? "test-secret"}`,"content-type":"application/json",...options.headers},...(body ? {body:JSON.stringify(body)} : {})},{incoming:{socket:{remoteAddress:options.remote ?? "192.168.1.9"}}});
- return {db,user,app,event,send,admin};
+ return {db,user,app,event,send,admin,accounts};
 }
+test("answer timeout request hash is optional, preserves receipts/grouping and can correlate same-user saved keys", async (t) => {
+ const x=setup();t.after(()=>x.db.close());
+ const legacy={...x.event(),code:"api_failed",module:"api",diagnostic_log:{operation:"decisions.answer",trigger:"answer",http_method:"POST",error_domain:"NSURLErrorDomain",error_code:-1001,handling:"unassessed",user_visible:true}};
+ assert.equal((await x.send(legacy)).status,202);
+ const originals=()=>({raw:all(x.db,"select * from diagnostics where event_id=?",legacy.event_id),receipts:all(x.db,"select * from diagnostic_receipts where event_id=?",legacy.event_id)});
+ const before=originals(),key="ABCDEF01-2345-4678-9ABC-DEF012345678";
+ const digest=(value:string)=>createHash("sha256").update(value,"utf8").digest("hex");
+ const requestHash=digest(key);
+ const event={...legacy,event_id:randomUUID(),diagnostic_log:{...legacy.diagnostic_log,request_key_sha256:requestHash}};
+ const fingerprint=diagnosticFingerprint(diagnosticSchema.parse(legacy));
+ assert.equal((await x.send(event)).status,202);
+ assert.equal(diagnosticFingerprint(diagnosticSchema.parse(event)),fingerprint);
+ const row=(await (await x.admin("/logs")).json())[0];
+ assert.equal(row.fingerprint,fingerprint);assert.equal(row.severity,"high");assert.equal(row.status,"open");assert.equal(row.occurrence_count,2);
+ assert.equal(row.diagnostic_context.request_key_sha256,requestHash);
+ assert.equal(JSON.parse(row.diagnostic_log).request_key_sha256,requestHash);
+ assert.deepEqual(JSON.parse(get<{payload:string}>(x.db,"select payload from diagnostics where event_id=?",event.event_id)!.payload),event);
+ assert.deepEqual(originals(),before);
+ assert.equal((await x.send({...event,event_id:legacy.event_id})).status,409);
+ assert.equal((await (await x.send(legacy)).json()).duplicate,true);
+ assert.equal((await (await x.send(event)).json()).duplicate,true);
+ assert.deepEqual(originals(),before);
+ const other=x.accounts.createUser();
+ for(const [user,status] of [[x.user,200],[other,409]] as const)
+  run(x.db,"insert into idempotency (user_id,key,route,status,body,created_at) values (?,?,?,?,?,?)",user,key,"POST /v1/decisions/K-SYNTH/answer",status,"{}",new Date().toISOString());
+ // Operator-side example: a digest match is scoped to the reporting user, not an automatic recovery verdict.
+ const saved=all<{key:string;status:number}>(x.db,"select key,status from idempotency where user_id=?",x.user);
+ assert.deepEqual(saved.filter(record=>digest(record.key)===requestHash).map(record=>record.status),[200]);
+ assert.equal(saved.filter(record=>digest(record.key)===digest("unmatched synthetic key")).length,0);
+ for(const invalid of ["",key,"a".repeat(63),"a".repeat(65),"g".repeat(64),requestHash.toUpperCase(),null,42])
+  assert.equal((await x.send({...event,event_id:randomUUID(),diagnostic_log:{...event.diagnostic_log,request_key_sha256:invalid}})).status,400);
+ assert.equal(get<{n:number}>(x.db,"select count(*) n from diagnostics")?.n,2);
+ assert.deepEqual(originals(),before);
+});
 test("admin report context preserves legacy acceptance, raw data, grouping and lifecycle", async () => {
  const x=setup();
  const event={...x.event(),code:"api_failed",module:"api",diagnostic_log:{operation:"decisions.list",user_visible:false}};

@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.35
+# Approval Box API（アプリ・Web版向け） v0.36
+
+v0.36（2026-10-27）: 診断に任意の`diagnostic_log.request_key_sha256`（小文字hex64）を追加。回答POST timeoutで、実際に送信へ付けた重複防止キーのSHA256を保存記録との照合に使えます。原キー・本文・認証情報は含めず、既存のfingerprint・重大度・欠測許容・原本は保持します。serverの受理を先に反映してからnativeの出力を配布してください。詳細は[diagnostics.md](diagnostics.md#optional-answer-request-key-digest-2026-10-27)。
 
 v0.35（2026-10-25）: 管理GETの既存`message_template`へ、保存済診断の処理名・失敗内容・対処/回復の観測状態を自動表示する。未送信の詳細は不明と表示し、診断の受付・登録条件、重大度、原本、fingerprint、回数、状態、DB版9は維持する。元の保存値は書換えず、出力時だけ説明を生成する。詳細は[diagnostics.md](diagnostics.md)。
 
