@@ -8,7 +8,7 @@ import { type Db, get } from "./db.ts";
 import type { Decisions } from "./decisions.ts";
 import type { EventHub } from "./events.ts";
 
-export type SendResult = { state: "delivered" | "unknown" | "failed"; detail?: string };
+export type SendResult = { state: "delivered" | "unknown" | "failed"; detail?: string } | { state: "retry"; retry_after_seconds: 30; detail?: string };
 /** 宛先のメンバー（電話帳のid）へ本文を送る。 */
 export type CallSender = (memberId: string, decisionId: string, text: string) => Promise<SendResult>;
 
@@ -55,7 +55,13 @@ export function callBridgeSender(config: CallBridgeConfig): CallSender {
       }) as ToolResult;
       const open = payload(opened);
       const sessionId = typeof open.session_id === "string" ? open.session_id : undefined;
-      if (opened.isError || !sessionId) return { state: "failed", detail: `call_open: ${JSON.stringify(open).slice(0, 300)}` };
+      if (opened.isError || !sessionId) {
+        // Bridgeが未開設・未送信を保証する一時切断だけを再試行する。
+        if (!sessionId && open.ok === false && open.code === "directory_link_down" && open.retryable === true && open.retry_after_seconds === 30 && open.session_created === false) {
+          return { state: "retry", retry_after_seconds: 30, detail: "directory_link_down" };
+        }
+        return { state: "failed", detail: `call_open: ${JSON.stringify(open).slice(0, 300)}` };
+      }
       sent = true; // ここから先の失敗は、届いたか分からない
       const result = await client.callTool({
         name: "call_send",
@@ -111,9 +117,10 @@ export class CallBridgeDeliverer {
           const conn = this.connection(id);
           if (!conn) continue;
           for (const item of this.decisions.serverDeliveries(id)) {
-            this.decisions.markSending(item.decision_id);
+            if (!this.decisions.markSending(item.decision_id)) continue;
             const outcome = await this.send(item.route.channel_id, item.decision_id, `Approval Box ${item.decision_id}\n${item.text}`);
-            this.decisions.reportDelivery(conn, item.decision_id, outcome.state, outcome.detail);
+            if (outcome.state === "retry") this.decisions.deferServerDelivery(item.decision_id, outcome.retry_after_seconds);
+            else this.decisions.reportDelivery(conn, item.decision_id, outcome.state, outcome.detail);
             console.log(`callbridge ${item.decision_id} → ${item.route.channel_id.slice(0, 8)} ${outcome.state}${outcome.detail ? ` (${outcome.detail.slice(0, 120)})` : ""}`);
           }
         }
