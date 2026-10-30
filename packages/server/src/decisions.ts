@@ -470,14 +470,20 @@ export class Decisions {
 
   /** サーバーが自分で届ける配送待ち（route.harness = callbridge）。送り始めた印（sending）が付いたものは含めない。 */
   serverDeliveries(connectionId: string) {
-    return all<Row>(this.db, "select * from decisions where connection_id = ? and status = 'answered' and delivery = 'waiting' and route is not null and delivery_detail is null order by updated_at", connectionId)
+    return all<Row>(this.db, "select * from decisions where connection_id = ? and status = 'answered' and delivery = 'waiting' and route is not null and (delivery_detail is null or (delivery_detail like 'retry_at:%' and substr(delivery_detail, 10) <= ?)) order by updated_at", connectionId, now())
       .map((row) => ({ decision_id: row.id, route: JSON.parse(row.route!) as Route, text: row.delivery_text! }))
       .filter((item) => item.route.harness === SERVER_HARNESS);
   }
 
   /** 送り始めた印。送信の途中でサーバーが止まったら、届いたか分からないので送り直さない。 */
   markSending(id: string) {
-    run(this.db, "update decisions set delivery_detail = 'sending' where id = ? and delivery = 'waiting'", id);
+    return run(this.db, "update decisions set delivery_detail = 'sending' where id = ? and delivery = 'waiting'", id).changes > 0;
+  }
+
+  /** 通話未開設が確定した一時失敗だけを永続待機へ戻す。取得済みの回答には触れない。 */
+  deferServerDelivery(id: string, seconds: 30) {
+    const at = new Date(Date.now() + seconds * 1000).toISOString();
+    run(this.db, "update decisions set delivery_detail = ? where id = ? and status = 'answered' and delivery = 'waiting' and delivery_detail = 'sending'", `retry_at:${at}`, id);
   }
 
   /** 前回の送信の途中で止まった配送。 */

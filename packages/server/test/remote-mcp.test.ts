@@ -179,3 +179,33 @@ test("call-bridge: 送信の途中でサーバーが止まった配送は、起�
   assert.equal((await ctx.call("GET", `/v1/decisions/${id}`, { token: ctx.session })).json.delivery, "unknown");
   await client.close();
 });
+
+test("call-bridgeの一時切断は永続待機、再起動後も期日前再送せず回復時に一回配送", async () => {
+  const ctx = setup();
+  const issued = await ctx.call("POST", "/v1/tokens", { token: ctx.session, body: { label: "GrokBot" } });
+  ctx.callBridgeConnections.add(issued.json.id);
+  const client = await mcpClient(ctx, issued.json.token);
+  const who = { requester_id: "actor", requester_name: "test" };
+  const first = await tool(client, "request_decision", { ...ask, ...who });
+  const id = (await tool(client, "request_decision", { ...ask, ...who, check_token: first.structuredContent!.check_token })).structuredContent!.decision_id as string;
+  const version = (await ctx.call("GET", `/v1/decisions/${id}`, { token: ctx.session })).json.version;
+  await ctx.call("POST", `/v1/decisions/${id}/answer`, { token: ctx.session, body: { option_id: "biz", version } });
+  let attempts = 0;
+  const send = async (): Promise<SendResult> => (++attempts === 1 ? { state: "retry", retry_after_seconds: 30 } : { state: "delivered" });
+  const firstRun = new CallBridgeDeliverer(ctx.db, ctx.decisions, ctx.events, send, ctx.callBridgeConnections);
+  await firstRun.sync();
+  assert.equal(attempts, 1);
+  assert.equal((await ctx.call("GET", `/v1/decisions/${id}`, { token: ctx.session })).json.delivery, "waiting");
+  const restarted = new CallBridgeDeliverer(ctx.db, ctx.decisions, ctx.events, send, ctx.callBridgeConnections);
+  await restarted.sync();
+  assert.equal(attempts, 1);
+  assert.match(ctx.db.prepare("select delivery_detail from decisions where id=?").get(id)!.delivery_detail as string, /^retry_at:/);
+  ctx.db.prepare("update decisions set delivery_detail='retry_at:2000-01-01T00:00:00.000Z' where id=?").run(id);
+  await restarted.sync(); await restarted.sync();
+  assert.equal(attempts, 2);
+  assert.equal((await ctx.call("GET", `/v1/decisions/${id}`, { token: ctx.session })).json.delivery, "delivered");
+  assert.equal(ctx.decisions.markSending(id), false);
+  ctx.decisions.deferServerDelivery(id, 30);
+  assert.equal((await ctx.call("GET", `/v1/decisions/${id}`, { token: ctx.session })).json.delivery, "delivered");
+  await client.close();
+});
