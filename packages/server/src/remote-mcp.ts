@@ -114,15 +114,10 @@ function tools(callBridge: boolean) {
 const VIEWABLE_IMAGES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const TEXT_TYPES = ["text/plain", "text/markdown", "text/csv", "application/json"];
 
-type AiDecision = ReturnType<Decisions["toAi"]>;
-
-function describe(items: AiDecision[]): string {
+function describe(items: ReturnType<Decisions["listMine"]>): string {
   if (!items.length) return "この接続から出した申請はありません。";
   return items.map((d) => {
-    const parts = [`- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version}${d.requester ? ` 申請者=${d.requester}` : ""} 作業=${d.session_label}`];
-    if ("answer_text" in d && d.answer_text) parts.push(`  答え: ${String(d.answer_text).split("\n").slice(1, 3).join(" / ")}`);
-    if (d.cancel_reason) parts.push(`  取り下げ理由: ${d.cancel_reason}`);
-    return parts.join("\n");
+    return `- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version}${d.requester ? ` 申請者=${d.requester}` : ""} 作業=${d.session_label}${d.has_answer ? " 答えあり（get_decisionで確認）" : ""}`;
   }).join("\n");
 }
 
@@ -171,7 +166,7 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
             return result(`${error.message}\n\ncheck_token: ${String(error.extra.check_token)}`, { error: error.code, ...error.extra }, true);
           }
           if (error instanceof ApiError && error.code === "duplicate_suspected") {
-            const existing = (error.extra.existing ?? []) as AiDecision[];
+            const existing = (error.extra.existing ?? []) as ReturnType<Decisions["listMine"]>;
             return result(`${error.message}\n既存の申請:\n${describe(existing)}`, { error: error.code, existing }, true);
           }
           throw error;
