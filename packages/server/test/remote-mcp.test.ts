@@ -95,14 +95,20 @@ test("リモートMCP: Bearer無しは401、札の往復で申請し、get_decis
   const dup = await tool(client, "request_decision", { ...named, check_token: (await tool(client, "request_decision", named)).structuredContent!.check_token });
   assert.equal(dup.structuredContent?.error, "duplicate_suspected");
 
-  await ctx.call("POST", `/v1/decisions/${id}/answer`, { token: ctx.session, body: { option_id: "own", version: app.json.version } });
+  await ctx.call("POST", `/v1/decisions/${id}/answer`, { token: ctx.session, body: { option_id: "own", text: "synthetic-private-remote-answer", version: app.json.version } });
   const got = await tool(client, "get_decision", { decision_id: id });
   assert.match(got.content[0]!.text, /答え: 私用/);
+  assert.match(got.content[0]!.text, /synthetic-private-remote-answer/);
   assert.equal(got.structuredContent!.delivery, "fetched");
 
   const listedMine = await tool(client, "list_my_decisions");
   assert.equal(listedMine.structuredContent!.items.length, 3, "答えた申請と、取り下げた名前なしの申請2つ");
   assert.match(listedMine.content[0]!.text, /「経費の区分を決めてほしい」 status=answered version=\d+ 申請者=Claude 作業=Books 確認/);
+  assert.doesNotMatch(JSON.stringify(listedMine), /synthetic-private-remote-answer|Amazonの購入1件/);
+  assert.equal(listedMine.structuredContent!.items.find((item: { decision_id: string }) => item.decision_id === id).has_answer, true);
+  const nextCheck = await tool(client, "request_decision", { ...named, title: "次の申請" });
+  assert.equal(nextCheck.structuredContent!.error, "confirm_required");
+  assert.doesNotMatch(JSON.stringify(nextCheck), /synthetic-private-remote-answer|Amazonの購入1件/);
   await client.close();
 });
 

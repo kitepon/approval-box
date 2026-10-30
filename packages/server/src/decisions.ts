@@ -323,7 +323,21 @@ export class Decisions {
     const rows = all<Row>(this.db,
       "select * from decisions where connection_id = ? and (status in ('pending','held') or updated_at >= ?) order by created_at desc",
       conn.id, since);
-    return rows.map((row) => this.toAi(row, routeChannel));
+    return rows.map((row) => this.summary(row, routeChannel));
+  }
+
+  /** 同じ接続を共有するAIの一覧に、本文や回答・添付を含めない。 */
+  private summary(row: Row, routeChannel?: string) {
+    const route = row.route ? (JSON.parse(row.route) as Route) : null;
+    return {
+      decision_id: row.id, title: row.title, status: row.status, version: row.version,
+      session_label: row.session_label, ...(row.requester ? { requester: row.requester } : {}),
+      this_session: !!routeChannel && route?.channel_id === routeChannel,
+      has_answer: row.answer !== null,
+      ...(row.delivery ? { delivery: row.delivery } : {}),
+      ...(row.test ? { test: true } : {}),
+      created_at: row.created_at, updated_at: row.updated_at,
+    };
   }
 
   create(conn: Connection, input: z.infer<typeof createSchema>, options: { test?: boolean; via?: "connector" | "remote" } = {}) {
@@ -340,7 +354,7 @@ export class Decisions {
         if (existing.length) {
           throw new ApiError("duplicate_suspected",
             "同じ件名の申請がまだ答えを待っています。新しく出さず、amend_decision で直すか、cancel_decision で取り下げてください。別件なら distinct_reason を付けて出し直せます。",
-            { existing: existing.map((row) => this.toAi(row, input.route?.channel_id)) });
+            { existing: existing.map((row) => this.summary(row, input.route?.channel_id)) });
         }
       }
       const id = uniqueId(this.db);
@@ -375,10 +389,10 @@ export class Decisions {
     const decisions = this.listMine(conn, input.route?.channel_id);
     // 0.1.6までのコネクタは message だけをAIに見せる。一覧と札も message に入れ、古いコネクタのAIも出し直せるようにする。
     const list = decisions.length
-      ? decisions.map((d) => `- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version}${d.answer ? " 答えあり" : ""}`).join("\n")
+      ? decisions.map((d) => `- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version}${d.has_answer ? " 答えあり" : ""}`).join("\n")
       : "（この端末から出した申請はありません）";
     throw new ApiError("confirm_required",
-      `${head}申請はまだ受け付けていません。下はこの端末から出した申請の一覧です。直す申請があれば amend_decision、要らなくなった申請があれば cancel_decision を先に済ませてください。答えが出ている申請は、その答えに従ってください。問題が無ければ、同じ申請に check_token: "${token}" を付けて出し直してください。\n${list}`,
+      `${head}申請はまだ受け付けていません。下は同じ接続から出した申請の要約一覧です。直す申請があれば amend_decision、要らなくなった申請があれば cancel_decision を先に済ませてください。答えが出ている申請は get_decision で確認してください。問題が無ければ、同じ申請に check_token: "${token}" を付けて出し直してください。\n${list}`,
       { check_token: token, decisions });
   }
 

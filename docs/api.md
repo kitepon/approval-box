@@ -1,4 +1,10 @@
-# Approval Box API（アプリ・Web版向け） v0.36
+# Approval Box API（アプリ・Web版向け） v0.37
+
+v0.37（2026-10-30）: AI向けの一覧・申請前確認・重複候補は要約だけを返す。回答本文・背景・選択肢・添付・取消理由を含めない。回答は明示的な `get_decision` または既存の回答配送で受け取る。利用者向けAPIと保存内容は変更しない。
+
+AIの認証・認可は接続トークン単位。同じトークンを共有するAIは同じ権限を持つ。`requester` / `requester_name` は表示用の自己申告であり、`channel_id` は配送先で、どちらも別の認証主体を作らない。AIごとのアクセス分離には別の接続トークンが必要。
+
+`GET /connector/v1/decisions`、リモートMCP `list_my_decisions`、`confirm_required.decisions` と `duplicate_suspected.existing` は同じ接続の要約一覧。項目は `decision_id,title,status,version,session_label,requester?,this_session,has_answer,delivery?,test?,created_at,updated_at`。`channel_id` があっても一覧の認可範囲は変わらず、`this_session` の表示だけに使う。回答済みの要約は `has_answer: true` とし、本文は `get_decision` / `GET /connector/v1/decisions/:id` で明示取得する。既存クライアントも同じ一覧APIから本文を受け取らなくなる。
 
 v0.36（2026-10-27）: 診断に任意の`diagnostic_log.request_key_sha256`（小文字hex64）を追加。回答POST timeoutで、実際に送信へ付けた重複防止キーのSHA256を保存記録との照合に使えます。原キー・本文・認証情報は含めず、既存のfingerprint・重大度・欠測許容・原本は保持します。serverの受理を先に反映してからnativeの出力を配布してください。詳細は[diagnostics.md](diagnostics.md#optional-answer-request-key-digest-2026-10-27)。
 
@@ -370,7 +376,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 申請画像（v0.27）
 
-AIが撮影・作成した画像を申請本文に添え、人が画像を見て通常の回答を出せる。利用者の回答添付とは分離する。Decision（利用者GET/list、AI create/get/list/amend）に `request_attachments: Attachment[]` を追加する。未添付は空配列、旧サーバー互換のためアプリ側は欠落も空として扱う。Attachmentは既存の `id,name,content_type,kind,size,sha256,created_at`。kindはimageのみ。
+AIが撮影・作成した画像を申請本文に添え、人が画像を見て通常の回答を出せる。利用者の回答添付とは分離する。Decision（利用者GET/list、AI create/get/amend）に `request_attachments: Attachment[]` を追加する。AIの要約一覧には含めない。未添付は空配列、旧サーバー互換のためアプリ側は欠落も空として扱う。Attachmentは既存の `id,name,content_type,kind,size,sha256,created_at`。kindはimageのみ。
 
 原本は既存 `GET /v1/decisions/:id/attachments/:aid` を共用し利用者Bearerを必須とする。他accountは404。AIは自接続の `GET /connector/v1/decisions/:id/attachments/:aid` でも取得できる。公開URLは作らない。アプリ/Webはsize・sha256を照合して本文下に『AIの添付画像』、縮小画像/ファイル名を表示しタップで原本拡大。取得失敗時は画像欄に明示して再読込できる。回答添付は `answer.attachments` と従来draft APIのまま。
 
