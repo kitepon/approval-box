@@ -209,3 +209,27 @@ test("call-bridgeの一時切断は永続待機、再起動後も期日前再送
   assert.equal((await ctx.call("GET", `/v1/decisions/${id}`, { token: ctx.session })).json.delivery, "delivered");
   await client.close();
 });
+
+
+test("call-bridge一時切断の再試行期限は回答時刻から10分、再起動でも延長しない", async () => {
+  const ctx = setup();
+  const issued = await ctx.call("POST", "/v1/tokens", { token: ctx.session, body: { label: "GrokBot" } });
+  ctx.callBridgeConnections.add(issued.json.id);
+  const client = await mcpClient(ctx, issued.json.token);
+  const args = { ...ask, requester_id: "actor", requester_name: "test" };
+  const first = await tool(client, "request_decision", args);
+  const id = (await tool(client, "request_decision", { ...args, check_token: first.structuredContent!.check_token })).structuredContent!.decision_id as string;
+  const version = (await ctx.call("GET", `/v1/decisions/${id}`, { token: ctx.session })).json.version;
+  await ctx.call("POST", `/v1/decisions/${id}/answer`, { token: ctx.session, body: { option_id: "biz", version } });
+  ctx.db.prepare("update decisions set answer=json_set(answer,'$.answered_at','2000-01-01T00:00:00.000Z') where id=?").run(id);
+  let attempts = 0;
+  const send = async (): Promise<SendResult> => { attempts++; return { state: "retry", retry_after_seconds: 30 }; };
+  await new CallBridgeDeliverer(ctx.db, ctx.decisions, ctx.events, send, ctx.callBridgeConnections).sync();
+  await new CallBridgeDeliverer(ctx.db, ctx.decisions, ctx.events, send, ctx.callBridgeConnections).sync();
+  assert.equal(attempts, 1);
+  const decision = (await ctx.call("GET", `/v1/decisions/${id}`, { token: ctx.session })).json;
+  assert.equal(decision.delivery, "unknown");
+  assert.equal(decision.status, "answered");
+  assert.equal(decision.answer.option_id, "biz");
+  await client.close();
+});

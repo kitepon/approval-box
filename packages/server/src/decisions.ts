@@ -482,8 +482,11 @@ export class Decisions {
 
   /** 通話未開設が確定した一時失敗だけを永続待機へ戻す。取得済みの回答には触れない。 */
   deferServerDelivery(id: string, seconds: 30) {
-    const at = new Date(Date.now() + seconds * 1000).toISOString();
-    run(this.db, "update decisions set delivery_detail = ? where id = ? and status = 'answered' and delivery = 'waiting' and delivery_detail = 'sending'", `retry_at:${at}`, id);
+    const row = this.row(id);
+    const retryAt = Date.now() + seconds * 1000;
+    if (!row?.answer || retryAt > Date.parse((JSON.parse(row.answer) as Answer).answered_at) + 10 * 60_000) return false;
+    const at = new Date(retryAt).toISOString();
+    return run(this.db, "update decisions set delivery_detail = ? where id = ? and status = 'answered' and delivery = 'waiting' and delivery_detail = 'sending'", `retry_at:${at}`, id).changes > 0;
   }
 
   /** 前回の送信の途中で止まった配送。 */

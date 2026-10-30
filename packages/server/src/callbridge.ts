@@ -119,8 +119,11 @@ export class CallBridgeDeliverer {
           for (const item of this.decisions.serverDeliveries(id)) {
             if (!this.decisions.markSending(item.decision_id)) continue;
             const outcome = await this.send(item.route.channel_id, item.decision_id, `Approval Box ${item.decision_id}\n${item.text}`);
-            if (outcome.state === "retry") this.decisions.deferServerDelivery(item.decision_id, outcome.retry_after_seconds);
-            else this.decisions.reportDelivery(conn, item.decision_id, outcome.state, outcome.detail);
+            if (outcome.state === "retry") {
+              if (!this.decisions.deferServerDelivery(item.decision_id, outcome.retry_after_seconds)) {
+                this.decisions.reportDelivery(conn, item.decision_id, "failed", "directory_link_down: 回答後10分の再試行期限を超えました。get_decisionで取得してください");
+              }
+            } else this.decisions.reportDelivery(conn, item.decision_id, outcome.state, outcome.detail);
             console.log(`callbridge ${item.decision_id} → ${item.route.channel_id.slice(0, 8)} ${outcome.state}${outcome.detail ? ` (${outcome.detail.slice(0, 120)})` : ""}`);
           }
         }
