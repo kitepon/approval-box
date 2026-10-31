@@ -18,16 +18,16 @@ async function swipe(page:Page,dx:number,dy=0,target="h1") {
 for(const dx of [-120,120]) test(`completed decision returns to inbox with swipe ${dx}`,async({page})=>{
   await fixture(page);await swipe(page,dx);await expect(page).toHaveURL(/\/$/);
 });
-test("scrolls, short drags, controls and reply drafts do not leave the detail",async({page})=>{
+test("scrolls, short drags and controls do not leave the detail",async({page})=>{
   await fixture(page);await swipe(page,120,100);await swipe(page,30);await swipe(page,120,0,"button.back");await expect(page).toHaveURL(/\/d\/K-SWIPE$/);
-  await page.unrouteAll();await fixture(page,"pending");await page.getByRole("textbox").fill("Keep draft");await swipe(page,120);
-  await expect(page.getByRole("textbox")).toHaveValue("Keep draft");await expect(page).toHaveURL(/\/d\/K-SWIPE$/);
+ });
+for (const status of ["pending","held"]) test(`${status} closes with an unsent reply without submitting it`,async({page})=>{
+  await fixture(page,status);let writes=0;
+  page.on("request",r=>{if(r.method()==="POST")writes++;});
+  await page.getByRole("textbox").fill("Unsent reply");
+  await expect(page.getByRole("button",{name:"Send text",exact:true})).toBeEnabled();
+  await swipe(page,120);await expect(page).toHaveURL(/\/$/);expect(writes).toBe(0);
 });
-test("held request can return, but a held reply draft is preserved",async({page})=>{
-  await fixture(page,"held");await page.getByRole("textbox").fill("Keep this");await expect(page.getByRole("button",{name:"Send text",exact:true})).toBeEnabled();await swipe(page,120);await expect(page.getByRole("textbox")).toHaveValue("Keep this");
-  await page.getByRole("textbox").fill("");await expect(page.getByRole("button",{name:"Send text",exact:true})).toBeDisabled();await swipe(page,-120);await expect(page).toHaveURL(/\/$/);
-});
-
 for (const dx of [-120,120]) test(`pending detail slides in swipe direction ${dx}`,async({page})=>{
   await fixture(page,"pending");
   await page.evaluate(()=>{
@@ -38,6 +38,7 @@ for (const dx of [-120,120]) test(`pending detail slides in swipe direction ${dx
   await swipe(page,dx);
   const frames=await page.evaluate(()=>(window as any).swipeAnimations);
   expect(frames).toHaveLength(1);
+  expect(frames[0][0].transform).toBe(`translateX(${dx}px)`);
   const value=Number(/translateX\((-?[0-9.]+)px\)/.exec(frames[0][1].transform)![1]);
   expect(Math.sign(value)).toBe(Math.sign(dx));
   await expect(page).toHaveURL(/\/$/);
@@ -49,4 +50,17 @@ test("reduced motion skips the slide; leaving for another page cancels it",async
   await page.emulateMedia({reducedMotion:"no-preference"});await swipe(page,120);
   await page.getByRole("link",{name:"Settings",exact:true}).click();await expect(page).toHaveURL(/\/settings$/);
   await page.waitForTimeout(250);await expect(page).toHaveURL(/\/settings$/);
+});
+
+test("short horizontal drag follows the finger then returns; touch cancel resets",async({page})=>{
+  await fixture(page,"pending");const el=page.locator("h1");const panel=page.locator("section.decision");
+  await el.dispatchEvent("touchstart",{touches:[{identifier:1,clientX:150,clientY:200}]});
+  await el.dispatchEvent("touchmove",{touches:[{identifier:1,clientX:190,clientY:200}]});
+  await expect(panel).toHaveAttribute("style",/translateX\(40px\)/);
+  await el.dispatchEvent("touchend",{touches:[],changedTouches:[{identifier:1,clientX:190,clientY:200}]});
+  await page.waitForTimeout(150);await expect(panel).not.toHaveAttribute("style",/translateX/);
+  await expect(page).toHaveURL(/\/d\/K-SWIPE$/);
+  await el.dispatchEvent("touchstart",{touches:[{identifier:1,clientX:150,clientY:200}]});
+  await el.dispatchEvent("touchmove",{touches:[{identifier:1,clientX:30,clientY:200}]});
+  await el.dispatchEvent("touchcancel");await expect(panel).not.toHaveAttribute("style",/translateX/);
 });
