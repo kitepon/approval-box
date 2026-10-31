@@ -82,3 +82,11 @@ node tools/e2e/parent-e2e.mjs claude-code  # 本物のAIで配送を確かめる
 Web版は日本語・英語・韓国語・中国語（簡体字/繁体字）に対応します。画面上部の「言語 / Language」で「システムに合わせる・日本語・English・한국어・简体中文・繁體中文」を選択できます。選択はブラウザへ保存され、システム設定ではブラウザの優先言語に追随します。未対応言語は日本語で表示します。申請・選択肢・回答などの本文は翻訳しません。Apple/Androidアプリの対応は各配布版の案内を確認してください。
 
 The web app supports Japanese, English, Korean, and Chinese (Simplified and Traditional). Choose Use system language, 日本語, English, 한국어, 简体中文, or 繁體中文 from Language at the top of the screen. Your choice is saved in the browser. Unsupported languages fall back to Japanese. Request content, options, and answers remain in their original language. Check the release notes for language support in each native app build.
+
+### 読みやすい申請文
+
+MCPは、[unai](https://github.com/kitepon/unai)の方針に沿って申請文を推敲するようAIへ伝えます。件名で判断してほしいことを示し、背景では判断に必要な理由と影響を先に説明します。各AIの口調や、承認対象・範囲・費用・危険・期限・未確認事項を保ちます。
+
+例：「ランタイム更新の実行可否について」より「Approval Boxの実行環境を更新してよいですか？」、背景には「セキュリティ修正を適用します。更新中は数秒使えなくなります。」のように具体的に書きます。
+
+AIへの執筆指示のため、文章の品質を機械的に保証するものではありません。保存済みの申請・回答は書き換えません。ローカル接続ではコネクタ0.1.27へ更新し、MCPを再接続すると新しい指示を取得できます。
