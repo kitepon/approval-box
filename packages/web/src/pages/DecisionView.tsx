@@ -92,28 +92,46 @@ export function DecisionView({ id }: { id: string }) {
     <section class="decision"
       onTouchStart={(e) => {
         swipe.current = null;
-        if (exitAnimation.current || busy || drafts.uploading || text || drafts.items.length || e.touches.length !== 1) return;
+        if (exitAnimation.current || busy || drafts.uploading || e.touches.length !== 1) return;
         if ((e.target as Element).closest("button,a,input,textarea,select,summary,[contenteditable]")) return;
         if (window.getSelection()?.toString()) return;
         swipe.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY, at: Date.now() };
       }}
       onTouchMove={(e) => {
-        if (e.touches.length !== 1 || swipe.current && Math.abs(e.touches[0]!.clientY - swipe.current.y) > 30) swipe.current = null;
+        const start = swipe.current;
+        if (!start) return;
+        if (e.touches.length !== 1 || Math.abs(e.touches[0]!.clientY - start.y) > 30 || window.getSelection()?.toString()) {
+          swipe.current = null;
+          e.currentTarget.style.transform = "";
+          return;
+        }
+        const dx = e.touches[0]!.clientX - start.x;
+        const dy = Math.abs(e.touches[0]!.clientY - start.y);
+        if (Math.abs(dx) > 10 && Math.abs(dx) > dy * 2 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          e.currentTarget.style.transform = `translateX(${dx}px)`;
+        }
       }}
-      onTouchCancel={() => { swipe.current = null; }}
+      onTouchCancel={(e) => { swipe.current = null; e.currentTarget.style.transform = ""; }}
       onTouchEnd={(e) => {
         const start = swipe.current;
         swipe.current = null;
-        if (!start || busy || drafts.uploading || text || drafts.items.length || e.touches.length || !e.changedTouches.length || window.getSelection()?.toString()) return;
+        const panel = e.currentTarget;
+        const from = panel.style.transform || "translateX(0)";
+        panel.style.transform = "";
+        if (!start || busy || drafts.uploading || e.touches.length || !e.changedTouches.length || window.getSelection()?.toString()) return;
         const distance = e.changedTouches[0]!.clientX - start.x;
         const dx = Math.abs(distance);
         const dy = Math.abs(e.changedTouches[0]!.clientY - start.y);
-        if (dx < 80 || dx <= dy * 2 || Date.now() - start.at >= 800) return;
+        if (dx < 80 || dx <= dy * 2 || Date.now() - start.at >= 800) {
+          if (!matchMedia("(prefers-reduced-motion: reduce)").matches) panel.animate([
+            { transform: from }, { transform: "translateX(0)" },
+          ], { duration: 120, easing: "ease-out" });
+          return;
+        }
         if (matchMedia("(prefers-reduced-motion: reduce)").matches) { navigate("/"); return; }
-        const panel = e.currentTarget;
         panel.inert = true;
         const animation = panel.animate([
-          { transform: "translateX(0)" },
+          { transform: from },
           { transform: `translateX(${Math.sign(distance) * Math.max(innerWidth, panel.offsetWidth)}px)` },
         ], { duration: 180, easing: "ease-in", fill: "forwards" });
         exitAnimation.current = animation;
