@@ -4,7 +4,7 @@ async function fixture(page:Page,status="answered") {
   await page.addInitScript(()=>localStorage.setItem("approval-box.session","synthetic"));
   await page.route("**/v1/**",route=>{
     const path=new URL(route.request().url()).pathname;
-    const body=path==="/v1/me"?{plan:"trial",setup:{verified:true}}:path==="/v1/decisions/K-SWIPE"?{...decision,status}:path==="/v1/decisions"?{items:[]}:{};
+    const body=path==="/v1/me"?{plan:"trial",setup:{verified:true}}:path==="/v1/decisions/K-SWIPE"?{...decision,status}:path==="/v1/decisions" || path.endsWith("/attachments")?{items:[]}:{};
     return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(body)});
   });
   await page.goto("/d/K-SWIPE");await expect(page.getByRole("heading",{name:"Decision"})).toBeVisible();
