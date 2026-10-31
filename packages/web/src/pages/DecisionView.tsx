@@ -29,6 +29,7 @@ export function DecisionView({ id }: { id: string }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const swipe = useRef<{ x: number; y: number; at: number } | null>(null);
   const shown = useRef<Decision | null>(null);
   const drafts = useDraftAttachments(id, decision?.status === "pending" || decision?.status === "held");
 
@@ -81,7 +82,26 @@ export function DecisionView({ id }: { id: string }) {
   }
 
   return (
-    <section class="decision">
+    <section class="decision"
+      onTouchStart={(e) => {
+        swipe.current = null;
+        if (busy || drafts.uploading || text || drafts.items.length || open && d.status !== "held" || e.touches.length !== 1) return;
+        if ((e.target as Element).closest("button,a,input,textarea,select,summary,[contenteditable]")) return;
+        if (window.getSelection()?.toString()) return;
+        swipe.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY, at: Date.now() };
+      }}
+      onTouchMove={(e) => {
+        if (e.touches.length !== 1 || swipe.current && Math.abs(e.touches[0]!.clientY - swipe.current.y) > 30) swipe.current = null;
+      }}
+      onTouchCancel={() => { swipe.current = null; }}
+      onTouchEnd={(e) => {
+        const start = swipe.current;
+        swipe.current = null;
+        if (!start || busy || drafts.uploading || text || drafts.items.length || e.touches.length || !e.changedTouches.length || window.getSelection()?.toString()) return;
+        const dx = Math.abs(e.changedTouches[0]!.clientX - start.x);
+        const dy = Math.abs(e.changedTouches[0]!.clientY - start.y);
+        if (dx >= 80 && dx > dy * 2 && Date.now() - start.at < 800) navigate("/");
+      }}>
       <button class="back" onClick={() => history.length > 1 ? history.back() : navigate("/")}>{t("‹ 戻る")}</button>
       {notice && <p class="notice">{systemMessage(notice)}</p>}
       <div class="card-meta">

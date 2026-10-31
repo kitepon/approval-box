@@ -27,7 +27,10 @@ export function harnessOf(clientName: string | undefined): Harness {
   return "other";
 }
 
+const QUESTION_STYLE = "申請文は unai（https://github.com/kitepon/unai）の方針で推敲する。各AIの人格・口調と、承認の対象・範囲・費用・危険・期限・未確認事項を保つ。件名は何を決めてほしいかを一文で書く。背景は判断に必要な理由と影響を先に書き、作業履歴や内部IDの羅列を避ける。誰が何をするかを明確にし、専門用語は説明を添え、曖昧な比喩・重複・不要な前置きを除く。選択肢は選んだ後に何が起きるか分かる短い文にする。意味や条件を変えず、必要な情報は省かない。";
+
 const INSTRUCTIONS = [
+  QUESTION_STYLE,
   "会話が替わったら list_my_decisions で自分が引き継ぐ申請を確かめ、申請ごとに resume_decision を呼ぶ。未決・保留の答えは新しい会話へ届き、回答済みならその場で答えが返る。",
   "Approval Boxは、利用者（人間）の判断・承認・操作が要る時に使う。URLを開いての承認や、利用者の手で行う作業を頼む時も含む。その時は request_decision でも申請する。利用者が申請に気づきやすいので、強く推奨する。答えは利用者がスマホやWebで出し、この会話へ自動で届く。",
   "request_decision を呼ぶと、申請はすぐには受け付けられず、自分の申請の一覧と check_token が返る。一覧を見て、内容が変わった申請は amend_decision、要らなくなった申請は cancel_decision で先に済ませる。答えが出ていれば、その答えに従う。問題が無ければ、同じ申請に check_token を付けて出し直すと受け付けられる。",
@@ -45,12 +48,12 @@ const TOOLS = [
   },
   {
     name: "request_decision",
-    description: "利用者に判断を申請する。1回目は受け付けず、自分の申請の一覧と check_token を返す。直す・取り下げる申請が無いか確かめ、要れば amend_decision・cancel_decision を済ませてから、check_token を付けて同じ申請を出し直す。答えはこの会話へ自動で届くので、待って何度も呼ばない。同じ件名の未決があると duplicate_suspected で断られる。",
+    description: QUESTION_STYLE + "\n利用者に判断を申請する。1回目は受け付けず、自分の申請の一覧と check_token を返す。直す・取り下げる申請が無いか確かめ、要れば amend_decision・cancel_decision を済ませてから、check_token を付けて同じ申請を出し直す。答えはこの会話へ自動で届くので、待って何度も呼ばない。同じ件名の未決があると duplicate_suspected で断られる。",
     inputSchema: {
       type: "object",
       properties: {
         title: { type: "string", description: "件名（120字まで）。何を決めてほしいか一行で" },
-        context: { type: "string", description: "判断に要る背景。プレーンテキスト" },
+        context: { type: "string", description: "判断に必要な理由・影響・未確認事項を先に。プレーンテキスト" },
         options: { type: "array", items: optionSchema, minItems: 2, maxItems: 6, description: "選択肢（2〜6）" },
         recommendation: { type: "string", description: "AIの推奨する選択肢のid" },
         urgency: { type: "string", enum: ["low", "normal", "high"] },

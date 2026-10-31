@@ -47,6 +47,7 @@ await runMcp();`;
   const threadId = randomUUID();
   // 誰から・何の仕事かは、道具の一覧で必須にして求める（クオの指摘 2026-10-14）。
   const listed = (await client.listTools()).tools.find(tool => tool.name === "request_decision")!;
+  assert.match(listed.description!, /unai.*承認の対象・範囲・費用・危険・期限・未確認事項を保つ/);
   assert.deepEqual(listed.inputSchema.required, ["title", "options", "requester_name", "session_label"]);
   const args = { title: "受付確認", options: [{ id: "ok", label: "確認" }], requester_name: " ナユタ ", session_label: "Approval Box / 受付の試験" };
   const first = await client.callTool({ name: "request_decision", arguments: args, _meta: { threadId } });

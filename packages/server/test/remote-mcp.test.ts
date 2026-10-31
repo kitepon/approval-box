@@ -57,6 +57,7 @@ test("リモートMCP: Bearer無しは401、札の往復で申請し、get_decis
   const request = listed.tools.find((t) => t.name === "request_decision")!;
   assert.equal("requester_id" in (request.inputSchema.properties ?? {}), false, "call-bridge で届けない接続には、通話の届け先（requester_id）を求めない");
   // 誰から・何の仕事かは、どの接続でも道具の一覧で必須にして求める（クオの指摘 2026-10-14）。
+  assert.match(request.description!, /unai.*承認の対象・範囲・費用・危険・期限・未確認事項を保つ/);
   assert.deepEqual(request.inputSchema.required, ["title", "options", "requester_name", "session_label"]);
 
   const named = { ...ask, requester_name: "Claude" };
