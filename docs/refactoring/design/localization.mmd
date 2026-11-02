@@ -1,0 +1,15 @@
+flowchart LR
+  HEAD["Accept-Language"] --> REQ["server/locale.ts: q値・優先度・ja既定"]
+  PREF["選好 / navigator / localStorage"] --> WEB["web/i18n.ts: locale・表示・変更通知"]
+  REQ --> L["server/src/shared/locales.ts: LOCALES / supportedLocale"]
+  WEB --> L
+  WEB --> FIX["shared/error-translations.ts: fixedErrorTranslation"]
+  API["server/errors.ts: ApiError / status / extra / body"] --> MSG["同error-translations.ts: errorMessage"]
+  FIX --> CAT["shared/error-messages-*.ts + code別fallback"]
+  MSG --> CAT
+  REQ --> API
+  FIX -->|"既知の固定文だけ変換、未知はundefined"| WEB
+  MSG -->|"ja原文 / 辞書 / code fallback"| API
+  WEB --> UI["画面。自由本文・名前・IDは原文"]
+  API --> RESP["HTTP/MCP応答。code/status/extraは維持"]
+  PURE["sharedはDB・HTTP・Node・Web状態をimportしない<br/>既存tsc/Viteで配布。新package無し"] -.-> CAT

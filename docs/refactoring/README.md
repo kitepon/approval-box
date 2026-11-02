@@ -1,6 +1,8 @@
 # Approval Box 機能図と責任の対応
 
-基準: main 90066748bf7ca4686716c67c91d76fcd20afa519。2026-11-02、Sol Highによる現状調査。これは改善前の記録。設計の判断・実装・最終整合はまだ行っていない。
+基準: main 90066748bf7ca4686716c67c91d76fcd20afa519。2026-11-02、Sol Highによる現状調査。`current/`は改善前の記録。Astra xhighによる設計を追加した。実装・最終整合はまだ行っていない。
+
+設計は[責務・代替案・採否](design.md) → [全caller・test・fixture・exportへの影響](impact.md) → [試験と完了条件](verification-plan.md)の順に読む。設計図は[HTTP](design/http.mmd)・[親会話](design/parent-channels.mmd)・[言語](design/localization.mmd)、全静的routeの移動先は[route-map](design/route-map.json)。設計図も未描画で、実装後の最終図とは区別する。
 
 読む順序は [全体図](current/overview.mmd) → 各機能詳細 → [全ファイル・関数](current/code-index.md)。図はMermaid原本で、まだ描画・目視前。最終成果ではSVGと描画確認を追加する。
 
