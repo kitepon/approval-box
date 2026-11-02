@@ -1,0 +1,21 @@
+flowchart LR
+ PATHS["connector uploadImagePaths: ローカルpath"] -->|全件検査/20MiB/10件/50MiB| UP["Api.uploadRequestImage"]
+ REMOTE["remote upload_request_image: strict base64"] --> RU["Attachments.uploadRequest"]
+ UP --> RU
+ RU -->|署名/容量/connection検証| RF[".part → rename"]
+ RF --> RDB[("request_uploads: connection所有 / hash+name重複")]
+ RDB -->|create/amend 同じtxで全件検証| BIND["Decisions.bindRequest"]
+ BIND -->|失敗 rollback| RDB
+ BIND --> Q[("attachments purpose=request / decision所有")]
+ FILE["Web/native 回答raw file + idem key"] --> AU["Attachments.upload"]
+ AU -->|重複キー/形式/容量/ownership検証| AF[".part → DB insert tx → rename"]
+ AF --> ADB[("attachments purpose=answer / position=null")]
+ ADB -->|answer 同じtx内| ANSWER["Decisions.bindAttachments: position付与"]
+ ANSWER --> DONE[("answer JSON + attachments")]
+ Q --> READ["readForUser / readForAi + 認証入口"]
+ DONE --> READ
+ READ --> CLIENT["Web Blob/hash/preview・connector hash保存・remote image/resource"]
+ ADB -->|24h未結合| GC["gc: DB参照なし原本 / 古いpart削除"]
+ RDB -->|24h / 接続解除| GC
+ Q -->|既決削除/retention/account削除| GC
+ DONE -->|同左| GC

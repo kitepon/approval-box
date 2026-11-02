@@ -1,9 +1,9 @@
 sequenceDiagram
- participant D as Decisions/Accounts
+ participant D as Decisions<br/>Accounts
  participant DB as SQLite tx
  participant E as EventHub
  participant S as http SSE
- participant W as web App/store
+ participant W as web<br/>App/store
  participant P as push Notifier
  D->>DB: 変更 + events row
  D->>E: publish / notifyConnection
@@ -18,5 +18,5 @@ sequenceDiagram
  W->>W: bump → useResource再GET → 画面反映
  P->>P: APNs送信、無効tokenだけ削除
  end
- Note over D,W: HTTP受付・DB確定・配送受付・画面反映は別の観測
- Note over S,W: 切断後はbackoff再接続、停止/abort時unsubscribe/wake
+ Note over D,W: HTTP受付・DB確定・配送受付<br/>画面反映は別の観測
+ Note over S,W: 切断後はbackoff再接続<br/>停止/abort時unsubscribe/wake

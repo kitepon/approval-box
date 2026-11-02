@@ -1,0 +1,5290 @@
+{
+  "sourceCommit": "97dd816e8214cf925420a8039b2b2e9155c851da",
+  "note": "Routes include middleware/mount/fallback; dynamic admin actions resolve/reopen and MCP handlers are described in flows.",
+  "routes": [
+    {
+      "file": "packages/server/src/diagnostics.ts",
+      "line": 184,
+      "target": "app",
+      "method": "use",
+      "path": "\"*\""
+    },
+    {
+      "file": "packages/server/src/diagnostics.ts",
+      "line": 195,
+      "target": "app",
+      "method": "get",
+      "path": "\"/logs\""
+    },
+    {
+      "file": "packages/server/src/diagnostics.ts",
+      "line": 215,
+      "target": "app",
+      "method": "patch",
+      "path": "\"/logs/:fingerprint/investigation\""
+    },
+    {
+      "file": "packages/server/src/diagnostics.ts",
+      "line": 230,
+      "target": "app",
+      "method": "post",
+      "path": "`/logs/${action}`"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 35,
+      "target": "app",
+      "method": "route",
+      "path": "\"/api/admin\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 37,
+      "target": "app",
+      "method": "get",
+      "path": "\"/healthz\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 44,
+      "target": "app",
+      "method": "post",
+      "path": "\"/mcp\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 45,
+      "target": "app",
+      "method": "on",
+      "path": "\"/mcp\"",
+      "methods": "[\"GET\", \"DELETE\"]"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 47,
+      "target": "app",
+      "method": "get",
+      "path": "\"*\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 24,
+      "target": "pairing",
+      "method": "post",
+      "path": "\"/pairing\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 28,
+      "target": "pairing",
+      "method": "get",
+      "path": "\"/pairing/:id\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 36,
+      "target": "app",
+      "method": "route",
+      "path": "\"/connector/v1\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 40,
+      "target": "conn",
+      "method": "use",
+      "path": "\"*\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 46,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/connection\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 47,
+      "target": "conn",
+      "method": "delete",
+      "path": "\"/connection\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 48,
+      "target": "conn",
+      "method": "put",
+      "path": "\"/connection/clients\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 53,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/decisions\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 54,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/request-images\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 60,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 66,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/decisions/:id\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 70,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions/:id/fetched\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 75,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions/:id/resume\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 76,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions/:id/amend\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 81,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions/:id/cancel\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 87,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/decisions/:id/attachments/:aid\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 92,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/setup-test\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 99,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/setup-test/confirm\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 103,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/deliveries\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 104,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/deliveries/:id\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 108,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/stream\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 109,
+      "target": "conn",
+      "method": "all",
+      "path": "\"*\""
+    },
+    {
+      "file": "packages/server/src/http/connector.ts",
+      "line": 110,
+      "target": "app",
+      "method": "route",
+      "path": "\"/connector/v1\""
+    },
+    {
+      "file": "packages/server/src/http/public.ts",
+      "line": 30,
+      "target": "app",
+      "method": "get",
+      "path": "\"/v1/auth/config\""
+    },
+    {
+      "file": "packages/server/src/http/public.ts",
+      "line": 31,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/auth/apple\""
+    },
+    {
+      "file": "packages/server/src/http/public.ts",
+      "line": 36,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/auth/apple/web/start\""
+    },
+    {
+      "file": "packages/server/src/http/public.ts",
+      "line": 44,
+      "target": "app",
+      "method": "post",
+      "path": "\"/auth/apple/callback\""
+    },
+    {
+      "file": "packages/server/src/http/public.ts",
+      "line": 61,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/auth/google\""
+    },
+    {
+      "file": "packages/server/src/http/public.ts",
+      "line": 64,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/appstore/notifications\""
+    },
+    {
+      "file": "packages/server/src/http/public.ts",
+      "line": 71,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/auth/link\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 25,
+      "target": "v1",
+      "method": "use",
+      "path": "\"*\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 30,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/diagnostics\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 32,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/decisions\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 39,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/decisions\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 46,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/decisions/:id\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 47,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/decisions/:id/answer\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 54,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/decisions/:id/attachments\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 60,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/decisions/:id/attachments\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 61,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/decisions/:id/attachments/:aid\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 62,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/decisions/:id/attachments/:aid\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 66,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/decisions/:id/hold\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 67,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/decisions/:id/unhold\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 69,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/events\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 71,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/connections\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 72,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/connections/:id\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 74,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/tokens\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 79,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/tokens\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 80,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/tokens/:id\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 81,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/devices\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 92,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/devices/:id\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 93,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/onboarding\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 99,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/pairing/lookup\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 100,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/pairing/:id/claim\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 101,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/pairing/:id/reject\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 103,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/me\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 104,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/me\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 112,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/me/settings\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 113,
+      "target": "v1",
+      "method": "patch",
+      "path": "\"/me/settings\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 117,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/auth/logout\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 119,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/billing/appstore/verify\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 126,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/billing/:store/:action\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 132,
+      "target": "v1",
+      "method": "all",
+      "path": "\"*\""
+    },
+    {
+      "file": "packages/server/src/http/user.ts",
+      "line": 133,
+      "target": "app",
+      "method": "route",
+      "path": "\"/v1\""
+    }
+  ],
+  "references": [
+    {
+      "caller": "docs/refactoring/refresh-index.mjs",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from 'node:assert/strict';"
+    },
+    {
+      "caller": "docs/refactoring/refresh-index.mjs",
+      "line": 2,
+      "module": "node:child_process",
+      "import": "import { execFileSync } from 'node:child_process';"
+    },
+    {
+      "caller": "docs/refactoring/refresh-index.mjs",
+      "line": 3,
+      "module": "node:crypto",
+      "import": "import { createHash } from 'node:crypto';"
+    },
+    {
+      "caller": "docs/refactoring/refresh-index.mjs",
+      "line": 4,
+      "module": "node:fs",
+      "import": "import { readFileSync, writeFileSync, readdirSync } from 'node:fs';"
+    },
+    {
+      "caller": "docs/refactoring/refresh-index.mjs",
+      "line": 5,
+      "module": "typescript",
+      "import": "import ts from 'typescript';"
+    },
+    {
+      "caller": "docs/refactoring/verify-contracts.mjs",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from 'node:assert/strict';"
+    },
+    {
+      "caller": "docs/refactoring/verify-contracts.mjs",
+      "line": 2,
+      "module": "node:child_process",
+      "import": "import {execFileSync} from 'node:child_process';"
+    },
+    {
+      "caller": "docs/refactoring/verify-contracts.mjs",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import {readFileSync,writeFileSync} from 'node:fs';"
+    },
+    {
+      "caller": "docs/refactoring/verify-contracts.mjs",
+      "line": 4,
+      "module": "typescript",
+      "import": "import ts from 'typescript';"
+    },
+    {
+      "caller": "packages/connector/scripts/build.mjs",
+      "line": 2,
+      "module": "esbuild",
+      "import": "import { build } from \"esbuild\";"
+    },
+    {
+      "caller": "packages/connector/scripts/build.mjs",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { existsSync, readFileSync, readdirSync, rmSync, chmodSync, writeFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/scripts/build.mjs",
+      "line": 4,
+      "module": "node:path",
+      "import": "import { dirname, join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/api.ts",
+      "line": 1,
+      "module": "./config.ts",
+      "import": "import type { Config } from \"./config.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/attachments.ts",
+      "line": 3,
+      "module": "node:crypto",
+      "import": "import { createHash } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/connector/src/attachments.ts",
+      "line": 4,
+      "module": "node:fs",
+      "import": "import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/src/attachments.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/attachments.ts",
+      "line": 6,
+      "module": "./api.ts",
+      "import": "import type { Api } from \"./api.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/attachments.ts",
+      "line": 7,
+      "module": "./profile.ts",
+      "import": "import { home } from \"./profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/channel-delivery.ts",
+      "line": 1,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/src/channel-delivery.ts",
+      "line": 2,
+      "module": "./profile.ts",
+      "import": "import { PROFILE } from \"./profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/claude-channel.ts",
+      "line": 1,
+      "module": "node:fs",
+      "import": "import { readFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/src/claude-channel.ts",
+      "line": 2,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/claude-channel.ts",
+      "line": 3,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 2,
+      "module": "node:fs",
+      "import": "import { cpSync, existsSync, mkdirSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 3,
+      "module": "node:os",
+      "import": "import { hostname } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 4,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 5,
+      "module": "node:readline/promises",
+      "import": "import { createInterface } from \"node:readline/promises\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 6,
+      "module": "qrcode",
+      "import": "import QRCode from \"qrcode\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 7,
+      "module": "./api.ts",
+      "import": "import { Api, ServerError } from \"./api.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 8,
+      "module": "./config.ts",
+      "import": "import { OFFICIAL_SERVER, readConfig, requireConfig, writeConfig } from \"./config.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 9,
+      "module": "./daemon.ts",
+      "import": "import { daemonStatus, ensureDaemon, runDaemon } from \"./daemon.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 10,
+      "module": "./harness.ts",
+      "import": "import { CLIENT, HARNESSES, LABEL, type Target, detect, filesOf, instructionsFileOf, register, registered, unregister } from \"./harness.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 11,
+      "module": "./instructions.ts",
+      "import": "import { INSTRUCTION_TEXT, managedElsewhere } from \"./instructions.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 12,
+      "module": "./mcp.ts",
+      "import": "import { runMcp } from \"./mcp.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 13,
+      "module": "./profile.ts",
+      "import": "import { home } from \"./profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 14,
+      "module": "./runtime.ts",
+      "import": "import { runtimeDir } from \"./runtime.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 15,
+      "module": "./version.ts",
+      "import": "import { VERSION, osName } from \"./version.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/config.ts",
+      "line": 1,
+      "module": "node:fs",
+      "import": "import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/src/config.ts",
+      "line": 2,
+      "module": "node:path",
+      "import": "import { dirname, join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/config.ts",
+      "line": 3,
+      "module": "./profile.ts",
+      "import": "import { home } from \"./profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/cursor-binding.ts",
+      "line": 1,
+      "module": "aiterm-steer-delivery",
+      "import": "import { cursorHookRoot, handleCursorHook, handleCursorChannelHook, withoutBom, type ProductProfile } from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon-launch.ts",
+      "line": 1,
+      "module": "node:child_process",
+      "import": "import { spawn, spawnSync } from \"node:child_process\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon-launch.ts",
+      "line": 2,
+      "module": "node:fs",
+      "import": "import { appendFileSync, closeSync, openSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon-launch.ts",
+      "line": 3,
+      "module": "node:path",
+      "import": "import { join, resolve } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon-launch.ts",
+      "line": 4,
+      "module": "./profile.ts",
+      "import": "import { home } from \"./profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 1,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 2,
+      "module": "./daemon-launch.ts",
+      "import": "import { launchDaemon } from \"./daemon-launch.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 3,
+      "module": "./channel-delivery.ts",
+      "import": "import { sendChannelAnswer, channelAnswerState } from \"./channel-delivery.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 4,
+      "module": "node:fs",
+      "import": "import { existsSync, mkdirSync, readFileSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 6,
+      "module": "./api.ts",
+      "import": "import { Api } from \"./api.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 7,
+      "module": "./attachments.ts",
+      "import": "import { type AttachmentMeta, pruneAttachments, saveAll } from \"./attachments.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 8,
+      "module": "./config.ts",
+      "import": "import { readConfig, requireConfig, writeJsonFile } from \"./config.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 9,
+      "module": "./profile.ts",
+      "import": "import { PROFILE, stateRoot } from \"./profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 10,
+      "module": "./runtime.ts",
+      "import": "import { runtimeEntry } from \"./runtime.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 1,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 2,
+      "module": "node:child_process",
+      "import": "import { execFileSync } from \"node:child_process\";"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { copyFileSync, existsSync, readFileSync, realpathSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { homedir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { delimiter, dirname, join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 6,
+      "module": "./config.ts",
+      "import": "import { writeJsonFile } from \"./config.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 7,
+      "module": "./instructions.ts",
+      "import": "import { hasInstructions, hasInstructionsInDir, managedElsewhere, removeInstructions, writeInstructions } from \"./instructions.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 8,
+      "module": "./profile.ts",
+      "import": "import { MCP_SERVER, PROFILE } from \"./profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 9,
+      "module": "./runtime.ts",
+      "import": "import { runtimeEntry } from \"./runtime.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/hooks/claude.ts",
+      "line": 2,
+      "module": "aiterm-steer-delivery",
+      "import": "import { runClaudeHookMain } from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/src/hooks/claude.ts",
+      "line": 3,
+      "module": "../profile.ts",
+      "import": "import { PROFILE } from \"../profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/hooks/cursor.ts",
+      "line": 2,
+      "module": "../cursor-binding.ts",
+      "import": "import { bindCursorResult } from \"../cursor-binding.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/hooks/cursor.ts",
+      "line": 3,
+      "module": "../profile.ts",
+      "import": "import { PROFILE } from \"../profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/hooks/receive.ts",
+      "line": 3,
+      "module": "aiterm-steer-delivery",
+      "import": "import { runChannelReceiveMain } from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/src/hooks/receive.ts",
+      "line": 4,
+      "module": "../profile.ts",
+      "import": "import { PROFILE } from \"../profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/instructions.ts",
+      "line": 1,
+      "module": "node:fs",
+      "import": "import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, writeFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/src/instructions.ts",
+      "line": 2,
+      "module": "node:os",
+      "import": "import { homedir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/src/instructions.ts",
+      "line": 3,
+      "module": "node:path",
+      "import": "import { dirname, join, resolve } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 1,
+      "module": "./parent-channels.ts",
+      "import": "import { channelFor, harnessOf, type Harness } from \"./parent-channels.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 2,
+      "module": "./parent-channels.ts",
+      "import": "export { harnessOf, type Harness } from \"./parent-channels.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 3,
+      "module": "@modelcontextprotocol/sdk/server/index.js",
+      "import": "import { Server } from \"@modelcontextprotocol/sdk/server/index.js\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 4,
+      "module": "@modelcontextprotocol/sdk/server/stdio.js",
+      "import": "import { StdioServerTransport } from \"@modelcontextprotocol/sdk/server/stdio.js\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 5,
+      "module": "@modelcontextprotocol/sdk/types.js",
+      "import": "import { CallToolRequestSchema, ListToolsRequestSchema } from \"@modelcontextprotocol/sdk/types.js\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 6,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 7,
+      "module": "node:fs",
+      "import": "import { readFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 8,
+      "module": "node:path",
+      "import": "import { basename } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 9,
+      "module": "./api.ts",
+      "import": "import { Api, ServerError } from \"./api.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 10,
+      "module": "./attachments.ts",
+      "import": "import { type AttachmentMeta, saveAttachment } from \"./attachments.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 11,
+      "module": "./config.ts",
+      "import": "import { requireConfig } from \"./config.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 12,
+      "module": "./daemon.ts",
+      "import": "import { ensureDaemon } from \"./daemon.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 13,
+      "module": "./request-images.ts",
+      "import": "import { uploadImagePaths } from \"./request-images.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 14,
+      "module": "./runtime.ts",
+      "import": "import { runtimeEntry } from \"./runtime.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 15,
+      "module": "./profile.ts",
+      "import": "import { MCP_SERVER, PROFILE } from \"./profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 16,
+      "module": "./version.ts",
+      "import": "import { osName, VERSION } from \"./version.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/parent-channels.ts",
+      "line": 1,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/src/parent-channels.ts",
+      "line": 2,
+      "module": "node:fs",
+      "import": "import { existsSync, readFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/src/parent-channels.ts",
+      "line": 3,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/parent-channels.ts",
+      "line": 4,
+      "module": "./config.ts",
+      "import": "import { writeJsonFile } from \"./config.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/parent-channels.ts",
+      "line": 5,
+      "module": "./claude-channel.ts",
+      "import": "import { claudeChannelIsCurrent } from \"./claude-channel.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/parent-channels.ts",
+      "line": 6,
+      "module": "./profile.ts",
+      "import": "import { PROFILE, stateRoot } from \"./profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/profile.ts",
+      "line": 1,
+      "module": "aiterm-steer-delivery",
+      "import": "import type { ProductProfile } from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/src/profile.ts",
+      "line": 2,
+      "module": "node:os",
+      "import": "import { homedir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/src/profile.ts",
+      "line": 3,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/request-images.ts",
+      "line": 1,
+      "module": "node:fs/promises",
+      "import": "import { open } from \"node:fs/promises\";"
+    },
+    {
+      "caller": "packages/connector/src/request-images.ts",
+      "line": 2,
+      "module": "node:path",
+      "import": "import { basename } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/request-images.ts",
+      "line": 3,
+      "module": "./api.ts",
+      "import": "import type { Api } from \"./api.ts\";"
+    },
+    {
+      "caller": "packages/connector/src/runtime.ts",
+      "line": 1,
+      "module": "node:path",
+      "import": "import { basename, dirname, join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/src/runtime.ts",
+      "line": 2,
+      "module": "node:url",
+      "import": "import { fileURLToPath } from \"node:url\";"
+    },
+    {
+      "caller": "packages/connector/src/runtime.ts",
+      "line": 3,
+      "module": "./profile.ts",
+      "import": "import { HOOK_FILES } from \"./profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 2,
+      "module": "node:crypto",
+      "import": "import { randomUUID } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, readFileSync, rmSync, writeFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 6,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 7,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 8,
+      "module": "../src/profile.ts",
+      "import": "import { PROFILE } from \"../src/profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 9,
+      "module": "../src/channel-delivery.ts",
+      "import": "import { sendChannelAnswer, channelAnswerState } from \"../src/channel-delivery.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 10,
+      "module": "../src/config.ts",
+      "import": "import { writeJsonFile } from \"../src/config.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/api.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/api.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/api.test.ts",
+      "line": 3,
+      "module": "node:http",
+      "import": "import { createServer } from \"node:http\";"
+    },
+    {
+      "caller": "packages/connector/test/api.test.ts",
+      "line": 4,
+      "module": "node:net",
+      "import": "import type { AddressInfo } from \"node:net\";"
+    },
+    {
+      "caller": "packages/connector/test/api.test.ts",
+      "line": 5,
+      "module": "../src/api.ts",
+      "import": "import { Api, ServerError } from \"../src/api.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/attachments.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/attachments.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/attachments.test.ts",
+      "line": 3,
+      "module": "node:crypto",
+      "import": "import { createHash } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/connector/test/attachments.test.ts",
+      "line": 4,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, readFileSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/test/attachments.test.ts",
+      "line": 5,
+      "module": "node:http",
+      "import": "import { createServer } from \"node:http\";"
+    },
+    {
+      "caller": "packages/connector/test/attachments.test.ts",
+      "line": 6,
+      "module": "node:net",
+      "import": "import type { AddressInfo } from \"node:net\";"
+    },
+    {
+      "caller": "packages/connector/test/attachments.test.ts",
+      "line": 7,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/test/attachments.test.ts",
+      "line": 8,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/test/attachments.test.ts",
+      "line": 9,
+      "module": "../src/api.ts",
+      "import": "import { Api } from \"../src/api.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/attachments.test.ts",
+      "line": 10,
+      "module": "../src/attachments.ts",
+      "import": "import { safeFileName, saveAll } from \"../src/attachments.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 2,
+      "module": "node:crypto",
+      "import": "import { randomUUID } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, readFileSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 6,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 7,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 8,
+      "module": "../src/profile.ts",
+      "import": "import { PROFILE } from \"../src/profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 9,
+      "module": "../src/channel-delivery.ts",
+      "import": "import { sendChannelAnswer, channelAnswerState, type CodexProvider } from \"../src/channel-delivery.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 10,
+      "module": "../src/config.ts",
+      "import": "import { writeJsonFile } from \"../src/config.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 2,
+      "module": "node:crypto",
+      "import": "import { randomUUID } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 6,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 7,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 8,
+      "module": "../src/claude-channel.ts",
+      "import": "import { claudeChannelIsCurrent } from \"../src/claude-channel.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 9,
+      "module": "../src/config.ts",
+      "import": "import { writeJsonFile } from \"../src/config.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 10,
+      "module": "../src/profile.ts",
+      "import": "import { PROFILE } from \"../src/profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 2,
+      "module": "node:crypto",
+      "import": "import { randomUUID } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 3,
+      "module": "node:child_process",
+      "import": "import { spawn, spawnSync } from \"node:child_process\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 4,
+      "module": "node:fs",
+      "import": "import { existsSync, mkdtempSync, readFileSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 5,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 6,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 7,
+      "module": "node:url",
+      "import": "import { fileURLToPath } from \"node:url\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 8,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 9,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 10,
+      "module": "../src/profile.ts",
+      "import": "import { PROFILE } from \"../src/profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 11,
+      "module": "../src/harness.ts",
+      "import": "import { registered } from \"../src/harness.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 12,
+      "module": "../src/config.ts",
+      "import": "import { writeJsonFile } from \"../src/config.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 2,
+      "module": "node:crypto",
+      "import": "import { randomUUID } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 4,
+      "module": "node:http",
+      "import": "import { createServer } from \"node:http\";"
+    },
+    {
+      "caller": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 5,
+      "module": "node:net",
+      "import": "import type { AddressInfo } from \"node:net\";"
+    },
+    {
+      "caller": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 6,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 7,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 8,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 9,
+      "module": "@modelcontextprotocol/sdk/client/index.js",
+      "import": "import { Client } from \"@modelcontextprotocol/sdk/client/index.js\";"
+    },
+    {
+      "caller": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 10,
+      "module": "@modelcontextprotocol/sdk/client/stdio.js",
+      "import": "import { StdioClientTransport } from \"@modelcontextprotocol/sdk/client/stdio.js\";"
+    },
+    {
+      "caller": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 11,
+      "module": "../src/config.ts",
+      "import": "import { writeJsonFile } from \"../src/config.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/cursor-binding.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/cursor-binding.test.ts",
+      "line": 2,
+      "module": "node:crypto",
+      "import": "import { randomUUID } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/connector/test/cursor-binding.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, readFileSync, readdirSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/test/cursor-binding.test.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/test/cursor-binding.test.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/test/cursor-binding.test.ts",
+      "line": 6,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/cursor-binding.test.ts",
+      "line": 7,
+      "module": "aiterm-steer-delivery",
+      "import": "import { openChannel, sendToChannel, channelMarker, channelRoot, channelDeliveryState, receiveFromChannel } from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/test/cursor-binding.test.ts",
+      "line": 8,
+      "module": "../src/profile.ts",
+      "import": "import { PROFILE } from \"../src/profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/cursor-binding.test.ts",
+      "line": 9,
+      "module": "../src/cursor-binding.ts",
+      "import": "import { bindCursorResult } from \"../src/cursor-binding.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/daemon-launch.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/daemon-launch.test.ts",
+      "line": 2,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/daemon-launch.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, readFileSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/test/daemon-launch.test.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/test/daemon-launch.test.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/test/daemon-launch.test.ts",
+      "line": 6,
+      "module": "../src/daemon-launch.ts",
+      "import": "import { launchDaemon, windowsDaemonLaunchScript } from \"../src/daemon-launch.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/daemon.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/daemon.test.ts",
+      "line": 2,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/daemon.test.ts",
+      "line": 3,
+      "module": "../src/daemon.ts",
+      "import": "import { daemonNode, shouldReplaceDaemon, versionOfEntry } from \"../src/daemon.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/instructions.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/instructions.test.ts",
+      "line": 2,
+      "module": "node:fs",
+      "import": "import { lstatSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/test/instructions.test.ts",
+      "line": 3,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/test/instructions.test.ts",
+      "line": 4,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/test/instructions.test.ts",
+      "line": 5,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/instructions.test.ts",
+      "line": 6,
+      "module": "../src/instructions.ts",
+      "import": "import { INSTRUCTION_TEXT, hasInstructions, hasInstructionsInDir, managedElsewhere, removeInstructions, writeInstructions } from \"../src/instructions.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/mcp-context.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from 'node:assert/strict';"
+    },
+    {
+      "caller": "packages/connector/test/mcp-context.test.ts",
+      "line": 2,
+      "module": "node:test",
+      "import": "import { test } from 'node:test';"
+    },
+    {
+      "caller": "packages/connector/test/mcp-context.test.ts",
+      "line": 3,
+      "module": "node:crypto",
+      "import": "import { randomUUID } from 'node:crypto';"
+    },
+    {
+      "caller": "packages/connector/test/mcp-context.test.ts",
+      "line": 4,
+      "module": "node:http",
+      "import": "import { createServer } from 'node:http';"
+    },
+    {
+      "caller": "packages/connector/test/mcp-context.test.ts",
+      "line": 5,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, rmSync } from 'node:fs';"
+    },
+    {
+      "caller": "packages/connector/test/mcp-context.test.ts",
+      "line": 6,
+      "module": "node:os",
+      "import": "import { tmpdir } from 'node:os';"
+    },
+    {
+      "caller": "packages/connector/test/mcp-context.test.ts",
+      "line": 7,
+      "module": "node:path",
+      "import": "import { join } from 'node:path';"
+    },
+    {
+      "caller": "packages/connector/test/mcp-context.test.ts",
+      "line": 8,
+      "module": "@modelcontextprotocol/sdk/client/index.js",
+      "import": "import { Client } from '@modelcontextprotocol/sdk/client/index.js';"
+    },
+    {
+      "caller": "packages/connector/test/mcp-context.test.ts",
+      "line": 9,
+      "module": "@modelcontextprotocol/sdk/client/stdio.js",
+      "import": "import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';"
+    },
+    {
+      "caller": "packages/connector/test/mcp-context.test.ts",
+      "line": 10,
+      "module": "../src/config.ts",
+      "import": "import { writeJsonFile } from '../src/config.ts';"
+    },
+    {
+      "caller": "packages/connector/test/parent-channels.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/parent-channels.test.ts",
+      "line": 2,
+      "module": "node:child_process",
+      "import": "import { spawnSync } from \"node:child_process\";"
+    },
+    {
+      "caller": "packages/connector/test/parent-channels.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/test/parent-channels.test.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/test/parent-channels.test.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/test/parent-channels.test.ts",
+      "line": 6,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/request-images.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/request-images.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/request-images.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';"
+    },
+    {
+      "caller": "packages/connector/test/request-images.test.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import {tmpdir} from 'node:os';"
+    },
+    {
+      "caller": "packages/connector/test/request-images.test.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import {join} from 'node:path';"
+    },
+    {
+      "caller": "packages/connector/test/request-images.test.ts",
+      "line": 6,
+      "module": "../src/request-images.ts",
+      "import": "import {uploadImagePaths} from '../src/request-images.ts';"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 2,
+      "module": "node:crypto",
+      "import": "import { randomUUID } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 3,
+      "module": "node:child_process",
+      "import": "import { spawn } from \"node:child_process\";"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 4,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, readFileSync, rmSync, existsSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 5,
+      "module": "node:http",
+      "import": "import { createServer, type ServerResponse } from \"node:http\";"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 6,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 7,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 8,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 9,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 10,
+      "module": "../src/profile.ts",
+      "import": "import { PROFILE } from \"../src/profile.ts\";"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 11,
+      "module": "../src/config.ts",
+      "import": "import { writeJsonFile } from \"../src/config.ts\";"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 1,
+      "module": "./shared/locales.ts",
+      "import": "import type { Locale } from \"./shared/locales.ts\";"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 2,
+      "module": "node:crypto",
+      "import": "import { createHash } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 3,
+      "module": "./db.ts",
+      "import": "import { type Db, all, get, run, tx } from \"./db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 4,
+      "module": "./errors.ts",
+      "import": "import { ApiError } from \"./errors.ts\";"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 5,
+      "module": "./events.ts",
+      "import": "import type { EventHub } from \"./events.ts\";"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 6,
+      "module": "./ids.ts",
+      "import": "import { hash, normalizePairingCode, now, pairingCode, secret, uuid } from \"./ids.ts\";"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 7,
+      "module": "./decisions.ts",
+      "import": "import type { Connection } from \"./decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 8,
+      "module": "./diagnostics.ts",
+      "import": "import { Diagnostics } from \"./diagnostics.ts\";"
+    },
+    {
+      "caller": "packages/server/src/appstore.ts",
+      "line": 3,
+      "module": "@apple/app-store-server-library",
+      "import": "import { Environment, SignedDataVerifier, type JWSTransactionDecodedPayload } from \"@apple/app-store-server-library\";"
+    },
+    {
+      "caller": "packages/server/src/appstore.ts",
+      "line": 4,
+      "module": "node:fs",
+      "import": "import { existsSync, readdirSync, readFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/src/appstore.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/server/src/appstore.ts",
+      "line": 6,
+      "module": "./accounts.ts",
+      "import": "import type { Accounts } from \"./accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/src/appstore.ts",
+      "line": 7,
+      "module": "./db.ts",
+      "import": "import { type Db, get, run, tx } from \"./db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/appstore.ts",
+      "line": 8,
+      "module": "./errors.ts",
+      "import": "import { ApiError } from \"./errors.ts\";"
+    },
+    {
+      "caller": "packages/server/src/appstore.ts",
+      "line": 9,
+      "module": "./ids.ts",
+      "import": "import { now } from \"./ids.ts\";"
+    },
+    {
+      "caller": "packages/server/src/attachments.ts",
+      "line": 4,
+      "module": "node:crypto",
+      "import": "import { createHash, randomBytes } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/server/src/attachments.ts",
+      "line": 5,
+      "module": "node:fs",
+      "import": "import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/src/attachments.ts",
+      "line": 6,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/server/src/attachments.ts",
+      "line": 7,
+      "module": "./db.ts",
+      "import": "import { type Db, all, get, run, tx } from \"./db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/attachments.ts",
+      "line": 8,
+      "module": "./errors.ts",
+      "import": "import { ApiError } from \"./errors.ts\";"
+    },
+    {
+      "caller": "packages/server/src/attachments.ts",
+      "line": 9,
+      "module": "./ids.ts",
+      "import": "import { now } from \"./ids.ts\";"
+    },
+    {
+      "caller": "packages/server/src/callbridge.ts",
+      "line": 4,
+      "module": "@modelcontextprotocol/sdk/client/index.js",
+      "import": "import { Client } from \"@modelcontextprotocol/sdk/client/index.js\";"
+    },
+    {
+      "caller": "packages/server/src/callbridge.ts",
+      "line": 5,
+      "module": "@modelcontextprotocol/sdk/client/streamableHttp.js",
+      "import": "import { StreamableHTTPClientTransport } from \"@modelcontextprotocol/sdk/client/streamableHttp.js\";"
+    },
+    {
+      "caller": "packages/server/src/callbridge.ts",
+      "line": 6,
+      "module": "node:fs",
+      "import": "import { readFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/src/callbridge.ts",
+      "line": 7,
+      "module": "./db.ts",
+      "import": "import { type Db, get } from \"./db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/callbridge.ts",
+      "line": 8,
+      "module": "./decisions.ts",
+      "import": "import type { Decisions } from \"./decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/src/callbridge.ts",
+      "line": 9,
+      "module": "./events.ts",
+      "import": "import type { EventHub } from \"./events.ts\";"
+    },
+    {
+      "caller": "packages/server/src/db.ts",
+      "line": 1,
+      "module": "./ids.ts",
+      "import": "import { hash } from \"./ids.ts\";"
+    },
+    {
+      "caller": "packages/server/src/db.ts",
+      "line": 2,
+      "module": "node:sqlite",
+      "import": "import { DatabaseSync, type SQLInputValue } from \"node:sqlite\";"
+    },
+    {
+      "caller": "packages/server/src/db.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdirSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/src/db.ts",
+      "line": 4,
+      "module": "node:path",
+      "import": "import { dirname } from \"node:path\";"
+    },
+    {
+      "caller": "packages/server/src/decisions.ts",
+      "line": 1,
+      "module": "zod",
+      "import": "import { z } from \"zod\";"
+    },
+    {
+      "caller": "packages/server/src/decisions.ts",
+      "line": 2,
+      "module": "./attachments.ts",
+      "import": "import { type Attachment, MAX_ANSWER_BYTES, MAX_PER_ANSWER, formatBytes } from \"./attachments.ts\";"
+    },
+    {
+      "caller": "packages/server/src/decisions.ts",
+      "line": 3,
+      "module": "./db.ts",
+      "import": "import { type Db, all, get, run, tx } from \"./db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/decisions.ts",
+      "line": 4,
+      "module": "./errors.ts",
+      "import": "import { ApiError } from \"./errors.ts\";"
+    },
+    {
+      "caller": "packages/server/src/decisions.ts",
+      "line": 5,
+      "module": "./events.ts",
+      "import": "import type { EventHub } from \"./events.ts\";"
+    },
+    {
+      "caller": "packages/server/src/decisions.ts",
+      "line": 6,
+      "module": "./ids.ts",
+      "import": "import { decisionId, hash, normalizeTitle, now, secret, testCode, uuid } from \"./ids.ts\";"
+    },
+    {
+      "caller": "packages/server/src/diagnostics.ts",
+      "line": 1,
+      "module": "node:crypto",
+      "import": "import { createHash, timingSafeEqual } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/server/src/diagnostics.ts",
+      "line": 2,
+      "module": "node:net",
+      "import": "import { isIP } from \"node:net\";"
+    },
+    {
+      "caller": "packages/server/src/diagnostics.ts",
+      "line": 3,
+      "module": "@hono/node-server/conninfo",
+      "import": "import { getConnInfo } from \"@hono/node-server/conninfo\";"
+    },
+    {
+      "caller": "packages/server/src/diagnostics.ts",
+      "line": 4,
+      "module": "hono",
+      "import": "import { Hono } from \"hono\";"
+    },
+    {
+      "caller": "packages/server/src/diagnostics.ts",
+      "line": 5,
+      "module": "zod",
+      "import": "import { z } from \"zod\";"
+    },
+    {
+      "caller": "packages/server/src/diagnostics.ts",
+      "line": 6,
+      "module": "./db.ts",
+      "import": "import { type Db, all, get, run, tx } from \"./db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/diagnostics.ts",
+      "line": 7,
+      "module": "./attachments.ts",
+      "import": "import { readLimited } from \"./attachments.ts\";"
+    },
+    {
+      "caller": "packages/server/src/diagnostics.ts",
+      "line": 8,
+      "module": "./errors.ts",
+      "import": "import { ApiError } from \"./errors.ts\";"
+    },
+    {
+      "caller": "packages/server/src/errors.ts",
+      "line": 1,
+      "module": "./shared/locales.ts",
+      "import": "import type { Locale } from \"./shared/locales.ts\";"
+    },
+    {
+      "caller": "packages/server/src/errors.ts",
+      "line": 2,
+      "module": "./shared/error-translations.ts",
+      "import": "import { errorMessage, type ErrorCode } from \"./shared/error-translations.ts\";"
+    },
+    {
+      "caller": "packages/server/src/errors.ts",
+      "line": 3,
+      "module": "./shared/error-translations.ts",
+      "import": "export type { ErrorCode } from \"./shared/error-translations.ts\";"
+    },
+    {
+      "caller": "packages/server/src/events.ts",
+      "line": 1,
+      "module": "node:events",
+      "import": "import { EventEmitter } from \"node:events\";"
+    },
+    {
+      "caller": "packages/server/src/events.ts",
+      "line": 2,
+      "module": "./db.ts",
+      "import": "import { type Db, all, run, afterCommit } from \"./db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/events.ts",
+      "line": 3,
+      "module": "./ids.ts",
+      "import": "import { now } from \"./ids.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 1,
+      "module": "hono",
+      "import": "import { Hono, type Context } from \"hono\";"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 2,
+      "module": "zod",
+      "import": "import { ZodError } from \"zod\";"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 3,
+      "module": "./locale.ts",
+      "import": "import { requestLocale } from \"./locale.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 4,
+      "module": "./errors.ts",
+      "import": "import { ApiError } from \"./errors.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 5,
+      "module": "./diagnostics.ts",
+      "import": "import { Diagnostics, diagnosticsAdmin } from \"./diagnostics.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 6,
+      "module": "./remote-mcp.ts",
+      "import": "import { remoteMcpHandler } from \"./remote-mcp.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 7,
+      "module": "./http/types.ts",
+      "import": "import type { Services } from \"./http/types.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 8,
+      "module": "./http/public.ts",
+      "import": "import { registerPublicRoutes } from \"./http/public.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 9,
+      "module": "./http/user.ts",
+      "import": "import { registerUserRoutes } from \"./http/user.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 10,
+      "module": "./http/connector.ts",
+      "import": "import { registerConnectorRoutes } from \"./http/connector.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 11,
+      "module": "./http/types.ts",
+      "import": "export type { Services } from \"./http/types.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/common.ts",
+      "line": 1,
+      "module": "hono",
+      "import": "import type { Context } from \"hono\";"
+    },
+    {
+      "caller": "packages/server/src/http/common.ts",
+      "line": 2,
+      "module": "zod",
+      "import": "import type { z } from \"zod\";"
+    },
+    {
+      "caller": "packages/server/src/http/common.ts",
+      "line": 3,
+      "module": "./types.ts",
+      "import": "import type { Services } from \"./types.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/common.ts",
+      "line": 4,
+      "module": "../locale.ts",
+      "import": "import { requestLocale } from \"../locale.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/common.ts",
+      "line": 5,
+      "module": "../attachments.ts",
+      "import": "import { type Attachment, contentDisposition } from \"../attachments.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/common.ts",
+      "line": 6,
+      "module": "../db.ts",
+      "import": "import { get, run } from \"../db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/common.ts",
+      "line": 7,
+      "module": "../errors.ts",
+      "import": "import { ApiError } from \"../errors.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/common.ts",
+      "line": 8,
+      "module": "../ids.ts",
+      "import": "import { now } from \"../ids.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/connector.ts",
+      "line": 3,
+      "module": "hono",
+      "import": "import { Hono, type Context } from \"hono\";"
+    },
+    {
+      "caller": "packages/server/src/http/connector.ts",
+      "line": 5,
+      "module": "zod",
+      "import": "import { z } from \"zod\";"
+    },
+    {
+      "caller": "packages/server/src/http/connector.ts",
+      "line": 6,
+      "module": "../accounts.ts",
+      "import": "import type { Accounts } from \"../accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/connector.ts",
+      "line": 8,
+      "module": "../attachments.ts",
+      "import": "import { MAX_FILE_BYTES, mediaType, readLimited } from \"../attachments.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/connector.ts",
+      "line": 9,
+      "module": "../db.ts",
+      "import": "import { get } from \"../db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/connector.ts",
+      "line": 10,
+      "module": "../errors.ts",
+      "import": "import { ApiError } from \"../errors.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/connector.ts",
+      "line": 12,
+      "module": "../decisions.ts",
+      "import": "import { amendSchema, createSchema, routeSchema } from \"../decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/connector.ts",
+      "line": 13,
+      "module": "../ids.ts",
+      "import": "import { now } from \"../ids.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/connector.ts",
+      "line": 15,
+      "module": "./types.ts",
+      "import": "import type { Services } from \"./types.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/connector.ts",
+      "line": 16,
+      "module": "./common.ts",
+      "import": "import { bearer, body, fileResponse, files, sweep } from \"./common.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/connector.ts",
+      "line": 17,
+      "module": "./streams.ts",
+      "import": "import { connectorEvents } from \"./streams.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/public.ts",
+      "line": 3,
+      "module": "../oidc.ts",
+      "import": "import { type Provider, verifyIdToken } from \"../oidc.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/public.ts",
+      "line": 5,
+      "module": "hono",
+      "import": "import { Hono, type Context } from \"hono\";"
+    },
+    {
+      "caller": "packages/server/src/http/public.ts",
+      "line": 7,
+      "module": "zod",
+      "import": "import { z } from \"zod\";"
+    },
+    {
+      "caller": "packages/server/src/http/public.ts",
+      "line": 9,
+      "module": "../db.ts",
+      "import": "import { get } from \"../db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/public.ts",
+      "line": 10,
+      "module": "../errors.ts",
+      "import": "import { ApiError } from \"../errors.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/public.ts",
+      "line": 12,
+      "module": "./types.ts",
+      "import": "import type { Services } from \"./types.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/public.ts",
+      "line": 13,
+      "module": "./common.ts",
+      "import": "import { body } from \"./common.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/streams.ts",
+      "line": 1,
+      "module": "hono",
+      "import": "import type { Context } from \"hono\";"
+    },
+    {
+      "caller": "packages/server/src/http/streams.ts",
+      "line": 2,
+      "module": "hono/streaming",
+      "import": "import { streamSSE } from \"hono/streaming\";"
+    },
+    {
+      "caller": "packages/server/src/http/streams.ts",
+      "line": 3,
+      "module": "./types.ts",
+      "import": "import type { Services } from \"./types.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/streams.ts",
+      "line": 4,
+      "module": "../events.ts",
+      "import": "import type { UserEvent } from \"../events.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/types.ts",
+      "line": 1,
+      "module": "../accounts.ts",
+      "import": "import type { Accounts } from \"../accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/types.ts",
+      "line": 2,
+      "module": "../appstore.ts",
+      "import": "import type { AppStore } from \"../appstore.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/types.ts",
+      "line": 3,
+      "module": "../attachments.ts",
+      "import": "import type { Attachments } from \"../attachments.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/types.ts",
+      "line": 4,
+      "module": "../db.ts",
+      "import": "import type { Db } from \"../db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/types.ts",
+      "line": 5,
+      "module": "../decisions.ts",
+      "import": "import type { Decisions } from \"../decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/types.ts",
+      "line": 6,
+      "module": "../events.ts",
+      "import": "import type { EventHub } from \"../events.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/types.ts",
+      "line": 7,
+      "module": "../oidc.ts",
+      "import": "import type { KeySource } from \"../oidc.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/types.ts",
+      "line": 8,
+      "module": "../remote-mcp.ts",
+      "import": "import type { RemoteMcpOptions } from \"../remote-mcp.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 1,
+      "module": "../shared/locales.ts",
+      "import": "import { LOCALES } from \"../shared/locales.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 2,
+      "module": "../locale.ts",
+      "import": "import { requestLocale } from \"../locale.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 3,
+      "module": "../diagnostics.ts",
+      "import": "import { Diagnostics, readDiagnostic } from \"../diagnostics.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 5,
+      "module": "../onboarding.ts",
+      "import": "import { onboarding } from \"../onboarding.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 6,
+      "module": "hono",
+      "import": "import { Hono } from \"hono\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 8,
+      "module": "zod",
+      "import": "import { z } from \"zod\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 10,
+      "module": "../attachments.ts",
+      "import": "import { MAX_FILE_BYTES, mediaType, readLimited } from \"../attachments.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 11,
+      "module": "../db.ts",
+      "import": "import { get, tx } from \"../db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 12,
+      "module": "../errors.ts",
+      "import": "import { ApiError } from \"../errors.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 14,
+      "module": "../decisions.ts",
+      "import": "import { answerSchema } from \"../decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 16,
+      "module": "./types.ts",
+      "import": "import type { Services } from \"./types.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 17,
+      "module": "./common.ts",
+      "import": "import { bearer, body, idempotent, fileResponse, files, sweep } from \"./common.ts\";"
+    },
+    {
+      "caller": "packages/server/src/http/user.ts",
+      "line": 18,
+      "module": "./streams.ts",
+      "import": "import { userEvents } from \"./streams.ts\";"
+    },
+    {
+      "caller": "packages/server/src/ids.ts",
+      "line": 1,
+      "module": "node:crypto",
+      "import": "import { createHash, randomBytes, randomInt, randomUUID } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/server/src/locale.ts",
+      "line": 1,
+      "module": "./shared/locales.ts",
+      "import": "import { supportedLocale, type Locale } from \"./shared/locales.ts\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 2,
+      "module": "./diagnostics.ts",
+      "import": "import { Diagnostics } from \"./diagnostics.ts\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 3,
+      "module": "./push.ts",
+      "import": "import { Apns, Notifier } from \"./push.ts\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 4,
+      "module": "@hono/node-server",
+      "import": "import { serve } from \"@hono/node-server\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 5,
+      "module": "node:fs",
+      "import": "import { existsSync, readFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 6,
+      "module": "node:path",
+      "import": "import { extname, join, resolve, sep } from \"node:path\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 7,
+      "module": "node:url",
+      "import": "import { fileURLToPath } from \"node:url\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 8,
+      "module": "hono",
+      "import": "import type { Context } from \"hono\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 9,
+      "module": "./accounts.ts",
+      "import": "import { Accounts, type BillingMode } from \"./accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 10,
+      "module": "./attachments.ts",
+      "import": "import { Attachments } from \"./attachments.ts\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 11,
+      "module": "./db.ts",
+      "import": "import { openDb } from \"./db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 12,
+      "module": "./decisions.ts",
+      "import": "import { Decisions } from \"./decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 13,
+      "module": "./events.ts",
+      "import": "import { EventHub } from \"./events.ts\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 14,
+      "module": "./appstore.ts",
+      "import": "import { AppStore, appleRootCertificates } from \"./appstore.ts\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 15,
+      "module": "./http.ts",
+      "import": "import { createApp } from \"./http.ts\";"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 16,
+      "module": "./callbridge.ts",
+      "import": "import { CallBridgeDeliverer, callBridgeSender, readHeaderFile } from \"./callbridge.ts\";"
+    },
+    {
+      "caller": "packages/server/src/oidc.ts",
+      "line": 3,
+      "module": "node:crypto",
+      "import": "import { createHash, createPublicKey, verify, type JsonWebKeyInput } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/server/src/oidc.ts",
+      "line": 4,
+      "module": "./errors.ts",
+      "import": "import { ApiError } from \"./errors.ts\";"
+    },
+    {
+      "caller": "packages/server/src/onboarding.ts",
+      "line": 1,
+      "module": "./shared/locales.ts",
+      "import": "import type { Locale } from \"./shared/locales.ts\";"
+    },
+    {
+      "caller": "packages/server/src/push.ts",
+      "line": 1,
+      "module": "./shared/locales.ts",
+      "import": "import type { Locale } from \"./shared/locales.ts\";"
+    },
+    {
+      "caller": "packages/server/src/push.ts",
+      "line": 4,
+      "module": "node:http2",
+      "import": "import { connect, type ClientHttp2Session } from \"node:http2\";"
+    },
+    {
+      "caller": "packages/server/src/push.ts",
+      "line": 5,
+      "module": "node:crypto",
+      "import": "import { createPrivateKey, sign, type KeyObject } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/server/src/push.ts",
+      "line": 6,
+      "module": "./db.ts",
+      "import": "import { type Db, all, get, run } from \"./db.ts\";"
+    },
+    {
+      "caller": "packages/server/src/push.ts",
+      "line": 7,
+      "module": "./decisions.ts",
+      "import": "import { displayLabel } from \"./decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/src/push.ts",
+      "line": 8,
+      "module": "./events.ts",
+      "import": "import type { EventHub, UserEvent } from \"./events.ts\";"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 4,
+      "module": "@modelcontextprotocol/sdk/server/index.js",
+      "import": "import { Server } from \"@modelcontextprotocol/sdk/server/index.js\";"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 5,
+      "module": "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js",
+      "import": "import { WebStandardStreamableHTTPServerTransport } from \"@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js\";"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 6,
+      "module": "@modelcontextprotocol/sdk/types.js",
+      "import": "import { CallToolRequestSchema, ListToolsRequestSchema } from \"@modelcontextprotocol/sdk/types.js\";"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 7,
+      "module": "hono",
+      "import": "import type { Context } from \"hono\";"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 8,
+      "module": "zod",
+      "import": "import { z, ZodError } from \"zod\";"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 9,
+      "module": "./accounts.ts",
+      "import": "import type { Accounts } from \"./accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 10,
+      "module": "./attachments.ts",
+      "import": "import { type Attachments, MAX_FILE_BYTES, formatBytes } from \"./attachments.ts\";"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 11,
+      "module": "./decisions.ts",
+      "import": "import { type Connection, Decisions, SERVER_HARNESS, SPEAK_BY_TITLE, amendSchema, createSchema } from \"./decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 12,
+      "module": "./errors.ts",
+      "import": "import { ApiError } from \"./errors.ts\";"
+    },
+    {
+      "caller": "packages/server/src/shared/error-translations.ts",
+      "line": 1,
+      "module": "./locales.ts",
+      "import": "import type { Locale } from \"./locales.ts\";"
+    },
+    {
+      "caller": "packages/server/src/shared/error-translations.ts",
+      "line": 2,
+      "module": "./error-messages-east-asian.ts",
+      "import": "import { errorMessagesKo, errorMessagesHans, errorMessagesHant } from \"./error-messages-east-asian.ts\";"
+    },
+    {
+      "caller": "packages/server/src/shared/error-translations.ts",
+      "line": 3,
+      "module": "./error-messages-en.ts",
+      "import": "import { errorMessagesEn } from \"./error-messages-en.ts\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 2,
+      "module": "node:crypto",
+      "import": "import { randomUUID } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { existsSync, mkdtempSync, rmSync, writeFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 6,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 7,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 8,
+      "module": "../src/attachments.ts",
+      "import": "import { Attachments } from \"../src/attachments.ts\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 9,
+      "module": "../src/db.ts",
+      "import": "import { all, get, openDb, run } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 10,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 11,
+      "module": "../src/diagnostics.ts",
+      "import": "import { Diagnostics, diagnosticFingerprint, diagnosticSchema } from \"../src/diagnostics.ts\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 12,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 13,
+      "module": "../src/http.ts",
+      "import": "import { createApp } from \"../src/http.ts\";"
+    },
+    {
+      "caller": "packages/server/test/api.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/api.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/api.test.ts",
+      "line": 3,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/api.test.ts",
+      "line": 4,
+      "module": "../src/db.ts",
+      "import": "import { openDb, run } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/api.test.ts",
+      "line": 5,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/api.test.ts",
+      "line": 6,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/api.test.ts",
+      "line": 7,
+      "module": "../src/http.ts",
+      "import": "import { createApp } from \"../src/http.ts\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 3,
+      "module": "node:child_process",
+      "import": "import { execFileSync } from \"node:child_process\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 4,
+      "module": "node:crypto",
+      "import": "import { createSign, randomUUID } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 5,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, readFileSync, writeFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 6,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 7,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 8,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 9,
+      "module": "../src/appstore.ts",
+      "import": "import { AppStore } from \"../src/appstore.ts\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 10,
+      "module": "../src/db.ts",
+      "import": "import { openDb } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 11,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 12,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 13,
+      "module": "../src/http.ts",
+      "import": "import { createApp } from \"../src/http.ts\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { existsSync, mkdtempSync, readdirSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 6,
+      "module": "@modelcontextprotocol/sdk/client/index.js",
+      "import": "import { Client } from \"@modelcontextprotocol/sdk/client/index.js\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 7,
+      "module": "@modelcontextprotocol/sdk/client/streamableHttp.js",
+      "import": "import { StreamableHTTPClientTransport } from \"@modelcontextprotocol/sdk/client/streamableHttp.js\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 8,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 9,
+      "module": "../src/attachments.ts",
+      "import": "import { Attachments, MAX_FILE_BYTES, contentDisposition } from \"../src/attachments.ts\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 10,
+      "module": "../src/db.ts",
+      "import": "import { openDb } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 11,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 12,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 13,
+      "module": "../src/http.ts",
+      "import": "import { createApp } from \"../src/http.ts\";"
+    },
+    {
+      "caller": "packages/server/test/callbridge-retry.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/callbridge-retry.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/callbridge-retry.test.ts",
+      "line": 3,
+      "module": "@modelcontextprotocol/sdk/client/index.js",
+      "import": "import { Client } from \"@modelcontextprotocol/sdk/client/index.js\";"
+    },
+    {
+      "caller": "packages/server/test/callbridge-retry.test.ts",
+      "line": 4,
+      "module": "../src/callbridge.ts",
+      "import": "import { callBridgeSender } from \"../src/callbridge.ts\";"
+    },
+    {
+      "caller": "packages/server/test/connector-auth.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/connector-auth.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/connector-auth.test.ts",
+      "line": 3,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/connector-auth.test.ts",
+      "line": 4,
+      "module": "../src/db.ts",
+      "import": "import { openDb } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/connector-auth.test.ts",
+      "line": 5,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/connector-auth.test.ts",
+      "line": 6,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/connector-auth.test.ts",
+      "line": 7,
+      "module": "../src/http.ts",
+      "import": "import { createApp } from \"../src/http.ts\";"
+    },
+    {
+      "caller": "packages/server/test/db.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/db.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/db.test.ts",
+      "line": 3,
+      "module": "node:sqlite",
+      "import": "import { DatabaseSync } from \"node:sqlite\";"
+    },
+    {
+      "caller": "packages/server/test/db.test.ts",
+      "line": 4,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, readFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/test/db.test.ts",
+      "line": 5,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/server/test/db.test.ts",
+      "line": 6,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/server/test/db.test.ts",
+      "line": 7,
+      "module": "../src/db.ts",
+      "import": "import { all, openDb } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/db.test.ts",
+      "line": 8,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/db.test.ts",
+      "line": 9,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/decision-summary.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/decision-summary.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/decision-summary.test.ts",
+      "line": 3,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/decision-summary.test.ts",
+      "line": 4,
+      "module": "../src/db.ts",
+      "import": "import { openDb } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/decision-summary.test.ts",
+      "line": 5,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/decision-summary.test.ts",
+      "line": 6,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/decision-summary.test.ts",
+      "line": 7,
+      "module": "../src/http.ts",
+      "import": "import { createApp } from \"../src/http.ts\";"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 6,
+      "module": "node:crypto",
+      "import": "import { createHash, randomUUID } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 7,
+      "module": "../src/db.ts",
+      "import": "import { openDb, all, get, run } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 8,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 9,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 10,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 11,
+      "module": "../src/http.ts",
+      "import": "import { createApp } from \"../src/http.ts\";"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 12,
+      "module": "../src/diagnostics.ts",
+      "import": "import { Diagnostics, diagnosticFingerprint, diagnosticSchema } from \"../src/diagnostics.ts\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, rmSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 6,
+      "module": "../src/db.ts",
+      "import": "import { openDb, all, get } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 7,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 8,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 9,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 10,
+      "module": "../src/push.ts",
+      "import": "import { Notifier } from \"../src/push.ts\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 11,
+      "module": "../src/onboarding.ts",
+      "import": "import { onboarding } from \"../src/onboarding.ts\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 12,
+      "module": "../src/errors.ts",
+      "import": "import { ApiError } from \"../src/errors.ts\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 13,
+      "module": "../src/http.ts",
+      "import": "import { createApp } from \"../src/http.ts\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 14,
+      "module": "../src/shared/error-messages-en.ts",
+      "import": "import { errorMessagesEn } from \"../src/shared/error-messages-en.ts\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 15,
+      "module": "../src/shared/error-messages-east-asian.ts",
+      "import": "import { errorMessagesKo, errorMessagesHans, errorMessagesHant } from \"../src/shared/error-messages-east-asian.ts\";"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 16,
+      "module": "../src/locale.ts",
+      "import": "import { requestLocale } from \"../src/locale.ts\";"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 3,
+      "module": "node:crypto",
+      "import": "import { generateKeyPairSync, verify } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 4,
+      "module": "../src/db.ts",
+      "import": "import { openDb, all } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 5,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 6,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 7,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 8,
+      "module": "../src/push.ts",
+      "import": "import { Apns, Notifier } from \"../src/push.ts\";"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 3,
+      "module": "@modelcontextprotocol/sdk/client/index.js",
+      "import": "import { Client } from \"@modelcontextprotocol/sdk/client/index.js\";"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 4,
+      "module": "@modelcontextprotocol/sdk/client/streamableHttp.js",
+      "import": "import { StreamableHTTPClientTransport } from \"@modelcontextprotocol/sdk/client/streamableHttp.js\";"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 5,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 6,
+      "module": "../src/callbridge.ts",
+      "import": "import { CallBridgeDeliverer, type SendResult } from \"../src/callbridge.ts\";"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 7,
+      "module": "../src/db.ts",
+      "import": "import { openDb } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 8,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 9,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 10,
+      "module": "../src/http.ts",
+      "import": "import { createApp } from \"../src/http.ts\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, rmSync, existsSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 6,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 7,
+      "module": "../src/attachments.ts",
+      "import": "import { Attachments,MAX_FILE_BYTES } from \"../src/attachments.ts\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 8,
+      "module": "../src/db.ts",
+      "import": "import { openDb,tx } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 9,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 10,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 11,
+      "module": "../src/http.ts",
+      "import": "import { createApp } from \"../src/http.ts\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 12,
+      "module": "@modelcontextprotocol/sdk/client/index.js",
+      "import": "import { Client } from \"@modelcontextprotocol/sdk/client/index.js\";"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 13,
+      "module": "@modelcontextprotocol/sdk/client/streamableHttp.js",
+      "import": "import { StreamableHTTPClientTransport } from \"@modelcontextprotocol/sdk/client/streamableHttp.js\";"
+    },
+    {
+      "caller": "packages/server/test/shutdown.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/shutdown.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/shutdown.test.ts",
+      "line": 3,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/shutdown.test.ts",
+      "line": 4,
+      "module": "../src/db.ts",
+      "import": "import { openDb } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/shutdown.test.ts",
+      "line": 5,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/shutdown.test.ts",
+      "line": 6,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/shutdown.test.ts",
+      "line": 7,
+      "module": "../src/http.ts",
+      "import": "import { createApp } from \"../src/http.ts\";"
+    },
+    {
+      "caller": "packages/server/test/start-with-secrets.test.ts",
+      "line": 2,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/start-with-secrets.test.ts",
+      "line": 3,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/start-with-secrets.test.ts",
+      "line": 4,
+      "module": "node:crypto",
+      "import": "import { generateKeyPairSync } from \"node:crypto\";"
+    },
+    {
+      "caller": "packages/server/test/start-with-secrets.test.ts",
+      "line": 5,
+      "module": "node:child_process",
+      "import": "import { spawnSync } from \"node:child_process\";"
+    },
+    {
+      "caller": "packages/server/test/start-with-secrets.test.ts",
+      "line": 6,
+      "module": "node:fs",
+      "import": "import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from \"node:fs\";"
+    },
+    {
+      "caller": "packages/server/test/start-with-secrets.test.ts",
+      "line": 7,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "packages/server/test/start-with-secrets.test.ts",
+      "line": 8,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "packages/server/test/start-with-secrets.test.ts",
+      "line": 9,
+      "module": "node:url",
+      "import": "import { fileURLToPath } from \"node:url\";"
+    },
+    {
+      "caller": "packages/server/test/start-with-secrets.test.ts",
+      "line": 10,
+      "module": "../src/callbridge.ts",
+      "import": "import { readHeaderFile } from \"../src/callbridge.ts\";"
+    },
+    {
+      "caller": "packages/server/test/start-with-secrets.test.ts",
+      "line": 11,
+      "module": "../src/push.ts",
+      "import": "import { Apns } from \"../src/push.ts\";"
+    },
+    {
+      "caller": "packages/server/test/streams.test.ts",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/server/test/streams.test.ts",
+      "line": 2,
+      "module": "node:events",
+      "import": "import { getEventListeners } from \"node:events\";"
+    },
+    {
+      "caller": "packages/server/test/streams.test.ts",
+      "line": 3,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/server/test/streams.test.ts",
+      "line": 4,
+      "module": "hono/streaming",
+      "import": "import { SSEStreamingApi } from \"hono/streaming\";"
+    },
+    {
+      "caller": "packages/server/test/streams.test.ts",
+      "line": 5,
+      "module": "../src/accounts.ts",
+      "import": "import { Accounts } from \"../src/accounts.ts\";"
+    },
+    {
+      "caller": "packages/server/test/streams.test.ts",
+      "line": 6,
+      "module": "../src/db.ts",
+      "import": "import { openDb } from \"../src/db.ts\";"
+    },
+    {
+      "caller": "packages/server/test/streams.test.ts",
+      "line": 7,
+      "module": "../src/decisions.ts",
+      "import": "import { Decisions } from \"../src/decisions.ts\";"
+    },
+    {
+      "caller": "packages/server/test/streams.test.ts",
+      "line": 8,
+      "module": "../src/events.ts",
+      "import": "import { EventHub } from \"../src/events.ts\";"
+    },
+    {
+      "caller": "packages/server/test/streams.test.ts",
+      "line": 9,
+      "module": "../src/http.ts",
+      "import": "import { createApp } from \"../src/http.ts\";"
+    },
+    {
+      "caller": "packages/web/playwright.config.ts",
+      "line": 1,
+      "module": "@playwright/test",
+      "import": "import { defineConfig } from \"@playwright/test\";"
+    },
+    {
+      "caller": "packages/web/src/api.ts",
+      "line": 1,
+      "module": "./i18n.ts",
+      "import": "import { t, locale } from \"./i18n.ts\";"
+    },
+    {
+      "caller": "packages/web/src/api.ts",
+      "line": 2,
+      "module": "./types",
+      "import": "import type { ApiErrorBody, Attachment } from \"./types\";"
+    },
+    {
+      "caller": "packages/web/src/format.ts",
+      "line": 1,
+      "module": "./i18n.ts",
+      "import": "import { labels, locale, relative, t } from \"./i18n.ts\";"
+    },
+    {
+      "caller": "packages/web/src/i18n.ts",
+      "line": 1,
+      "module": "../../server/src/shared/error-translations.ts",
+      "import": "import { fixedErrorTranslation } from \"../../server/src/shared/error-translations.ts\";"
+    },
+    {
+      "caller": "packages/web/src/i18n.ts",
+      "line": 2,
+      "module": "preact/hooks",
+      "import": "import { useEffect, useState } from \"preact/hooks\";"
+    },
+    {
+      "caller": "packages/web/src/i18n.ts",
+      "line": 3,
+      "module": "./messages.ts",
+      "import": "import { en, type MessageKey } from \"./messages.ts\";"
+    },
+    {
+      "caller": "packages/web/src/i18n.ts",
+      "line": 4,
+      "module": "./messages-east-asian.ts",
+      "import": "import { ko, zhHans, zhHant } from \"./messages-east-asian.ts\";"
+    },
+    {
+      "caller": "packages/web/src/i18n.ts",
+      "line": 5,
+      "module": "../../server/src/shared/locales.ts",
+      "import": "import { LOCALES, supportedLocale, type Locale } from \"../../server/src/shared/locales.ts\";"
+    },
+    {
+      "caller": "packages/web/src/i18n.ts",
+      "line": 6,
+      "module": "../../server/src/shared/locales.ts",
+      "import": "export type { Locale } from \"../../server/src/shared/locales.ts\";"
+    },
+    {
+      "caller": "packages/web/src/idlogin.tsx",
+      "line": 1,
+      "module": "./i18n.ts",
+      "import": "import { systemMessage, t, locale, useLocale } from \"./i18n.ts\";"
+    },
+    {
+      "caller": "packages/web/src/idlogin.tsx",
+      "line": 4,
+      "module": "preact/hooks",
+      "import": "import { useEffect, useRef, useState } from \"preact/hooks\";"
+    },
+    {
+      "caller": "packages/web/src/idlogin.tsx",
+      "line": 5,
+      "module": "./api",
+      "import": "import { api, ApiError } from \"./api\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 1,
+      "module": "./i18n.ts",
+      "import": "import { t, useLocale, languagePreference, setLanguage, type LanguagePreference } from \"./i18n.ts\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 2,
+      "module": "preact",
+      "import": "import { render } from \"preact\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 3,
+      "module": "preact/hooks",
+      "import": "import { useEffect, useState } from \"preact/hooks\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 4,
+      "module": "./api",
+      "import": "import { getSession, setSession, setUnauthorizedHandler, subscribeEvents } from \"./api\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 5,
+      "module": "./router",
+      "import": "import { linkProps, navigate, useLocation } from \"./router\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 6,
+      "module": "./store",
+      "import": "import { bump, loadOpen, useResource } from \"./store\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 7,
+      "module": "./pages/Connections",
+      "import": "import { Connections, Pair } from \"./pages/Connections\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 8,
+      "module": "./pages/DecisionView",
+      "import": "import { DecisionView } from \"./pages/DecisionView\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 9,
+      "module": "./pages/History",
+      "import": "import { History } from \"./pages/History\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 10,
+      "module": "./pages/Inbox",
+      "import": "import { Inbox } from \"./pages/Inbox\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 11,
+      "module": "./pages/Settings",
+      "import": "import { Settings } from \"./pages/Settings\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 12,
+      "module": "./idlogin",
+      "import": "import { IdLogin, loginConfig } from \"./idlogin\";"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 13,
+      "module": "./style.css",
+      "import": "import \"./style.css\";"
+    },
+    {
+      "caller": "packages/web/src/messages-east-asian.ts",
+      "line": 1,
+      "module": "./messages.ts",
+      "import": "import type { MessageKey } from \"./messages.ts\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Attachments.tsx",
+      "line": 1,
+      "module": "../i18n.ts",
+      "import": "import { systemMessage, t, type UiMessage } from \"../i18n.ts\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Attachments.tsx",
+      "line": 2,
+      "module": "preact/hooks",
+      "import": "import { useEffect, useState } from \"preact/hooks\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Attachments.tsx",
+      "line": 3,
+      "module": "../api",
+      "import": "import { api, fetchAttachment, uploadAttachment } from \"../api\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Attachments.tsx",
+      "line": 4,
+      "module": "../types",
+      "import": "import type { Attachment } from \"../types\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 1,
+      "module": "../i18n.ts",
+      "import": "import { systemMessage, t } from \"../i18n.ts\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 2,
+      "module": "preact/hooks",
+      "import": "import { useEffect, useState } from \"preact/hooks\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 3,
+      "module": "../api",
+      "import": "import { api } from \"../api\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 4,
+      "module": "../router",
+      "import": "import { navigate } from \"../router\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 5,
+      "module": "../store",
+      "import": "import { bump, loadMe, useResource } from \"../store\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 6,
+      "module": "../format",
+      "import": "import { ago, CHECK_LABEL, clientLabel, dateTime, FAILED_STEP } from \"../format\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 7,
+      "module": "../types",
+      "import": "import type { Check, Connection } from \"../types\";"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 1,
+      "module": "../i18n.ts",
+      "import": "import { systemMessage, t } from \"../i18n.ts\";"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 2,
+      "module": "preact/hooks",
+      "import": "import { useEffect, useRef, useState } from \"preact/hooks\";"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 3,
+      "module": "../api",
+      "import": "import { api, ApiError } from \"../api\";"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 4,
+      "module": "../router",
+      "import": "import { navigate } from \"../router\";"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 5,
+      "module": "../store",
+      "import": "import { bump, useBump } from \"../store\";"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 6,
+      "module": "../format",
+      "import": "import { ago, dateTime, deadlineText, DELIVERY_LABEL, FIELD_LABEL, URGENCY_LABEL } from \"../format\";"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 7,
+      "module": "../types",
+      "import": "import type { Decision } from \"../types\";"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 8,
+      "module": "./Source",
+      "import": "import { Source } from \"./Source\";"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 9,
+      "module": "./Attachments",
+      "import": "import { ACCEPT, RequestImages, AttachmentList, MAX_COUNT, useDraftAttachments } from \"./Attachments\";"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 1,
+      "module": "../i18n.ts",
+      "import": "import { systemMessage, t } from \"../i18n.ts\";"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 2,
+      "module": "preact/hooks",
+      "import": "import { useState } from \"preact/hooks\";"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 3,
+      "module": "../api",
+      "import": "import { api } from \"../api\";"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 4,
+      "module": "../router",
+      "import": "import { linkProps } from \"../router\";"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 5,
+      "module": "../store",
+      "import": "import { bump, loadClosed, useResource } from \"../store\";"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 6,
+      "module": "../format",
+      "import": "import { dateTime, DELIVERY_LABEL } from \"../format\";"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 7,
+      "module": "./Source",
+      "import": "import { Source } from \"./Source\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Inbox.tsx",
+      "line": 1,
+      "module": "../i18n.ts",
+      "import": "import { systemMessage, t } from \"../i18n.ts\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Inbox.tsx",
+      "line": 2,
+      "module": "../router",
+      "import": "import { linkProps } from \"../router\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Inbox.tsx",
+      "line": 3,
+      "module": "../store",
+      "import": "import { loadOpen, useResource } from \"../store\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Inbox.tsx",
+      "line": 4,
+      "module": "../format",
+      "import": "import { ago, deadlineText, URGENCY_LABEL } from \"../format\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Inbox.tsx",
+      "line": 5,
+      "module": "../types",
+      "import": "import type { Decision } from \"../types\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Inbox.tsx",
+      "line": 6,
+      "module": "./Source",
+      "import": "import { Source } from \"./Source\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Settings.tsx",
+      "line": 1,
+      "module": "../i18n.ts",
+      "import": "import { t, days } from \"../i18n.ts\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Settings.tsx",
+      "line": 2,
+      "module": "preact/hooks",
+      "import": "import { useState } from \"preact/hooks\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Settings.tsx",
+      "line": 3,
+      "module": "../api",
+      "import": "import { api, setSession } from \"../api\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Settings.tsx",
+      "line": 4,
+      "module": "../router",
+      "import": "import { navigate } from \"../router\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Settings.tsx",
+      "line": 5,
+      "module": "../store",
+      "import": "import { bump, loadMe, useResource } from \"../store\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Settings.tsx",
+      "line": 6,
+      "module": "../format",
+      "import": "import { CHECK_LABEL, clientLabel } from \"../format\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Source.tsx",
+      "line": 1,
+      "module": "../format",
+      "import": "import { clientLabel } from \"../format\";"
+    },
+    {
+      "caller": "packages/web/src/pages/Source.tsx",
+      "line": 2,
+      "module": "../types",
+      "import": "import type { Decision } from \"../types\";"
+    },
+    {
+      "caller": "packages/web/src/router.ts",
+      "line": 1,
+      "module": "preact/hooks",
+      "import": "import { useEffect, useState } from \"preact/hooks\";"
+    },
+    {
+      "caller": "packages/web/src/store.ts",
+      "line": 1,
+      "module": "preact/hooks",
+      "import": "import { useEffect, useState } from \"preact/hooks\";"
+    },
+    {
+      "caller": "packages/web/src/store.ts",
+      "line": 2,
+      "module": "./api",
+      "import": "import { api } from \"./api\";"
+    },
+    {
+      "caller": "packages/web/src/store.ts",
+      "line": 3,
+      "module": "./types",
+      "import": "import type { Decision, Me } from \"./types\";"
+    },
+    {
+      "caller": "packages/web/test/browser/localization.spec.ts",
+      "line": 1,
+      "module": "@playwright/test",
+      "import": "import { test, expect, type Page } from \"@playwright/test\";"
+    },
+    {
+      "caller": "packages/web/test/browser/swipe.spec.ts",
+      "line": 1,
+      "module": "@playwright/test",
+      "import": "import { test, expect, type Page } from \"@playwright/test\";"
+    },
+    {
+      "caller": "packages/web/test/i18n.test.ts",
+      "line": 1,
+      "module": "node:test",
+      "import": "import { test } from \"node:test\";"
+    },
+    {
+      "caller": "packages/web/test/i18n.test.ts",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "packages/web/test/i18n.test.ts",
+      "line": 3,
+      "module": "../src/i18n.ts",
+      "import": "import { resolveLocale, translate, setLanguage, locale, systemMessage } from \"../src/i18n.ts\";"
+    },
+    {
+      "caller": "packages/web/test/i18n.test.ts",
+      "line": 4,
+      "module": "../src/messages.ts",
+      "import": "import { en } from \"../src/messages.ts\";"
+    },
+    {
+      "caller": "packages/web/test/i18n.test.ts",
+      "line": 5,
+      "module": "../src/messages-east-asian.ts",
+      "import": "import { ko, zhHans, zhHant } from \"../src/messages-east-asian.ts\";"
+    },
+    {
+      "caller": "packages/web/test/i18n.test.ts",
+      "line": 6,
+      "module": "../src/format.ts",
+      "import": "import { ago, URGENCY_LABEL, deadlineText } from \"../src/format.ts\";"
+    },
+    {
+      "caller": "packages/web/vite.config.ts",
+      "line": 1,
+      "module": "vite",
+      "import": "import { defineConfig } from \"vite\";"
+    },
+    {
+      "caller": "packages/web/vite.config.ts",
+      "line": 2,
+      "module": "@preact/preset-vite",
+      "import": "import preact from \"@preact/preset-vite\";"
+    },
+    {
+      "caller": "tools/deploy/diagnostic-trigger-smoke.mjs",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from 'node:assert/strict';"
+    },
+    {
+      "caller": "tools/deploy/diagnostic-trigger-smoke.mjs",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import {readFileSync} from 'node:fs';"
+    },
+    {
+      "caller": "tools/deploy/diagnostic-trigger-smoke.mjs",
+      "line": 4,
+      "module": "node:crypto",
+      "import": "import {randomUUID} from 'node:crypto';"
+    },
+    {
+      "caller": "tools/deploy/diagnostic-trigger-smoke.mjs",
+      "line": 5,
+      "module": "/app/server/dist/db.js",
+      "import": "import {openDb,get} from '/app/server/dist/db.js';"
+    },
+    {
+      "caller": "tools/deploy/diagnostic-trigger-smoke.mjs",
+      "line": 6,
+      "module": "/app/server/dist/accounts.js",
+      "import": "import {Accounts} from '/app/server/dist/accounts.js';"
+    },
+    {
+      "caller": "tools/deploy/diagnostic-trigger-smoke.mjs",
+      "line": 7,
+      "module": "/app/server/dist/events.js",
+      "import": "import {EventHub} from '/app/server/dist/events.js';"
+    },
+    {
+      "caller": "tools/e2e/bundle.mjs",
+      "line": 5,
+      "module": "esbuild",
+      "import": "import { build } from \"esbuild\";"
+    },
+    {
+      "caller": "tools/e2e/bundle.mjs",
+      "line": 6,
+      "module": "node:url",
+      "import": "import { fileURLToPath } from \"node:url\";"
+    },
+    {
+      "caller": "tools/e2e/claude-binary.mjs",
+      "line": 3,
+      "module": "node:child_process",
+      "import": "import { execFileSync } from \"node:child_process\";"
+    },
+    {
+      "caller": "tools/e2e/codex-consumer-migration.mjs",
+      "line": 2,
+      "module": "node:assert/strict",
+      "import": "import assert from 'node:assert/strict';"
+    },
+    {
+      "caller": "tools/e2e/codex-consumer-migration.mjs",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import fs from 'node:fs';"
+    },
+    {
+      "caller": "tools/e2e/codex-consumer-migration.mjs",
+      "line": 4,
+      "module": "node:path",
+      "import": "import path from 'node:path';"
+    },
+    {
+      "caller": "tools/e2e/codex-consumer-migration.mjs",
+      "line": 5,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from 'aiterm-steer-delivery';"
+    },
+    {
+      "caller": "tools/e2e/codex-consumer-migration.mjs",
+      "line": 6,
+      "module": "../../packages/connector/src/profile.ts",
+      "import": "import { PROFILE } from '../../packages/connector/src/profile.ts';"
+    },
+    {
+      "caller": "tools/e2e/codex-consumer-migration.mjs",
+      "line": 7,
+      "module": "../../packages/connector/src/harness.ts",
+      "import": "import { register } from '../../packages/connector/src/harness.ts';"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 9,
+      "module": "@hono/node-server",
+      "import": "import { serve } from \"@hono/node-server\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 10,
+      "module": "@modelcontextprotocol/sdk/client/index.js",
+      "import": "import { Client } from \"@modelcontextprotocol/sdk/client/index.js\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 11,
+      "module": "@modelcontextprotocol/sdk/client/stdio.js",
+      "import": "import { StdioClientTransport } from \"@modelcontextprotocol/sdk/client/stdio.js\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 12,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from \"aiterm-steer-delivery\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 13,
+      "module": "node:child_process",
+      "import": "import { execFileSync } from \"node:child_process\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 14,
+      "module": "node:crypto",
+      "import": "import { randomUUID } from \"node:crypto\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 15,
+      "module": "node:fs",
+      "import": "import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from \"node:fs\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 16,
+      "module": "node:os",
+      "import": "import { homedir, tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 17,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 18,
+      "module": "node:url",
+      "import": "import { fileURLToPath } from \"node:url\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 19,
+      "module": "../../packages/server/src/accounts.ts",
+      "import": "import { Accounts } from \"../../packages/server/src/accounts.ts\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 20,
+      "module": "../../packages/server/src/db.ts",
+      "import": "import { openDb } from \"../../packages/server/src/db.ts\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 21,
+      "module": "../../packages/server/src/decisions.ts",
+      "import": "import { Decisions } from \"../../packages/server/src/decisions.ts\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 22,
+      "module": "../../packages/server/src/events.ts",
+      "import": "import { EventHub } from \"../../packages/server/src/events.ts\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 23,
+      "module": "../../packages/server/src/http.ts",
+      "import": "import { createApp } from \"../../packages/server/src/http.ts\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 24,
+      "module": "../../packages/connector/src/profile.ts",
+      "import": "import { PROFILE } from \"../../packages/connector/src/profile.ts\";"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 25,
+      "module": "./claude-binary.mjs",
+      "import": "import { claudeBinaryForShell } from \"./claude-binary.mjs\";"
+    },
+    {
+      "caller": "tools/e2e/parent-preflight.test.mjs",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from \"node:assert/strict\";"
+    },
+    {
+      "caller": "tools/e2e/parent-preflight.test.mjs",
+      "line": 2,
+      "module": "node:child_process",
+      "import": "import { spawnSync } from \"node:child_process\";"
+    },
+    {
+      "caller": "tools/e2e/parent-preflight.test.mjs",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from \"node:fs\";"
+    },
+    {
+      "caller": "tools/e2e/parent-preflight.test.mjs",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from \"node:os\";"
+    },
+    {
+      "caller": "tools/e2e/parent-preflight.test.mjs",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from \"node:path\";"
+    },
+    {
+      "caller": "tools/e2e/parent-preflight.test.mjs",
+      "line": 6,
+      "module": "node:url",
+      "import": "import { fileURLToPath } from \"node:url\";"
+    },
+    {
+      "caller": "tools/e2e/parent-preflight.test.mjs",
+      "line": 7,
+      "module": "node:test",
+      "import": "import test from \"node:test\";"
+    },
+    {
+      "caller": "tools/e2e/session-routing-production.mjs",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from 'node:assert/strict';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-production.mjs",
+      "line": 2,
+      "module": "node:fs",
+      "import": "import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-production.mjs",
+      "line": 3,
+      "module": "node:path",
+      "import": "import { join } from 'node:path';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-production.mjs",
+      "line": 4,
+      "module": "@modelcontextprotocol/sdk/client/index.js",
+      "import": "import { Client } from '@modelcontextprotocol/sdk/client/index.js';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-production.mjs",
+      "line": 5,
+      "module": "@modelcontextprotocol/sdk/client/stdio.js",
+      "import": "import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-production.mjs",
+      "line": 6,
+      "module": "aiterm-steer-delivery",
+      "import": "import * as steer from 'aiterm-steer-delivery';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-production.mjs",
+      "line": 7,
+      "module": "../../packages/connector/src/profile.ts",
+      "import": "import { PROFILE } from '../../packages/connector/src/profile.ts';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-smoke.mjs",
+      "line": 1,
+      "module": "node:assert/strict",
+      "import": "import assert from 'node:assert/strict';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-smoke.mjs",
+      "line": 2,
+      "module": "node:http",
+      "import": "import { createServer } from 'node:http';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-smoke.mjs",
+      "line": 3,
+      "module": "node:fs",
+      "import": "import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-smoke.mjs",
+      "line": 4,
+      "module": "node:os",
+      "import": "import { tmpdir } from 'node:os';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-smoke.mjs",
+      "line": 5,
+      "module": "node:path",
+      "import": "import { join } from 'node:path';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-smoke.mjs",
+      "line": 6,
+      "module": "node:url",
+      "import": "import { fileURLToPath } from 'node:url';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-smoke.mjs",
+      "line": 7,
+      "module": "@modelcontextprotocol/sdk/client/index.js",
+      "import": "import { Client } from '@modelcontextprotocol/sdk/client/index.js';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-smoke.mjs",
+      "line": 8,
+      "module": "@modelcontextprotocol/sdk/client/stdio.js",
+      "import": "import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';"
+    },
+    {
+      "caller": "tools/e2e/session-routing-smoke.mjs",
+      "line": 9,
+      "module": "node:fs",
+      "import": "import { writeFileSync, mkdirSync } from 'node:fs';"
+    }
+  ],
+  "tests": [
+    {
+      "file": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 12,
+      "label": "\"公開ViaAiterm wrapperの実processへ旧channelを渡し、受付不明を再送しない\""
+    },
+    {
+      "file": "packages/connector/test/api.test.ts",
+      "line": 13,
+      "label": "\"前段のHTMLのエラーページは、JSONの例外ではなく「届かなかった」誤りになる\""
+    },
+    {
+      "file": "packages/connector/test/api.test.ts",
+      "line": 31,
+      "label": "\"読み取り（GET）のJSONでない応答は、やり直しを案内する（一覧の確認は求めない）\""
+    },
+    {
+      "file": "packages/connector/test/api.test.ts",
+      "line": 45,
+      "label": "\"サーバーのJSONの誤りは、今までどおり code と message を返す\""
+    },
+    {
+      "file": "packages/connector/test/attachments.test.ts",
+      "line": 14,
+      "label": "\"添付: 端末へ保存して場所を返し、中身が合わないものは保存しない\""
+    },
+    {
+      "file": "packages/connector/test/attachments.test.ts",
+      "line": 51,
+      "label": "\"添付: ファイル名はどのOSでも使える形にする\""
+    },
+    {
+      "file": "packages/connector/test/channel-delivery.test.ts",
+      "line": 12,
+      "label": "\"旧Codex channel.v1を改変せず共通providerへ渡し、unknownを二重配送しない\""
+    },
+    {
+      "file": "packages/connector/test/channel-delivery.test.ts",
+      "line": 38,
+      "label": "\"Codex以外のchannelは既存配送を維持する\""
+    },
+    {
+      "file": "packages/connector/test/channel-delivery.test.ts",
+      "line": 50,
+      "label": "\"同じchannelへ同じ配送IDで送り直しても本文は1通で、前の本文の行方を返す\""
+    },
+    {
+      "file": "packages/connector/test/claude-channel.test.ts",
+      "line": 28,
+      "label": "\"同じ会話でも、Claudeのprocessが替わったら保存済みのchannelを使い回さない\""
+    },
+    {
+      "file": "packages/connector/test/claude-channel.test.ts",
+      "line": 45,
+      "label": "\"Claudeが起動し直した後、古いprocessに結んだchannelの答えが、新しい申請を待たずに今のprocessへ届く\""
+    },
+    {
+      "file": "packages/connector/test/claude-channel.test.ts",
+      "line": 67,
+      "label": "\"起動し直した後の新しい申請は今のprocessのchannelを開き、古いchannelの答えと届いた順に出る\""
+    },
+    {
+      "file": "packages/connector/test/claude-hook.test.ts",
+      "line": 18,
+      "label": "\"Claude registration migrates legacy hooks and doctor detects missing events\""
+    },
+    {
+      "file": "packages/connector/test/claude-hook.test.ts",
+      "line": 44,
+      "label": "\"Grok Stop executes the connector hook through its shell command with exit 0\""
+    },
+    {
+      "file": "packages/connector/test/claude-hook.test.ts",
+      "line": 57,
+      "label": "\"Claude Stop shell hook waits for a channel answer and returns asyncRewake exit 2\""
+    },
+    {
+      "file": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 13,
+      "label": "\"Codex申請の確認・受付・再開はhookと親アプリ再起動を条件にしない\""
+    },
+    {
+      "file": "packages/connector/test/cursor-binding.test.ts",
+      "line": 12,
+      "label": "`Cursor: ${order}でもhookは消費せず、背景受信が回答を一度だけ出す`"
+    },
+    {
+      "file": "packages/connector/test/cursor-binding.test.ts",
+      "line": 54,
+      "label": "\"Cursor: BOM・afterMCPExecutionを受け、別の会話へbindを上書きしない\""
+    },
+    {
+      "file": "packages/connector/test/daemon-launch.test.ts",
+      "line": 8,
+      "label": "\"Windows常駐adapterは隔離HOMEとCLI探索だけを保持し秘密環境を転送しない\""
+    },
+    {
+      "file": "packages/connector/test/daemon-launch.test.ts",
+      "line": 21,
+      "label": "\"起動先のnodeが無い時、呼び出した側のprocessを落とさず、名前を付けて記録する\""
+    },
+    {
+      "file": "packages/connector/test/daemon.test.ts",
+      "line": 7,
+      "label": "\"デーモンの入れ替え: 古い版は新しい版へ替えるが、新しい版を古い版へ戻さない\""
+    },
+    {
+      "file": "packages/connector/test/daemon.test.ts",
+      "line": 20,
+      "label": "\"配送デーモンを起こすnode: 更新で消える場所ではなく、今ある場所を引く\""
+    },
+    {
+      "file": "packages/connector/test/instructions.test.ts",
+      "line": 8,
+      "label": "\"全体の指示へ一節を足し、二度書いても一つ、外すと元に戻る\""
+    },
+    {
+      "file": "packages/connector/test/instructions.test.ts",
+      "line": 22,
+      "label": "\"ファイルが無ければ作る\""
+    },
+    {
+      "file": "packages/connector/test/instructions.test.ts",
+      "line": 30,
+      "label": "\"symlinkの先（dotagentsの生成物など）には書かず、前の版が書いた区画は外せる\""
+    },
+    {
+      "file": "packages/connector/test/instructions.test.ts",
+      "line": 45,
+      "label": "\"管理元が自分の言葉で書いた同じ趣旨の文も一節とみなし、外す時は触れない\""
+    },
+    {
+      "file": "packages/connector/test/instructions.test.ts",
+      "line": 54,
+      "label": "\"Claude Code の @取り込みを1段たどって、管理元の文を見つける\""
+    },
+    {
+      "file": "packages/connector/test/instructions.test.ts",
+      "line": 63,
+      "label": "\"規範の置き場（rules）にある同じ趣旨の文を見つける\""
+    },
+    {
+      "file": "packages/connector/test/mcp-context.test.ts",
+      "line": 12,
+      "label": "'MCPはrequest/setupの失敗時にも会話を記録し、amend/resumeの失敗時は直前の会話を保つ'"
+    },
+    {
+      "file": "packages/connector/test/parent-channels.test.ts",
+      "line": 8,
+      "label": "\"親channelはCodex threadを分離し、永続記録とprocess内記録を使い分ける\""
+    },
+    {
+      "file": "packages/connector/test/request-images.test.ts",
+      "line": 8,
+      "label": "'image_paths: 全件ローカル検証後upload、basename/MIME/原本を保持しpath非共有'"
+    },
+    {
+      "file": "packages/connector/test/session-routing.test.ts",
+      "line": 20,
+      "label": "`実デーモン: 旧会話のqueuedを${scenario}後に二重配送しない`"
+    },
+    {
+      "file": "packages/server/test/account-deletion.test.ts",
+      "line": 36,
+      "label": "\"DELETE /me removes owned auxiliary data and rejects late writes without changing another account\""
+    },
+    {
+      "file": "packages/server/test/account-deletion.test.ts",
+      "line": 67,
+      "label": "`DELETE /me removes diagnostic contributions and personal notes, preserves other sources (raw pruned=${pruned})`"
+    },
+    {
+      "file": "packages/server/test/account-deletion.test.ts",
+      "line": 92,
+      "label": "\"DELETE /me file removal failure rolls back account deletion and permits a retry\""
+    },
+    {
+      "file": "packages/server/test/account-deletion.test.ts",
+      "line": 111,
+      "label": "\"schema6 migration removes orphan replies/payloads and preserves living diagnostic groups on reopen\""
+    },
+    {
+      "file": "packages/server/test/account-deletion.test.ts",
+      "line": 138,
+      "label": "\"account-deletion migration preserves the SSE cursor even when the highest event was already removed\""
+    },
+    {
+      "file": "packages/server/test/account-deletion.test.ts",
+      "line": 154,
+      "label": "\"another user's active aggregate does not extend an inactive source's 120-day retention\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 53,
+      "label": "\"同じIdempotency-Keyの同時回答は同じ成功応答を返し、保存は1回に留める\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 72,
+      "label": "\"一覧は時差と小数秒を含む期限の実時刻順にし、急ぎ度・保留・期限なし・ページ送りを保つ\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 114,
+      "label": "\"時差付き期限の修正は一覧へ反映し、既決の一覧は更新日時の新しい順を保つ\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 134,
+      "label": "\"申請・重複検知・修正・回答・配送\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 181,
+      "label": "\"申請はまず一覧を返して確かめさせ、札を付けて出し直した時だけ受け付ける\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 213,
+      "label": "\"他の接続の申請は見えない\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 222,
+      "label": "\"セットアップ確認が済むまで課金させない\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 247,
+      "label": "\"既決の削除は未決を残す\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 259,
+      "label": "\"接続トークンを発行・一覧・失効でき、登録手順と知らないAPIはJSONで返る\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 283,
+      "label": "\"通知の端末を登録でき、同じtokenは同じidになり、解除できる\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 294,
+      "label": "\"Sign in with Apple: 確かめたtokenで入り、同じApple IDは同じアカウント、ログイン済みなら結ぶ\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 345,
+      "label": "\"ブラウザで始めるAppleのログイン: callbackで確かめ、code_verifierと合う時だけ一度きりのコードを使える\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 397,
+      "label": "\"確認を求める文に札と一覧が入る（0.1.6までのコネクタは文だけをAIに見せる）\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 406,
+      "label": "\"会話切替: amendは配送先も更新し、古い版の競合では更新しない\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 420,
+      "label": "\"再開: 対象の申請だけ移管し、回答済みはその場で取得、他の接続と取り下げは拒否\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 438,
+      "label": "\"申請者と作業名: アプリには「誰から / 何の仕事」の一行と、分けた項目の両方を返す\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 472,
+      "label": "\"答えを届ける文は、利用者へ件名で伝えるようAIへ添える\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 483,
+      "label": "'冪等応答は最初の言語を保持し、5xx・rate limit・一度返すtokenを保存しない'"
+    },
+    {
+      "file": "packages/server/test/appstore.test.ts",
+      "line": 65,
+      "label": "\"App Store: Sandboxの購入は確認前でも受け付け、署名を確かめて契約中にする\""
+    },
+    {
+      "file": "packages/server/test/appstore.test.ts",
+      "line": 74,
+      "label": "\"App Store: 本番の購入はセットアップ確認の後だけ。署名の違う取引・他人の取引・知らない商品は断る\""
+    },
+    {
+      "file": "packages/server/test/appstore.test.ts",
+      "line": 92,
+      "label": "\"App Store: 通知で更新・返金を反映し、古い通知で期限を巻き戻さない。期限を過ぎれば切れる\""
+    },
+    {
+      "file": "packages/server/test/appstore.test.ts",
+      "line": 115,
+      "label": "\"App Store: Appleのルートにつながらない鎖で署名した取引は断る\""
+    },
+    {
+      "file": "packages/server/test/attachments.test.ts",
+      "line": 65,
+      "label": "\"添付: 画像と書類を上げ、答えと一緒に結び、AIが取れる\""
+    },
+    {
+      "file": "packages/server/test/attachments.test.ts",
+      "line": 146,
+      "label": "\"添付: 添付だけの答え、version違いでも下書きは残る、送り直しは二重にならない\""
+    },
+    {
+      "file": "packages/server/test/attachments.test.ts",
+      "line": 203,
+      "label": "\"添付: 形式・大きさ・数の上限と、取り下げ・アカウント削除での片付け\""
+    },
+    {
+      "file": "packages/server/test/attachments.test.ts",
+      "line": 244,
+      "label": "\"添付: 保存日数を過ぎた既決と、24時間結ばれない下書きは消える\""
+    },
+    {
+      "file": "packages/server/test/attachments.test.ts",
+      "line": 270,
+      "label": "\"添付: リモートMCPの get_attachment は画像を image、書類をファイルで返す\""
+    },
+    {
+      "file": "packages/server/test/attachments.test.ts",
+      "line": 304,
+      "label": "\"添付: Content-Disposition は ASCII の名前と UTF-8 の名前を両方持つ\""
+    },
+    {
+      "file": "packages/server/test/callbridge-retry.test.ts",
+      "line": 12,
+      "label": "`call_open: ${name}`"
+    },
+    {
+      "file": "packages/server/test/callbridge-retry.test.ts",
+      "line": 22,
+      "label": "\"call_send後のunknownや通信例外へ再試行保証を広げない\""
+    },
+    {
+      "file": "packages/server/test/connector-auth.test.ts",
+      "line": 17,
+      "label": "\"sessionと接続tokenを区別し、未知APIへstatic HTMLを返さない\""
+    },
+    {
+      "file": "packages/server/test/connector-auth.test.ts",
+      "line": 43,
+      "label": "\"pairingを含む業務経路や未知の経路も接続トークンを必須とする\""
+    },
+    {
+      "file": "packages/server/test/connector-auth.test.ts",
+      "line": 74,
+      "label": "\"公開ペアリングは接続トークンなしで動き、受取りにはpoll secretが必要\""
+    },
+    {
+      "file": "packages/server/test/connector-auth.test.ts",
+      "line": 97,
+      "label": "\"正規接続トークンは業務経路へ進み、存在しない申請は404を返す\""
+    },
+    {
+      "file": "packages/server/test/db.test.ts",
+      "line": 11,
+      "label": "\"スキーマに同じ表を二度書かない（古い定義が残ると、既にあるDBでは新しい定義が飛ばされる）\""
+    },
+    {
+      "file": "packages/server/test/db.test.ts",
+      "line": 17,
+      "label": "\"最初の形のdevices表を持つDBを開くと、行を保ったまま新しい形へ移り、登録できる\""
+    },
+    {
+      "file": "packages/server/test/db.test.ts",
+      "line": 35,
+      "label": "\"申請者の列が無いDBを開くと、申請を保ったまま列が足される\""
+    },
+    {
+      "file": "packages/server/test/decision-summary.test.ts",
+      "line": 9,
+      "label": "\"接続内の一覧・確認・重複候補は要約だけ、本文は明示取得で返す\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 22,
+      "label": "\"answer timeout request hash is optional, preserves receipts/grouping and can correlate same-user saved keys\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 56,
+      "label": "\"admin report context preserves legacy acceptance, raw data, grouping and lifecycle\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 78,
+      "label": "\"admin report describes observed failures and state without interpreting private codes\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 99,
+      "label": "\"authenticated diagnostics: exact receipt, replay, conflict, bounded typed payload\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 109,
+      "label": "\"Apple authorization domain and code survive HTTP acceptance without rewriting legacy diagnostics\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 146,
+      "label": "\"UserNotifications domain stays distinct from legacy other without inferring impact\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 171,
+      "label": "\"LAN socket and host required: reject proxy paths, spoofing, wrong/missing bearer\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 176,
+      "label": "\"BugHub aggregation, resolve idempotency, duplicate stays resolved, new occurrence reopens\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 186,
+      "label": "\"fingerprint excludes versions/index, includes device and crash exception/frame; bounded raw logs preserve receipts\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 195,
+      "label": "\"persistent rate limit counts new events, retry does not consume allowance\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 202,
+      "label": "\"receipts, severity and aggregate survive database reopen\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 215,
+      "label": "\"crash frames accept absent sample_count without discarding UUID/offset\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 223,
+      "label": "\"optional trigger preserves grouping, exact receipts and admin/raw observation\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 248,
+      "label": "\"investigation PATCH changes only independent note; replay/new diagnostics and state changes retain it\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 269,
+      "label": "\"investigation uses existing LAN admin authority and bounded independent input\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 281,
+      "label": "\"v3 database migration preserves diagnosis and persists independent investigation across reopen\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 295,
+      "label": "\"assessed recovered communication stays raw-only; duplicate receipts and legacy groups remain intact\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 308,
+      "label": "\"handling alone and unknown recovery do not hide impact; source severity and evidence are projected\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 319,
+      "label": "\"normal cancellation requires explicit source assessment and known cancellation\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 325,
+      "label": "\"recovered retry of an unexpected cancellation stays a reference; unassessed or unrecovered ones still register\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 342,
+      "label": "\"unknown recovery remains registered; bounded administrator notes survive assessment projection and replay\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 18,
+      "label": "\"language negotiation honors quality, region and exclusions; legacy defaults to Japanese\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 30,
+      "label": "\"HTTP error codes and structured fields stay stable across languages; device locale validates\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 44,
+      "label": "\"five device locales receive localized fixed push text while request content and silent updates stay intact\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 74,
+      "label": "\"schema 7 device migration preserves existing fields and defaults only the new locale\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 87,
+      "label": "\"onboarding translates fixed instructions without changing commands or protocol client IDs\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 100,
+      "label": "\"Korean and Chinese HTTP errors and instructions keep protocol data unchanged\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 116,
+      "label": "\"schema 8 locale constraint upgrade preserves all old device values and allows new locales\""
+    },
+    {
+      "file": "packages/server/test/push.test.ts",
+      "line": 10,
+      "label": "\"申請が来たら件名で鳴らし、取り下げは音なし。無効なtokenの端末は消す\""
+    },
+    {
+      "file": "packages/server/test/push.test.ts",
+      "line": 59,
+      "label": "\"APNsの認証tokenはES256でチームとkidを持つ\""
+    },
+    {
+      "file": "packages/server/test/remote-mcp.test.ts",
+      "line": 48,
+      "label": "\"リモートMCP: Bearer無しは401、札の往復で申請し、get_decisionで答えを取る\""
+    },
+    {
+      "file": "packages/server/test/remote-mcp.test.ts",
+      "line": 116,
+      "label": "\"call-bridge の接続: 申請者のIDで受け、答えを通話で届ける。コネクタのデーモンには渡さない\""
+    },
+    {
+      "file": "packages/server/test/remote-mcp.test.ts",
+      "line": 170,
+      "label": "\"call-bridge: 送信の途中でサーバーが止まった配送は、起動し直した時に unknown にして送り直さない\""
+    },
+    {
+      "file": "packages/server/test/remote-mcp.test.ts",
+      "line": 190,
+      "label": "\"call-bridgeの一時切断は永続待機、再起動後も期日前再送せず回復時に一回配送\""
+    },
+    {
+      "file": "packages/server/test/remote-mcp.test.ts",
+      "line": 221,
+      "label": "\"call-bridge一時切断の再試行期限は回答時刻から10分、再起動でも延長しない\""
+    },
+    {
+      "file": "packages/server/test/request-images.test.ts",
+      "line": 25,
+      "label": "'申請画像: 原子的作成、他接続拒否、認証原本、回答添付分離'"
+    },
+    {
+      "file": "packages/server/test/request-images.test.ts",
+      "line": 38,
+      "label": "'申請画像: 置換/競合/既存再利用/取消/既決削除/期限/account削除'"
+    },
+    {
+      "file": "packages/server/test/request-images.test.ts",
+      "line": 55,
+      "label": "'申請画像: 形式/単体/合計/件数制限、rollbackで通知無し'"
+    },
+    {
+      "file": "packages/server/test/request-images.test.ts",
+      "line": 66,
+      "label": "'申請画像: remote MCP schemaとbase64 uploadから正規request/get'"
+    },
+    {
+      "file": "packages/server/test/shutdown.test.ts",
+      "line": 40,
+      "label": "\"停止の合図で、アプリ向けの更新の知らせを正しく閉じる\""
+    },
+    {
+      "file": "packages/server/test/shutdown.test.ts",
+      "line": 53,
+      "label": "\"停止の合図の後に来た接続も、待たせずに閉じる\""
+    },
+    {
+      "file": "packages/server/test/shutdown.test.ts",
+      "line": 62,
+      "label": "\"停止の合図が無ければ、流れは開いたまま\""
+    },
+    {
+      "file": "packages/server/test/start-with-secrets.test.ts",
+      "line": 31,
+      "label": "\"SECRETS_DIR を指定すると、鍵3個を 600 のファイルへ移し、サーバーの環境から値を外す\""
+    },
+    {
+      "file": "packages/server/test/start-with-secrets.test.ts",
+      "line": 53,
+      "label": "\"APNS_KEY は、改行を \\\\n と書いた1行でも受ける\""
+    },
+    {
+      "file": "packages/server/test/start-with-secrets.test.ts",
+      "line": 59,
+      "label": "\"空の鍵はファイルにしない。ファイルで渡した鍵の指定はそのまま通す\""
+    },
+    {
+      "file": "packages/server/test/start-with-secrets.test.ts",
+      "line": 67,
+      "label": "\"SECRETS_DIR が無ければ、環境をそのまま渡して起こす\""
+    },
+    {
+      "file": "packages/server/test/start-with-secrets.test.ts",
+      "line": 75,
+      "label": "\"書けない置き場ではサーバーを起こさず、値を出さずに止まる\""
+    },
+    {
+      "file": "packages/server/test/streams.test.ts",
+      "line": 13,
+      "label": "`${kind} SSE: ${ending}で購読と停止listenerを解放する`"
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 23,
+      "label": "\"login auto-detects English; selection persists, HTML lang and OS changes follow\""
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 34,
+      "label": "\"all main pages use English while content and reply drafts survive language switching\""
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 51,
+      "label": "\"English destructive confirmation rejects a wrong confirmation word before any delete\""
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 59,
+      "label": "\"unsupported browser language falls back to Japanese and storage failure allows English choice\""
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 67,
+      "label": "\"English navigation and account controls fit a narrow phone screen\""
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 81,
+      "label": "`${language.code}: auto-detection, UI, literal content, drafts, persistence and confirmation`"
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 102,
+      "label": "\"visible API errors follow a language change without a retry or loss of request content\""
+    },
+    {
+      "file": "packages/web/test/browser/swipe.spec.ts",
+      "line": 18,
+      "label": "`completed decision returns to inbox with swipe ${dx}`"
+    },
+    {
+      "file": "packages/web/test/browser/swipe.spec.ts",
+      "line": 21,
+      "label": "\"scrolls, short drags and controls do not leave the detail\""
+    },
+    {
+      "file": "packages/web/test/browser/swipe.spec.ts",
+      "line": 24,
+      "label": "`${status} closes with an unsent reply without submitting it`"
+    },
+    {
+      "file": "packages/web/test/browser/swipe.spec.ts",
+      "line": 31,
+      "label": "`pending detail slides in swipe direction ${dx}`"
+    },
+    {
+      "file": "packages/web/test/browser/swipe.spec.ts",
+      "line": 46,
+      "label": "\"reduced motion skips the slide; leaving for another page cancels it\""
+    },
+    {
+      "file": "packages/web/test/browser/swipe.spec.ts",
+      "line": 55,
+      "label": "\"short horizontal drag follows the finger then returns; touch cancel resets\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 8,
+      "label": "\"language priority, regional variants and unsupported fallback\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 15,
+      "label": "\"all catalogs have identical keys and interpolation tokens\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 25,
+      "label": "\"user names with replacement syntax, markup and Japanese remain literal\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 30,
+      "label": "\"labels and plural time formatting follow language changes with unavailable storage\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 39,
+      "label": "\"visible Japanese literals outside the catalog must use a translation key\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 60,
+      "label": "\"Korean and Chinese scripts/regions resolve in preference order and retain literal user text\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 73,
+      "label": "\"stored product errors and structured upload errors render in the current language\""
+    },
+    {
+      "file": "tools/e2e/parent-preflight.test.mjs",
+      "line": 27,
+      "label": "`${harness}: 設定を保持し隔離した接続で起動依頼まで進む`"
+    }
+  ]
+}
