@@ -1,0 +1,24 @@
+flowchart TD
+ ASK["local/remote MCP request_decision"] --> CHECK["Decisions.requireCheck"]
+ CHECK -->|confirm_required: まだ未受付| LIST["要約一覧 + check_token → AI"]
+ LIST -->|同一申請再提出| CREATE["create: useCheck / rate / duplicate / recommendation"]
+ CREATE -->|invalid/duplicate/rate| ERROR["ApiError → JSON/MCP isError"]
+ CREATE --> TX["tx: decision + bindRequest + history + event row"]
+ TX -->|rollback: event副作用なし| ERROR
+ TX -->|commit| PENDING["pending v1: 受付完了"]
+ PENDING --> HOLD["setHold → held"]
+ HOLD --> PENDING
+ PENDING --> AMEND["amend: version check / 全画像置換 / history"]
+ HOLD --> AMEND
+ AMEND --> PRESERVE["更新前のpending/heldを維持"]
+ PENDING --> CANCEL["cancel → cancelled: 画像保持 / 未結合draft削除"]
+ HOLD --> CANCEL
+ PENDING --> ANSWER["answer: version/options/attachments検証"]
+ HOLD --> ANSWER
+ ANSWER -->|409: 最新Decisionを返す| ERROR
+ ANSWER --> ATX["tx: bindAttachments + answer + history + delivery waiting"]
+ ATX --> ANSWERED["answered: 回答保存済み"]
+ ANSWERED --> DELIVERY["配送は独立状態: waiting/delivered/unknown/fetched"]
+ CANCEL --> DELETE["deleteClosed / purgeExpired / DELETE me"]
+ ANSWERED --> DELETE
+ DELETE --> GC["DB cascade → events deleted → files GC"]

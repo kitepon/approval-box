@@ -1,0 +1,20 @@
+flowchart TD
+ LOGIN["Web/native: Apple or Google id_token"] --> VERIFY["oidc.verifyIdToken: issuer/aud/expiry/signature/nonce"]
+ VERIFY -->|失敗401/公開鍵取得失敗| ERR["HTTP onError → 入口へ"]
+ VERIFY --> ACC["Accounts.signInWithIdentity"]
+ ACC --> ID[("identities + users + hashed sessions")]
+ ID --> SESSION["session / expiry → client"]
+ START["Apple web/start PKCE"] --> FLOW[("auth_flows: state/nonce/challenge/used")]
+ FLOW --> CALLBACK["Apple callback: takeAuthFlow → verify → bind"]
+ CALLBACK -->|取消/失敗| RETURN["approvalbox:// auth error + state"]
+ CALLBACK --> CODE[("login_links: 一度限りcode")]
+ CODE -->|link + code_verifier| SESSION
+ PC["CLI setup: startPairing"] --> PAIR[("pairings: code + hashed poll_secret")]
+ PAIR -->|authenticated lookup| PERSON["Web/native: claim or reject"]
+ PERSON -->|claim tx| CONN[("connections + 一度だけ返すtoken")]
+ CONN -->|PC poll: claimed→delivered/token削除| CONFIG["connector config.json"]
+ PERSON -->|reject / 期限切れ| STOP["CLI error: setup中止"]
+ CONFIG --> AUTH["Accounts.connectionByToken"]
+ AUTH -->|revoked/invalid 401| STOP
+ SESSION --> REVOKE["logout / revoke token / revoke connection / DELETE me"]
+ REVOKE --> CLEAN["DB cascade・診断寄与除去・ファイル削除"]

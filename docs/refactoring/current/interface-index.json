@@ -1,0 +1,2911 @@
+{
+  "note": "Static source routes, local imports including tests, and test labels. Prefixes/conditions are explained in flows; dynamic behavior is not inferred.",
+  "routes": [
+    {
+      "file": "packages/server/src/diagnostics.ts",
+      "line": 184,
+      "target": "app",
+      "method": "use",
+      "path": "\"*\""
+    },
+    {
+      "file": "packages/server/src/diagnostics.ts",
+      "line": 195,
+      "target": "app",
+      "method": "get",
+      "path": "\"/logs\""
+    },
+    {
+      "file": "packages/server/src/diagnostics.ts",
+      "line": 215,
+      "target": "app",
+      "method": "patch",
+      "path": "\"/logs/:fingerprint/investigation\""
+    },
+    {
+      "file": "packages/server/src/diagnostics.ts",
+      "line": 230,
+      "target": "app",
+      "method": "post",
+      "path": "`/logs/${action}`"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 115,
+      "target": "app",
+      "method": "route",
+      "path": "\"/api/admin\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 117,
+      "target": "app",
+      "method": "get",
+      "path": "\"/healthz\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 130,
+      "target": "app",
+      "method": "get",
+      "path": "\"/v1/auth/config\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 131,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/auth/apple\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 136,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/auth/apple/web/start\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 144,
+      "target": "app",
+      "method": "post",
+      "path": "\"/auth/apple/callback\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 161,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/auth/google\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 164,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/appstore/notifications\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 171,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/auth/link\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 177,
+      "target": "v1",
+      "method": "use",
+      "path": "\"*\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 182,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/diagnostics\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 184,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/decisions\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 191,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/decisions\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 198,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/decisions/:id\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 199,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/decisions/:id/answer\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 206,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/decisions/:id/attachments\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 212,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/decisions/:id/attachments\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 213,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/decisions/:id/attachments/:aid\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 214,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/decisions/:id/attachments/:aid\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 218,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/decisions/:id/hold\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 219,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/decisions/:id/unhold\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 221,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/events\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 249,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/connections\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 250,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/connections/:id\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 252,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/tokens\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 257,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/tokens\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 258,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/tokens/:id\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 259,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/devices\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 270,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/devices/:id\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 271,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/onboarding\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 277,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/pairing/lookup\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 278,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/pairing/:id/claim\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 279,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/pairing/:id/reject\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 281,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/me\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 282,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/me\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 290,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/me/settings\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 291,
+      "target": "v1",
+      "method": "patch",
+      "path": "\"/me/settings\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 295,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/auth/logout\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 297,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/billing/appstore/verify\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 304,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/billing/:store/:action\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 310,
+      "target": "v1",
+      "method": "all",
+      "path": "\"*\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 311,
+      "target": "app",
+      "method": "route",
+      "path": "\"/v1\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 316,
+      "target": "pairing",
+      "method": "post",
+      "path": "\"/pairing\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 320,
+      "target": "pairing",
+      "method": "get",
+      "path": "\"/pairing/:id\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 328,
+      "target": "app",
+      "method": "route",
+      "path": "\"/connector/v1\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 332,
+      "target": "conn",
+      "method": "use",
+      "path": "\"*\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 338,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/connection\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 339,
+      "target": "conn",
+      "method": "delete",
+      "path": "\"/connection\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 340,
+      "target": "conn",
+      "method": "put",
+      "path": "\"/connection/clients\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 345,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/decisions\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 346,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/request-images\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 352,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 358,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/decisions/:id\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 362,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions/:id/fetched\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 367,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions/:id/resume\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 368,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions/:id/amend\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 373,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions/:id/cancel\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 379,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/decisions/:id/attachments/:aid\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 384,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/setup-test\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 391,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/setup-test/confirm\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 395,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/deliveries\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 396,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/deliveries/:id\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 400,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/stream\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 422,
+      "target": "conn",
+      "method": "all",
+      "path": "\"*\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 423,
+      "target": "app",
+      "method": "route",
+      "path": "\"/connector/v1\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 426,
+      "target": "app",
+      "method": "post",
+      "path": "\"/mcp\""
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 427,
+      "target": "app",
+      "method": "on",
+      "path": "[\"GET\", \"DELETE\"]"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 429,
+      "target": "app",
+      "method": "get",
+      "path": "\"*\""
+    }
+  ],
+  "references": [
+    {
+      "caller": "packages/connector/src/api.ts",
+      "line": 1,
+      "module": "./config.ts",
+      "import": "type { Config }"
+    },
+    {
+      "caller": "packages/connector/src/attachments.ts",
+      "line": 6,
+      "module": "./api.ts",
+      "import": "type { Api }"
+    },
+    {
+      "caller": "packages/connector/src/attachments.ts",
+      "line": 7,
+      "module": "./profile.ts",
+      "import": "{ home }"
+    },
+    {
+      "caller": "packages/connector/src/channel-delivery.ts",
+      "line": 2,
+      "module": "./profile.ts",
+      "import": "{ PROFILE }"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 7,
+      "module": "./api.ts",
+      "import": "{ Api, ServerError }"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 8,
+      "module": "./config.ts",
+      "import": "{ OFFICIAL_SERVER, readConfig, requireConfig, writeConfig }"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 9,
+      "module": "./daemon.ts",
+      "import": "{ daemonStatus, ensureDaemon, runDaemon }"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 10,
+      "module": "./harness.ts",
+      "import": "{ CLIENT, HARNESSES, LABEL, type Target, detect, filesOf, instructionsFileOf, register, registered, unregister }"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 11,
+      "module": "./instructions.ts",
+      "import": "{ INSTRUCTION_TEXT, managedElsewhere }"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 12,
+      "module": "./mcp.ts",
+      "import": "{ runMcp }"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 13,
+      "module": "./profile.ts",
+      "import": "{ home }"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 14,
+      "module": "./runtime.ts",
+      "import": "{ runtimeDir }"
+    },
+    {
+      "caller": "packages/connector/src/cli.ts",
+      "line": 15,
+      "module": "./version.ts",
+      "import": "{ VERSION, osName }"
+    },
+    {
+      "caller": "packages/connector/src/config.ts",
+      "line": 3,
+      "module": "./profile.ts",
+      "import": "{ home }"
+    },
+    {
+      "caller": "packages/connector/src/daemon-launch.ts",
+      "line": 4,
+      "module": "./profile.ts",
+      "import": "{ home }"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 2,
+      "module": "./daemon-launch.ts",
+      "import": "{ launchDaemon }"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 3,
+      "module": "./channel-delivery.ts",
+      "import": "{ sendChannelAnswer, channelAnswerState }"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 6,
+      "module": "./api.ts",
+      "import": "{ Api }"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 7,
+      "module": "./attachments.ts",
+      "import": "{ type AttachmentMeta, pruneAttachments, saveAll }"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 8,
+      "module": "./config.ts",
+      "import": "{ readConfig, requireConfig, writeJsonFile }"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 9,
+      "module": "./profile.ts",
+      "import": "{ PROFILE, stateRoot }"
+    },
+    {
+      "caller": "packages/connector/src/daemon.ts",
+      "line": 10,
+      "module": "./runtime.ts",
+      "import": "{ runtimeEntry }"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 6,
+      "module": "./config.ts",
+      "import": "{ writeJsonFile }"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 7,
+      "module": "./instructions.ts",
+      "import": "{ hasInstructions, hasInstructionsInDir, managedElsewhere, removeInstructions, writeInstructions }"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 8,
+      "module": "./profile.ts",
+      "import": "{ MCP_SERVER, PROFILE }"
+    },
+    {
+      "caller": "packages/connector/src/harness.ts",
+      "line": 9,
+      "module": "./runtime.ts",
+      "import": "{ runtimeEntry }"
+    },
+    {
+      "caller": "packages/connector/src/hooks/claude.ts",
+      "line": 3,
+      "module": "../profile.ts",
+      "import": "{ PROFILE }"
+    },
+    {
+      "caller": "packages/connector/src/hooks/cursor.ts",
+      "line": 2,
+      "module": "../cursor-binding.ts",
+      "import": "{ bindCursorResult }"
+    },
+    {
+      "caller": "packages/connector/src/hooks/cursor.ts",
+      "line": 3,
+      "module": "../profile.ts",
+      "import": "{ PROFILE }"
+    },
+    {
+      "caller": "packages/connector/src/hooks/receive.ts",
+      "line": 4,
+      "module": "../profile.ts",
+      "import": "{ PROFILE }"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 7,
+      "module": "./api.ts",
+      "import": "{ Api, ServerError }"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 8,
+      "module": "./attachments.ts",
+      "import": "{ type AttachmentMeta, saveAttachment }"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 9,
+      "module": "./config.ts",
+      "import": "{ requireConfig, writeJsonFile }"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 10,
+      "module": "./daemon.ts",
+      "import": "{ ensureDaemon }"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 11,
+      "module": "./request-images.ts",
+      "import": "{ uploadImagePaths }"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 12,
+      "module": "./runtime.ts",
+      "import": "{ runtimeEntry }"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 13,
+      "module": "./claude-channel.ts",
+      "import": "{ claudeChannelIsCurrent }"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 14,
+      "module": "./profile.ts",
+      "import": "{ MCP_SERVER, PROFILE, stateRoot }"
+    },
+    {
+      "caller": "packages/connector/src/mcp.ts",
+      "line": 15,
+      "module": "./version.ts",
+      "import": "{ osName, VERSION }"
+    },
+    {
+      "caller": "packages/connector/src/request-images.ts",
+      "line": 3,
+      "module": "./api.ts",
+      "import": "type { Api }"
+    },
+    {
+      "caller": "packages/connector/src/runtime.ts",
+      "line": 3,
+      "module": "./profile.ts",
+      "import": "{ HOOK_FILES }"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 8,
+      "module": "../src/profile.ts",
+      "import": "{ PROFILE }"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 9,
+      "module": "../src/channel-delivery.ts",
+      "import": "{ sendChannelAnswer, channelAnswerState }"
+    },
+    {
+      "caller": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 10,
+      "module": "../src/config.ts",
+      "import": "{ writeJsonFile }"
+    },
+    {
+      "caller": "packages/connector/test/api.test.ts",
+      "line": 5,
+      "module": "../src/api.ts",
+      "import": "{ Api, ServerError }"
+    },
+    {
+      "caller": "packages/connector/test/attachments.test.ts",
+      "line": 9,
+      "module": "../src/api.ts",
+      "import": "{ Api }"
+    },
+    {
+      "caller": "packages/connector/test/attachments.test.ts",
+      "line": 10,
+      "module": "../src/attachments.ts",
+      "import": "{ safeFileName, saveAll }"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 8,
+      "module": "../src/profile.ts",
+      "import": "{ PROFILE }"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 9,
+      "module": "../src/channel-delivery.ts",
+      "import": "{ sendChannelAnswer, channelAnswerState, type CodexProvider }"
+    },
+    {
+      "caller": "packages/connector/test/channel-delivery.test.ts",
+      "line": 10,
+      "module": "../src/config.ts",
+      "import": "{ writeJsonFile }"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 8,
+      "module": "../src/claude-channel.ts",
+      "import": "{ claudeChannelIsCurrent }"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 9,
+      "module": "../src/config.ts",
+      "import": "{ writeJsonFile }"
+    },
+    {
+      "caller": "packages/connector/test/claude-channel.test.ts",
+      "line": 10,
+      "module": "../src/profile.ts",
+      "import": "{ PROFILE }"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 10,
+      "module": "../src/profile.ts",
+      "import": "{ PROFILE }"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 11,
+      "module": "../src/harness.ts",
+      "import": "{ registered }"
+    },
+    {
+      "caller": "packages/connector/test/claude-hook.test.ts",
+      "line": 12,
+      "module": "../src/config.ts",
+      "import": "{ writeJsonFile }"
+    },
+    {
+      "caller": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 11,
+      "module": "../src/config.ts",
+      "import": "{ writeJsonFile }"
+    },
+    {
+      "caller": "packages/connector/test/cursor-binding.test.ts",
+      "line": 8,
+      "module": "../src/profile.ts",
+      "import": "{ PROFILE }"
+    },
+    {
+      "caller": "packages/connector/test/cursor-binding.test.ts",
+      "line": 9,
+      "module": "../src/cursor-binding.ts",
+      "import": "{ bindCursorResult }"
+    },
+    {
+      "caller": "packages/connector/test/daemon-launch.test.ts",
+      "line": 6,
+      "module": "../src/daemon-launch.ts",
+      "import": "{ launchDaemon, windowsDaemonLaunchScript }"
+    },
+    {
+      "caller": "packages/connector/test/daemon.test.ts",
+      "line": 3,
+      "module": "../src/daemon.ts",
+      "import": "{ daemonNode, shouldReplaceDaemon, versionOfEntry }"
+    },
+    {
+      "caller": "packages/connector/test/instructions.test.ts",
+      "line": 6,
+      "module": "../src/instructions.ts",
+      "import": "{ INSTRUCTION_TEXT, hasInstructions, hasInstructionsInDir, managedElsewhere, removeInstructions, writeInstructions }"
+    },
+    {
+      "caller": "packages/connector/test/request-images.test.ts",
+      "line": 6,
+      "module": "../src/request-images.ts",
+      "import": "{uploadImagePaths}"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 10,
+      "module": "../src/profile.ts",
+      "import": "{ PROFILE }"
+    },
+    {
+      "caller": "packages/connector/test/session-routing.test.ts",
+      "line": 11,
+      "module": "../src/config.ts",
+      "import": "{ writeJsonFile }"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 1,
+      "module": "./locales.ts",
+      "import": "type { Locale }"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 3,
+      "module": "./db.ts",
+      "import": "{ type Db, all, get, run, tx }"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 4,
+      "module": "./errors.ts",
+      "import": "{ ApiError }"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 5,
+      "module": "./events.ts",
+      "import": "type { EventHub }"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 6,
+      "module": "./ids.ts",
+      "import": "{ hash, normalizePairingCode, now, pairingCode, secret, uuid }"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 7,
+      "module": "./decisions.ts",
+      "import": "type { Connection }"
+    },
+    {
+      "caller": "packages/server/src/accounts.ts",
+      "line": 8,
+      "module": "./diagnostics.ts",
+      "import": "{ Diagnostics }"
+    },
+    {
+      "caller": "packages/server/src/appstore.ts",
+      "line": 6,
+      "module": "./accounts.ts",
+      "import": "type { Accounts }"
+    },
+    {
+      "caller": "packages/server/src/appstore.ts",
+      "line": 7,
+      "module": "./db.ts",
+      "import": "{ type Db, get, run, tx }"
+    },
+    {
+      "caller": "packages/server/src/appstore.ts",
+      "line": 8,
+      "module": "./errors.ts",
+      "import": "{ ApiError }"
+    },
+    {
+      "caller": "packages/server/src/appstore.ts",
+      "line": 9,
+      "module": "./ids.ts",
+      "import": "{ now }"
+    },
+    {
+      "caller": "packages/server/src/attachments.ts",
+      "line": 7,
+      "module": "./db.ts",
+      "import": "{ type Db, all, get, run, tx }"
+    },
+    {
+      "caller": "packages/server/src/attachments.ts",
+      "line": 8,
+      "module": "./errors.ts",
+      "import": "{ ApiError }"
+    },
+    {
+      "caller": "packages/server/src/attachments.ts",
+      "line": 9,
+      "module": "./ids.ts",
+      "import": "{ now }"
+    },
+    {
+      "caller": "packages/server/src/callbridge.ts",
+      "line": 7,
+      "module": "./db.ts",
+      "import": "{ type Db, get }"
+    },
+    {
+      "caller": "packages/server/src/callbridge.ts",
+      "line": 8,
+      "module": "./decisions.ts",
+      "import": "type { Decisions }"
+    },
+    {
+      "caller": "packages/server/src/callbridge.ts",
+      "line": 9,
+      "module": "./events.ts",
+      "import": "type { EventHub }"
+    },
+    {
+      "caller": "packages/server/src/db.ts",
+      "line": 1,
+      "module": "./ids.ts",
+      "import": "{ hash }"
+    },
+    {
+      "caller": "packages/server/src/decisions.ts",
+      "line": 2,
+      "module": "./attachments.ts",
+      "import": "{ type Attachment, MAX_ANSWER_BYTES, MAX_PER_ANSWER, formatBytes }"
+    },
+    {
+      "caller": "packages/server/src/decisions.ts",
+      "line": 3,
+      "module": "./db.ts",
+      "import": "{ type Db, all, get, run, tx }"
+    },
+    {
+      "caller": "packages/server/src/decisions.ts",
+      "line": 4,
+      "module": "./errors.ts",
+      "import": "{ ApiError }"
+    },
+    {
+      "caller": "packages/server/src/decisions.ts",
+      "line": 5,
+      "module": "./events.ts",
+      "import": "type { EventHub }"
+    },
+    {
+      "caller": "packages/server/src/decisions.ts",
+      "line": 6,
+      "module": "./ids.ts",
+      "import": "{ decisionId, hash, normalizeTitle, now, secret, testCode, uuid }"
+    },
+    {
+      "caller": "packages/server/src/diagnostics.ts",
+      "line": 6,
+      "module": "./db.ts",
+      "import": "{ type Db, all, get, run, tx }"
+    },
+    {
+      "caller": "packages/server/src/diagnostics.ts",
+      "line": 7,
+      "module": "./attachments.ts",
+      "import": "{ readLimited }"
+    },
+    {
+      "caller": "packages/server/src/diagnostics.ts",
+      "line": 8,
+      "module": "./errors.ts",
+      "import": "{ ApiError }"
+    },
+    {
+      "caller": "packages/server/src/errors.ts",
+      "line": 1,
+      "module": "./locales.ts",
+      "import": "type { Locale }"
+    },
+    {
+      "caller": "packages/server/src/errors.ts",
+      "line": 2,
+      "module": "./error-messages-east-asian.ts",
+      "import": "{ errorMessagesKo, errorMessagesHans, errorMessagesHant }"
+    },
+    {
+      "caller": "packages/server/src/errors.ts",
+      "line": 3,
+      "module": "./error-messages-en.ts",
+      "import": "{ errorMessagesEn }"
+    },
+    {
+      "caller": "packages/server/src/events.ts",
+      "line": 2,
+      "module": "./db.ts",
+      "import": "{ type Db, all, run, afterCommit }"
+    },
+    {
+      "caller": "packages/server/src/events.ts",
+      "line": 3,
+      "module": "./ids.ts",
+      "import": "{ now }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 1,
+      "module": "./locales.ts",
+      "import": "{ LOCALES }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 2,
+      "module": "./locale.ts",
+      "import": "{ requestLocale }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 3,
+      "module": "./diagnostics.ts",
+      "import": "{ Diagnostics, diagnosticsAdmin, readDiagnostic }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 4,
+      "module": "./oidc.ts",
+      "import": "{ type KeySource, type Provider, verifyIdToken }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 5,
+      "module": "./onboarding.ts",
+      "import": "{ onboarding }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 9,
+      "module": "./accounts.ts",
+      "import": "type { Accounts }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 10,
+      "module": "./appstore.ts",
+      "import": "type { AppStore }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 11,
+      "module": "./attachments.ts",
+      "import": "{ type Attachment, type Attachments, MAX_FILE_BYTES, contentDisposition, mediaType, readLimited }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 12,
+      "module": "./db.ts",
+      "import": "{ type Db, get, run, tx }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 13,
+      "module": "./errors.ts",
+      "import": "{ ApiError }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 14,
+      "module": "./events.ts",
+      "import": "type { EventHub, UserEvent }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 15,
+      "module": "./decisions.ts",
+      "import": "{ Decisions, amendSchema, answerSchema, createSchema, routeSchema }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 16,
+      "module": "./ids.ts",
+      "import": "{ now }"
+    },
+    {
+      "caller": "packages/server/src/http.ts",
+      "line": 17,
+      "module": "./remote-mcp.ts",
+      "import": "{ type RemoteMcpOptions, remoteMcpHandler }"
+    },
+    {
+      "caller": "packages/server/src/locale.ts",
+      "line": 1,
+      "module": "./locales.ts",
+      "import": "{ supportedLocale, type Locale }"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 2,
+      "module": "./diagnostics.ts",
+      "import": "{ Diagnostics }"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 3,
+      "module": "./push.ts",
+      "import": "{ Apns, Notifier }"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 9,
+      "module": "./accounts.ts",
+      "import": "{ Accounts, type BillingMode }"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 10,
+      "module": "./attachments.ts",
+      "import": "{ Attachments }"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 11,
+      "module": "./db.ts",
+      "import": "{ openDb }"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 12,
+      "module": "./decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 13,
+      "module": "./events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 14,
+      "module": "./appstore.ts",
+      "import": "{ AppStore, appleRootCertificates }"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 15,
+      "module": "./http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "packages/server/src/main.ts",
+      "line": 16,
+      "module": "./callbridge.ts",
+      "import": "{ CallBridgeDeliverer, callBridgeSender, readHeaderFile }"
+    },
+    {
+      "caller": "packages/server/src/oidc.ts",
+      "line": 4,
+      "module": "./errors.ts",
+      "import": "{ ApiError }"
+    },
+    {
+      "caller": "packages/server/src/onboarding.ts",
+      "line": 1,
+      "module": "./locales.ts",
+      "import": "type { Locale }"
+    },
+    {
+      "caller": "packages/server/src/push.ts",
+      "line": 1,
+      "module": "./locales.ts",
+      "import": "type { Locale }"
+    },
+    {
+      "caller": "packages/server/src/push.ts",
+      "line": 6,
+      "module": "./db.ts",
+      "import": "{ type Db, all, get, run }"
+    },
+    {
+      "caller": "packages/server/src/push.ts",
+      "line": 7,
+      "module": "./decisions.ts",
+      "import": "{ displayLabel }"
+    },
+    {
+      "caller": "packages/server/src/push.ts",
+      "line": 8,
+      "module": "./events.ts",
+      "import": "type { EventHub, UserEvent }"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 9,
+      "module": "./accounts.ts",
+      "import": "type { Accounts }"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 10,
+      "module": "./attachments.ts",
+      "import": "{ type Attachments, MAX_FILE_BYTES, formatBytes }"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 11,
+      "module": "./decisions.ts",
+      "import": "{ type Connection, Decisions, SERVER_HARNESS, SPEAK_BY_TITLE, amendSchema, createSchema }"
+    },
+    {
+      "caller": "packages/server/src/remote-mcp.ts",
+      "line": 12,
+      "module": "./errors.ts",
+      "import": "{ ApiError }"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 7,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 8,
+      "module": "../src/attachments.ts",
+      "import": "{ Attachments }"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 9,
+      "module": "../src/db.ts",
+      "import": "{ all, get, openDb, run }"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 10,
+      "module": "../src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 11,
+      "module": "../src/diagnostics.ts",
+      "import": "{ Diagnostics, diagnosticFingerprint, diagnosticSchema }"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 12,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/account-deletion.test.ts",
+      "line": 13,
+      "module": "../src/http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "packages/server/test/api.test.ts",
+      "line": 3,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/api.test.ts",
+      "line": 4,
+      "module": "../src/db.ts",
+      "import": "{ openDb, run }"
+    },
+    {
+      "caller": "packages/server/test/api.test.ts",
+      "line": 5,
+      "module": "../src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/test/api.test.ts",
+      "line": 6,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/api.test.ts",
+      "line": 7,
+      "module": "../src/http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 8,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 9,
+      "module": "../src/appstore.ts",
+      "import": "{ AppStore }"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 10,
+      "module": "../src/db.ts",
+      "import": "{ openDb }"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 11,
+      "module": "../src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 12,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/appstore.test.ts",
+      "line": 13,
+      "module": "../src/http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 8,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 9,
+      "module": "../src/attachments.ts",
+      "import": "{ Attachments, MAX_FILE_BYTES, contentDisposition }"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 10,
+      "module": "../src/db.ts",
+      "import": "{ openDb }"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 11,
+      "module": "../src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 12,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/attachments.test.ts",
+      "line": 13,
+      "module": "../src/http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "packages/server/test/callbridge-retry.test.ts",
+      "line": 4,
+      "module": "../src/callbridge.ts",
+      "import": "{ callBridgeSender }"
+    },
+    {
+      "caller": "packages/server/test/connector-auth.test.ts",
+      "line": 3,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/connector-auth.test.ts",
+      "line": 4,
+      "module": "../src/db.ts",
+      "import": "{ openDb }"
+    },
+    {
+      "caller": "packages/server/test/connector-auth.test.ts",
+      "line": 5,
+      "module": "../src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/test/connector-auth.test.ts",
+      "line": 6,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/connector-auth.test.ts",
+      "line": 7,
+      "module": "../src/http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "packages/server/test/db.test.ts",
+      "line": 7,
+      "module": "../src/db.ts",
+      "import": "{ all, openDb }"
+    },
+    {
+      "caller": "packages/server/test/db.test.ts",
+      "line": 8,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/db.test.ts",
+      "line": 9,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/decision-summary.test.ts",
+      "line": 3,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/decision-summary.test.ts",
+      "line": 4,
+      "module": "../src/db.ts",
+      "import": "{ openDb }"
+    },
+    {
+      "caller": "packages/server/test/decision-summary.test.ts",
+      "line": 5,
+      "module": "../src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/test/decision-summary.test.ts",
+      "line": 6,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/decision-summary.test.ts",
+      "line": 7,
+      "module": "../src/http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 7,
+      "module": "../src/db.ts",
+      "import": "{ openDb, all, get, run }"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 8,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 9,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 10,
+      "module": "../src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 11,
+      "module": "../src/http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "packages/server/test/diagnostics.test.ts",
+      "line": 12,
+      "module": "../src/diagnostics.ts",
+      "import": "{ Diagnostics, diagnosticFingerprint, diagnosticSchema }"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 6,
+      "module": "../src/db.ts",
+      "import": "{ openDb, all, get }"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 7,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 8,
+      "module": "../src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 9,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 10,
+      "module": "../src/push.ts",
+      "import": "{ Notifier }"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 11,
+      "module": "../src/onboarding.ts",
+      "import": "{ onboarding }"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 12,
+      "module": "../src/errors.ts",
+      "import": "{ ApiError }"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 13,
+      "module": "../src/http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 14,
+      "module": "../src/error-messages-en.ts",
+      "import": "{ errorMessagesEn }"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 15,
+      "module": "../src/error-messages-east-asian.ts",
+      "import": "{ errorMessagesKo, errorMessagesHans, errorMessagesHant }"
+    },
+    {
+      "caller": "packages/server/test/locale.test.ts",
+      "line": 16,
+      "module": "../src/locale.ts",
+      "import": "{ requestLocale }"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 4,
+      "module": "../src/db.ts",
+      "import": "{ openDb, all }"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 5,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 6,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 7,
+      "module": "../src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/test/push.test.ts",
+      "line": 8,
+      "module": "../src/push.ts",
+      "import": "{ Apns, Notifier }"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 5,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 6,
+      "module": "../src/callbridge.ts",
+      "import": "{ CallBridgeDeliverer, type SendResult }"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 7,
+      "module": "../src/db.ts",
+      "import": "{ openDb }"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 8,
+      "module": "../src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 9,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/remote-mcp.test.ts",
+      "line": 10,
+      "module": "../src/http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 6,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 7,
+      "module": "../src/attachments.ts",
+      "import": "{ Attachments,MAX_FILE_BYTES }"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 8,
+      "module": "../src/db.ts",
+      "import": "{ openDb,tx }"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 9,
+      "module": "../src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 10,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/request-images.test.ts",
+      "line": 11,
+      "module": "../src/http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "packages/server/test/shutdown.test.ts",
+      "line": 3,
+      "module": "../src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "packages/server/test/shutdown.test.ts",
+      "line": 4,
+      "module": "../src/db.ts",
+      "import": "{ openDb }"
+    },
+    {
+      "caller": "packages/server/test/shutdown.test.ts",
+      "line": 5,
+      "module": "../src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "packages/server/test/shutdown.test.ts",
+      "line": 6,
+      "module": "../src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "packages/server/test/shutdown.test.ts",
+      "line": 7,
+      "module": "../src/http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "packages/server/test/start-with-secrets.test.ts",
+      "line": 10,
+      "module": "../src/callbridge.ts",
+      "import": "{ readHeaderFile }"
+    },
+    {
+      "caller": "packages/server/test/start-with-secrets.test.ts",
+      "line": 11,
+      "module": "../src/push.ts",
+      "import": "{ Apns }"
+    },
+    {
+      "caller": "packages/web/src/api.ts",
+      "line": 1,
+      "module": "./i18n.ts",
+      "import": "{ t, locale }"
+    },
+    {
+      "caller": "packages/web/src/api.ts",
+      "line": 2,
+      "module": "./types",
+      "import": "type { ApiErrorBody, Attachment }"
+    },
+    {
+      "caller": "packages/web/src/format.ts",
+      "line": 1,
+      "module": "./i18n.ts",
+      "import": "{ labels, locale, relative, t }"
+    },
+    {
+      "caller": "packages/web/src/i18n.ts",
+      "line": 1,
+      "module": "../../server/src/errors.ts",
+      "import": "{ fixedErrorTranslation }"
+    },
+    {
+      "caller": "packages/web/src/i18n.ts",
+      "line": 3,
+      "module": "./messages.ts",
+      "import": "{ en, type MessageKey }"
+    },
+    {
+      "caller": "packages/web/src/i18n.ts",
+      "line": 4,
+      "module": "./messages-east-asian.ts",
+      "import": "{ ko, zhHans, zhHant }"
+    },
+    {
+      "caller": "packages/web/src/i18n.ts",
+      "line": 5,
+      "module": "./locales.ts",
+      "import": "{ LOCALES, supportedLocale, type Locale }"
+    },
+    {
+      "caller": "packages/web/src/idlogin.tsx",
+      "line": 1,
+      "module": "./i18n.ts",
+      "import": "{ systemMessage, t, locale, useLocale }"
+    },
+    {
+      "caller": "packages/web/src/idlogin.tsx",
+      "line": 5,
+      "module": "./api",
+      "import": "{ api, ApiError }"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 1,
+      "module": "./i18n.ts",
+      "import": "{ t, useLocale, languagePreference, setLanguage, type LanguagePreference }"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 4,
+      "module": "./api",
+      "import": "{ getSession, setSession, setUnauthorizedHandler, subscribeEvents }"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 5,
+      "module": "./router",
+      "import": "{ linkProps, navigate, useLocation }"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 6,
+      "module": "./store",
+      "import": "{ bump, loadOpen, useResource }"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 7,
+      "module": "./pages/Connections",
+      "import": "{ Connections, Pair }"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 8,
+      "module": "./pages/DecisionView",
+      "import": "{ DecisionView }"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 9,
+      "module": "./pages/History",
+      "import": "{ History }"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 10,
+      "module": "./pages/Inbox",
+      "import": "{ Inbox }"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 11,
+      "module": "./pages/Settings",
+      "import": "{ Settings }"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 12,
+      "module": "./idlogin",
+      "import": "{ IdLogin, loginConfig }"
+    },
+    {
+      "caller": "packages/web/src/main.tsx",
+      "line": 13,
+      "module": "./style.css",
+      "import": null
+    },
+    {
+      "caller": "packages/web/src/messages-east-asian.ts",
+      "line": 1,
+      "module": "./messages.ts",
+      "import": "type { MessageKey }"
+    },
+    {
+      "caller": "packages/web/src/pages/Attachments.tsx",
+      "line": 1,
+      "module": "../i18n.ts",
+      "import": "{ systemMessage, t, type UiMessage }"
+    },
+    {
+      "caller": "packages/web/src/pages/Attachments.tsx",
+      "line": 3,
+      "module": "../api",
+      "import": "{ api, fetchAttachment, uploadAttachment }"
+    },
+    {
+      "caller": "packages/web/src/pages/Attachments.tsx",
+      "line": 4,
+      "module": "../types",
+      "import": "type { Attachment }"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 1,
+      "module": "../i18n.ts",
+      "import": "{ systemMessage, t }"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 3,
+      "module": "../api",
+      "import": "{ api }"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 4,
+      "module": "../router",
+      "import": "{ navigate }"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 5,
+      "module": "../store",
+      "import": "{ bump, loadMe, useResource }"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 6,
+      "module": "../format",
+      "import": "{ ago, CHECK_LABEL, clientLabel, dateTime, FAILED_STEP }"
+    },
+    {
+      "caller": "packages/web/src/pages/Connections.tsx",
+      "line": 7,
+      "module": "../types",
+      "import": "type { Check, Connection }"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 1,
+      "module": "../i18n.ts",
+      "import": "{ systemMessage, t }"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 3,
+      "module": "../api",
+      "import": "{ api, ApiError }"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 4,
+      "module": "../router",
+      "import": "{ navigate }"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 5,
+      "module": "../store",
+      "import": "{ bump, useBump }"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 6,
+      "module": "../format",
+      "import": "{ ago, dateTime, deadlineText, DELIVERY_LABEL, FIELD_LABEL, URGENCY_LABEL }"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 7,
+      "module": "../types",
+      "import": "type { Decision }"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 8,
+      "module": "./Source",
+      "import": "{ Source }"
+    },
+    {
+      "caller": "packages/web/src/pages/DecisionView.tsx",
+      "line": 9,
+      "module": "./Attachments",
+      "import": "{ ACCEPT, RequestImages, AttachmentList, MAX_COUNT, useDraftAttachments }"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 1,
+      "module": "../i18n.ts",
+      "import": "{ systemMessage, t }"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 3,
+      "module": "../api",
+      "import": "{ api }"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 4,
+      "module": "../router",
+      "import": "{ linkProps }"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 5,
+      "module": "../store",
+      "import": "{ bump, loadClosed, useResource }"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 6,
+      "module": "../format",
+      "import": "{ dateTime, DELIVERY_LABEL }"
+    },
+    {
+      "caller": "packages/web/src/pages/History.tsx",
+      "line": 7,
+      "module": "./Source",
+      "import": "{ Source }"
+    },
+    {
+      "caller": "packages/web/src/pages/Inbox.tsx",
+      "line": 1,
+      "module": "../i18n.ts",
+      "import": "{ systemMessage, t }"
+    },
+    {
+      "caller": "packages/web/src/pages/Inbox.tsx",
+      "line": 2,
+      "module": "../router",
+      "import": "{ linkProps }"
+    },
+    {
+      "caller": "packages/web/src/pages/Inbox.tsx",
+      "line": 3,
+      "module": "../store",
+      "import": "{ loadOpen, useResource }"
+    },
+    {
+      "caller": "packages/web/src/pages/Inbox.tsx",
+      "line": 4,
+      "module": "../format",
+      "import": "{ ago, deadlineText, URGENCY_LABEL }"
+    },
+    {
+      "caller": "packages/web/src/pages/Inbox.tsx",
+      "line": 5,
+      "module": "../types",
+      "import": "type { Decision }"
+    },
+    {
+      "caller": "packages/web/src/pages/Inbox.tsx",
+      "line": 6,
+      "module": "./Source",
+      "import": "{ Source }"
+    },
+    {
+      "caller": "packages/web/src/pages/Settings.tsx",
+      "line": 1,
+      "module": "../i18n.ts",
+      "import": "{ t, days }"
+    },
+    {
+      "caller": "packages/web/src/pages/Settings.tsx",
+      "line": 3,
+      "module": "../api",
+      "import": "{ api, setSession }"
+    },
+    {
+      "caller": "packages/web/src/pages/Settings.tsx",
+      "line": 4,
+      "module": "../router",
+      "import": "{ navigate }"
+    },
+    {
+      "caller": "packages/web/src/pages/Settings.tsx",
+      "line": 5,
+      "module": "../store",
+      "import": "{ bump, loadMe, useResource }"
+    },
+    {
+      "caller": "packages/web/src/pages/Settings.tsx",
+      "line": 6,
+      "module": "../format",
+      "import": "{ CHECK_LABEL, clientLabel }"
+    },
+    {
+      "caller": "packages/web/src/pages/Source.tsx",
+      "line": 1,
+      "module": "../format",
+      "import": "{ clientLabel }"
+    },
+    {
+      "caller": "packages/web/src/pages/Source.tsx",
+      "line": 2,
+      "module": "../types",
+      "import": "type { Decision }"
+    },
+    {
+      "caller": "packages/web/src/store.ts",
+      "line": 2,
+      "module": "./api",
+      "import": "{ api }"
+    },
+    {
+      "caller": "packages/web/src/store.ts",
+      "line": 3,
+      "module": "./types",
+      "import": "type { Decision, Me }"
+    },
+    {
+      "caller": "packages/web/test/i18n.test.ts",
+      "line": 3,
+      "module": "../src/i18n.ts",
+      "import": "{ resolveLocale, translate, setLanguage, locale, systemMessage }"
+    },
+    {
+      "caller": "packages/web/test/i18n.test.ts",
+      "line": 4,
+      "module": "../src/messages.ts",
+      "import": "{ en }"
+    },
+    {
+      "caller": "packages/web/test/i18n.test.ts",
+      "line": 5,
+      "module": "../src/messages-east-asian.ts",
+      "import": "{ ko, zhHans, zhHant }"
+    },
+    {
+      "caller": "packages/web/test/i18n.test.ts",
+      "line": 6,
+      "module": "../src/format.ts",
+      "import": "{ ago, URGENCY_LABEL, deadlineText }"
+    },
+    {
+      "caller": "tools/e2e/codex-consumer-migration.mjs",
+      "line": 6,
+      "module": "../../packages/connector/src/profile.ts",
+      "import": "{ PROFILE }"
+    },
+    {
+      "caller": "tools/e2e/codex-consumer-migration.mjs",
+      "line": 7,
+      "module": "../../packages/connector/src/harness.ts",
+      "import": "{ register }"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 19,
+      "module": "../../packages/server/src/accounts.ts",
+      "import": "{ Accounts }"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 20,
+      "module": "../../packages/server/src/db.ts",
+      "import": "{ openDb }"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 21,
+      "module": "../../packages/server/src/decisions.ts",
+      "import": "{ Decisions }"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 22,
+      "module": "../../packages/server/src/events.ts",
+      "import": "{ EventHub }"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 23,
+      "module": "../../packages/server/src/http.ts",
+      "import": "{ createApp }"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 24,
+      "module": "../../packages/connector/src/profile.ts",
+      "import": "{ PROFILE }"
+    },
+    {
+      "caller": "tools/e2e/parent-e2e.mjs",
+      "line": 25,
+      "module": "./claude-binary.mjs",
+      "import": "{ claudeBinaryForShell }"
+    },
+    {
+      "caller": "tools/e2e/session-routing-production.mjs",
+      "line": 7,
+      "module": "../../packages/connector/src/profile.ts",
+      "import": "{ PROFILE }"
+    }
+  ],
+  "tests": [
+    {
+      "file": "packages/connector/test/aiterm-provider.test.ts",
+      "line": 12,
+      "label": "\"公開ViaAiterm wrapperの実processへ旧channelを渡し、受付不明を再送しない\""
+    },
+    {
+      "file": "packages/connector/test/api.test.ts",
+      "line": 13,
+      "label": "\"前段のHTMLのエラーページは、JSONの例外ではなく「届かなかった」誤りになる\""
+    },
+    {
+      "file": "packages/connector/test/api.test.ts",
+      "line": 31,
+      "label": "\"読み取り（GET）のJSONでない応答は、やり直しを案内する（一覧の確認は求めない）\""
+    },
+    {
+      "file": "packages/connector/test/api.test.ts",
+      "line": 45,
+      "label": "\"サーバーのJSONの誤りは、今までどおり code と message を返す\""
+    },
+    {
+      "file": "packages/connector/test/attachments.test.ts",
+      "line": 14,
+      "label": "\"添付: 端末へ保存して場所を返し、中身が合わないものは保存しない\""
+    },
+    {
+      "file": "packages/connector/test/attachments.test.ts",
+      "line": 51,
+      "label": "\"添付: ファイル名はどのOSでも使える形にする\""
+    },
+    {
+      "file": "packages/connector/test/channel-delivery.test.ts",
+      "line": 12,
+      "label": "\"旧Codex channel.v1を改変せず共通providerへ渡し、unknownを二重配送しない\""
+    },
+    {
+      "file": "packages/connector/test/channel-delivery.test.ts",
+      "line": 38,
+      "label": "\"Codex以外のchannelは既存配送を維持する\""
+    },
+    {
+      "file": "packages/connector/test/channel-delivery.test.ts",
+      "line": 50,
+      "label": "\"同じchannelへ同じ配送IDで送り直しても本文は1通で、前の本文の行方を返す\""
+    },
+    {
+      "file": "packages/connector/test/claude-channel.test.ts",
+      "line": 28,
+      "label": "\"同じ会話でも、Claudeのprocessが替わったら保存済みのchannelを使い回さない\""
+    },
+    {
+      "file": "packages/connector/test/claude-channel.test.ts",
+      "line": 45,
+      "label": "\"Claudeが起動し直した後、古いprocessに結んだchannelの答えが、新しい申請を待たずに今のprocessへ届く\""
+    },
+    {
+      "file": "packages/connector/test/claude-channel.test.ts",
+      "line": 67,
+      "label": "\"起動し直した後の新しい申請は今のprocessのchannelを開き、古いchannelの答えと届いた順に出る\""
+    },
+    {
+      "file": "packages/connector/test/claude-hook.test.ts",
+      "line": 18,
+      "label": "\"Claude registration migrates legacy hooks and doctor detects missing events\""
+    },
+    {
+      "file": "packages/connector/test/claude-hook.test.ts",
+      "line": 44,
+      "label": "\"Grok Stop executes the connector hook through its shell command with exit 0\""
+    },
+    {
+      "file": "packages/connector/test/claude-hook.test.ts",
+      "line": 57,
+      "label": "\"Claude Stop shell hook waits for a channel answer and returns asyncRewake exit 2\""
+    },
+    {
+      "file": "packages/connector/test/codex-acceptance.test.ts",
+      "line": 13,
+      "label": "\"Codex申請の確認・受付・再開はhookと親アプリ再起動を条件にしない\""
+    },
+    {
+      "file": "packages/connector/test/cursor-binding.test.ts",
+      "line": 12,
+      "label": "`Cursor: ${order}でもhookは消費せず、背景受信が回答を一度だけ出す`"
+    },
+    {
+      "file": "packages/connector/test/cursor-binding.test.ts",
+      "line": 54,
+      "label": "\"Cursor: BOM・afterMCPExecutionを受け、別の会話へbindを上書きしない\""
+    },
+    {
+      "file": "packages/connector/test/daemon-launch.test.ts",
+      "line": 8,
+      "label": "\"Windows常駐adapterは隔離HOMEとCLI探索だけを保持し秘密環境を転送しない\""
+    },
+    {
+      "file": "packages/connector/test/daemon-launch.test.ts",
+      "line": 21,
+      "label": "\"起動先のnodeが無い時、呼び出した側のprocessを落とさず、名前を付けて記録する\""
+    },
+    {
+      "file": "packages/connector/test/daemon.test.ts",
+      "line": 7,
+      "label": "\"デーモンの入れ替え: 古い版は新しい版へ替えるが、新しい版を古い版へ戻さない\""
+    },
+    {
+      "file": "packages/connector/test/daemon.test.ts",
+      "line": 20,
+      "label": "\"配送デーモンを起こすnode: 更新で消える場所ではなく、今ある場所を引く\""
+    },
+    {
+      "file": "packages/connector/test/instructions.test.ts",
+      "line": 8,
+      "label": "\"全体の指示へ一節を足し、二度書いても一つ、外すと元に戻る\""
+    },
+    {
+      "file": "packages/connector/test/instructions.test.ts",
+      "line": 22,
+      "label": "\"ファイルが無ければ作る\""
+    },
+    {
+      "file": "packages/connector/test/instructions.test.ts",
+      "line": 30,
+      "label": "\"symlinkの先（dotagentsの生成物など）には書かず、前の版が書いた区画は外せる\""
+    },
+    {
+      "file": "packages/connector/test/instructions.test.ts",
+      "line": 45,
+      "label": "\"管理元が自分の言葉で書いた同じ趣旨の文も一節とみなし、外す時は触れない\""
+    },
+    {
+      "file": "packages/connector/test/instructions.test.ts",
+      "line": 54,
+      "label": "\"Claude Code の @取り込みを1段たどって、管理元の文を見つける\""
+    },
+    {
+      "file": "packages/connector/test/instructions.test.ts",
+      "line": 63,
+      "label": "\"規範の置き場（rules）にある同じ趣旨の文を見つける\""
+    },
+    {
+      "file": "packages/connector/test/request-images.test.ts",
+      "line": 8,
+      "label": "'image_paths: 全件ローカル検証後upload、basename/MIME/原本を保持しpath非共有'"
+    },
+    {
+      "file": "packages/connector/test/session-routing.test.ts",
+      "line": 20,
+      "label": "`実デーモン: 旧会話のqueuedを${scenario}後に二重配送しない`"
+    },
+    {
+      "file": "packages/server/test/account-deletion.test.ts",
+      "line": 36,
+      "label": "\"DELETE /me removes owned auxiliary data and rejects late writes without changing another account\""
+    },
+    {
+      "file": "packages/server/test/account-deletion.test.ts",
+      "line": 67,
+      "label": "`DELETE /me removes diagnostic contributions and personal notes, preserves other sources (raw pruned=${pruned})`"
+    },
+    {
+      "file": "packages/server/test/account-deletion.test.ts",
+      "line": 92,
+      "label": "\"DELETE /me file removal failure rolls back account deletion and permits a retry\""
+    },
+    {
+      "file": "packages/server/test/account-deletion.test.ts",
+      "line": 111,
+      "label": "\"schema6 migration removes orphan replies/payloads and preserves living diagnostic groups on reopen\""
+    },
+    {
+      "file": "packages/server/test/account-deletion.test.ts",
+      "line": 138,
+      "label": "\"account-deletion migration preserves the SSE cursor even when the highest event was already removed\""
+    },
+    {
+      "file": "packages/server/test/account-deletion.test.ts",
+      "line": 154,
+      "label": "\"another user's active aggregate does not extend an inactive source's 120-day retention\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 53,
+      "label": "\"同じIdempotency-Keyの同時回答は同じ成功応答を返し、保存は1回に留める\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 72,
+      "label": "\"一覧は時差と小数秒を含む期限の実時刻順にし、急ぎ度・保留・期限なし・ページ送りを保つ\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 114,
+      "label": "\"時差付き期限の修正は一覧へ反映し、既決の一覧は更新日時の新しい順を保つ\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 134,
+      "label": "\"申請・重複検知・修正・回答・配送\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 181,
+      "label": "\"申請はまず一覧を返して確かめさせ、札を付けて出し直した時だけ受け付ける\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 213,
+      "label": "\"他の接続の申請は見えない\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 222,
+      "label": "\"セットアップ確認が済むまで課金させない\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 247,
+      "label": "\"既決の削除は未決を残す\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 259,
+      "label": "\"接続トークンを発行・一覧・失効でき、登録手順と知らないAPIはJSONで返る\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 283,
+      "label": "\"通知の端末を登録でき、同じtokenは同じidになり、解除できる\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 294,
+      "label": "\"Sign in with Apple: 確かめたtokenで入り、同じApple IDは同じアカウント、ログイン済みなら結ぶ\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 345,
+      "label": "\"ブラウザで始めるAppleのログイン: callbackで確かめ、code_verifierと合う時だけ一度きりのコードを使える\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 397,
+      "label": "\"確認を求める文に札と一覧が入る（0.1.6までのコネクタは文だけをAIに見せる）\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 406,
+      "label": "\"会話切替: amendは配送先も更新し、古い版の競合では更新しない\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 420,
+      "label": "\"再開: 対象の申請だけ移管し、回答済みはその場で取得、他の接続と取り下げは拒否\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 438,
+      "label": "\"申請者と作業名: アプリには「誰から / 何の仕事」の一行と、分けた項目の両方を返す\""
+    },
+    {
+      "file": "packages/server/test/api.test.ts",
+      "line": 472,
+      "label": "\"答えを届ける文は、利用者へ件名で伝えるようAIへ添える\""
+    },
+    {
+      "file": "packages/server/test/appstore.test.ts",
+      "line": 65,
+      "label": "\"App Store: Sandboxの購入は確認前でも受け付け、署名を確かめて契約中にする\""
+    },
+    {
+      "file": "packages/server/test/appstore.test.ts",
+      "line": 74,
+      "label": "\"App Store: 本番の購入はセットアップ確認の後だけ。署名の違う取引・他人の取引・知らない商品は断る\""
+    },
+    {
+      "file": "packages/server/test/appstore.test.ts",
+      "line": 92,
+      "label": "\"App Store: 通知で更新・返金を反映し、古い通知で期限を巻き戻さない。期限を過ぎれば切れる\""
+    },
+    {
+      "file": "packages/server/test/appstore.test.ts",
+      "line": 115,
+      "label": "\"App Store: Appleのルートにつながらない鎖で署名した取引は断る\""
+    },
+    {
+      "file": "packages/server/test/attachments.test.ts",
+      "line": 65,
+      "label": "\"添付: 画像と書類を上げ、答えと一緒に結び、AIが取れる\""
+    },
+    {
+      "file": "packages/server/test/attachments.test.ts",
+      "line": 146,
+      "label": "\"添付: 添付だけの答え、version違いでも下書きは残る、送り直しは二重にならない\""
+    },
+    {
+      "file": "packages/server/test/attachments.test.ts",
+      "line": 203,
+      "label": "\"添付: 形式・大きさ・数の上限と、取り下げ・アカウント削除での片付け\""
+    },
+    {
+      "file": "packages/server/test/attachments.test.ts",
+      "line": 244,
+      "label": "\"添付: 保存日数を過ぎた既決と、24時間結ばれない下書きは消える\""
+    },
+    {
+      "file": "packages/server/test/attachments.test.ts",
+      "line": 270,
+      "label": "\"添付: リモートMCPの get_attachment は画像を image、書類をファイルで返す\""
+    },
+    {
+      "file": "packages/server/test/attachments.test.ts",
+      "line": 304,
+      "label": "\"添付: Content-Disposition は ASCII の名前と UTF-8 の名前を両方持つ\""
+    },
+    {
+      "file": "packages/server/test/callbridge-retry.test.ts",
+      "line": 12,
+      "label": "`call_open: ${name}`"
+    },
+    {
+      "file": "packages/server/test/callbridge-retry.test.ts",
+      "line": 22,
+      "label": "\"call_send後のunknownや通信例外へ再試行保証を広げない\""
+    },
+    {
+      "file": "packages/server/test/connector-auth.test.ts",
+      "line": 17,
+      "label": "\"pairingを含む業務経路や未知の経路も接続トークンを必須とする\""
+    },
+    {
+      "file": "packages/server/test/connector-auth.test.ts",
+      "line": 48,
+      "label": "\"公開ペアリングは接続トークンなしで動き、受取りにはpoll secretが必要\""
+    },
+    {
+      "file": "packages/server/test/connector-auth.test.ts",
+      "line": 71,
+      "label": "\"正規接続トークンは業務経路へ進み、存在しない申請は404を返す\""
+    },
+    {
+      "file": "packages/server/test/db.test.ts",
+      "line": 11,
+      "label": "\"スキーマに同じ表を二度書かない（古い定義が残ると、既にあるDBでは新しい定義が飛ばされる）\""
+    },
+    {
+      "file": "packages/server/test/db.test.ts",
+      "line": 17,
+      "label": "\"最初の形のdevices表を持つDBを開くと、行を保ったまま新しい形へ移り、登録できる\""
+    },
+    {
+      "file": "packages/server/test/db.test.ts",
+      "line": 35,
+      "label": "\"申請者の列が無いDBを開くと、申請を保ったまま列が足される\""
+    },
+    {
+      "file": "packages/server/test/decision-summary.test.ts",
+      "line": 9,
+      "label": "\"接続内の一覧・確認・重複候補は要約だけ、本文は明示取得で返す\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 22,
+      "label": "\"answer timeout request hash is optional, preserves receipts/grouping and can correlate same-user saved keys\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 56,
+      "label": "\"admin report context preserves legacy acceptance, raw data, grouping and lifecycle\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 78,
+      "label": "\"admin report describes observed failures and state without interpreting private codes\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 99,
+      "label": "\"authenticated diagnostics: exact receipt, replay, conflict, bounded typed payload\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 109,
+      "label": "\"Apple authorization domain and code survive HTTP acceptance without rewriting legacy diagnostics\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 146,
+      "label": "\"UserNotifications domain stays distinct from legacy other without inferring impact\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 171,
+      "label": "\"LAN socket and host required: reject proxy paths, spoofing, wrong/missing bearer\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 176,
+      "label": "\"BugHub aggregation, resolve idempotency, duplicate stays resolved, new occurrence reopens\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 186,
+      "label": "\"fingerprint excludes versions/index, includes device and crash exception/frame; bounded raw logs preserve receipts\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 195,
+      "label": "\"persistent rate limit counts new events, retry does not consume allowance\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 202,
+      "label": "\"receipts, severity and aggregate survive database reopen\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 215,
+      "label": "\"crash frames accept absent sample_count without discarding UUID/offset\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 223,
+      "label": "\"optional trigger preserves grouping, exact receipts and admin/raw observation\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 248,
+      "label": "\"investigation PATCH changes only independent note; replay/new diagnostics and state changes retain it\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 269,
+      "label": "\"investigation uses existing LAN admin authority and bounded independent input\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 281,
+      "label": "\"v3 database migration preserves diagnosis and persists independent investigation across reopen\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 295,
+      "label": "\"assessed recovered communication stays raw-only; duplicate receipts and legacy groups remain intact\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 308,
+      "label": "\"handling alone and unknown recovery do not hide impact; source severity and evidence are projected\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 319,
+      "label": "\"normal cancellation requires explicit source assessment and known cancellation\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 325,
+      "label": "\"recovered retry of an unexpected cancellation stays a reference; unassessed or unrecovered ones still register\""
+    },
+    {
+      "file": "packages/server/test/diagnostics.test.ts",
+      "line": 342,
+      "label": "\"unknown recovery remains registered; bounded administrator notes survive assessment projection and replay\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 18,
+      "label": "\"language negotiation honors quality, region and exclusions; legacy defaults to Japanese\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 30,
+      "label": "\"HTTP error codes and structured fields stay stable across languages; device locale validates\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 44,
+      "label": "\"five device locales receive localized fixed push text while request content and silent updates stay intact\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 74,
+      "label": "\"schema 7 device migration preserves existing fields and defaults only the new locale\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 87,
+      "label": "\"onboarding translates fixed instructions without changing commands or protocol client IDs\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 100,
+      "label": "\"Korean and Chinese HTTP errors and instructions keep protocol data unchanged\""
+    },
+    {
+      "file": "packages/server/test/locale.test.ts",
+      "line": 116,
+      "label": "\"schema 8 locale constraint upgrade preserves all old device values and allows new locales\""
+    },
+    {
+      "file": "packages/server/test/push.test.ts",
+      "line": 10,
+      "label": "\"申請が来たら件名で鳴らし、取り下げは音なし。無効なtokenの端末は消す\""
+    },
+    {
+      "file": "packages/server/test/push.test.ts",
+      "line": 59,
+      "label": "\"APNsの認証tokenはES256でチームとkidを持つ\""
+    },
+    {
+      "file": "packages/server/test/remote-mcp.test.ts",
+      "line": 48,
+      "label": "\"リモートMCP: Bearer無しは401、札の往復で申請し、get_decisionで答えを取る\""
+    },
+    {
+      "file": "packages/server/test/remote-mcp.test.ts",
+      "line": 116,
+      "label": "\"call-bridge の接続: 申請者のIDで受け、答えを通話で届ける。コネクタのデーモンには渡さない\""
+    },
+    {
+      "file": "packages/server/test/remote-mcp.test.ts",
+      "line": 170,
+      "label": "\"call-bridge: 送信の途中でサーバーが止まった配送は、起動し直した時に unknown にして送り直さない\""
+    },
+    {
+      "file": "packages/server/test/remote-mcp.test.ts",
+      "line": 190,
+      "label": "\"call-bridgeの一時切断は永続待機、再起動後も期日前再送せず回復時に一回配送\""
+    },
+    {
+      "file": "packages/server/test/remote-mcp.test.ts",
+      "line": 221,
+      "label": "\"call-bridge一時切断の再試行期限は回答時刻から10分、再起動でも延長しない\""
+    },
+    {
+      "file": "packages/server/test/request-images.test.ts",
+      "line": 25,
+      "label": "'申請画像: 原子的作成、他接続拒否、認証原本、回答添付分離'"
+    },
+    {
+      "file": "packages/server/test/request-images.test.ts",
+      "line": 38,
+      "label": "'申請画像: 置換/競合/既存再利用/取消/既決削除/期限/account削除'"
+    },
+    {
+      "file": "packages/server/test/request-images.test.ts",
+      "line": 55,
+      "label": "'申請画像: 形式/単体/合計/件数制限、rollbackで通知無し'"
+    },
+    {
+      "file": "packages/server/test/request-images.test.ts",
+      "line": 66,
+      "label": "'申請画像: remote MCP schemaとbase64 uploadから正規request/get'"
+    },
+    {
+      "file": "packages/server/test/shutdown.test.ts",
+      "line": 33,
+      "label": "\"停止の合図で、アプリ向けの更新の知らせを正しく閉じる\""
+    },
+    {
+      "file": "packages/server/test/shutdown.test.ts",
+      "line": 46,
+      "label": "\"停止の合図の後に来た接続も、待たせずに閉じる\""
+    },
+    {
+      "file": "packages/server/test/shutdown.test.ts",
+      "line": 55,
+      "label": "\"停止の合図が無ければ、流れは開いたまま\""
+    },
+    {
+      "file": "packages/server/test/start-with-secrets.test.ts",
+      "line": 31,
+      "label": "\"SECRETS_DIR を指定すると、鍵3個を 600 のファイルへ移し、サーバーの環境から値を外す\""
+    },
+    {
+      "file": "packages/server/test/start-with-secrets.test.ts",
+      "line": 53,
+      "label": "\"APNS_KEY は、改行を \\\\n と書いた1行でも受ける\""
+    },
+    {
+      "file": "packages/server/test/start-with-secrets.test.ts",
+      "line": 59,
+      "label": "\"空の鍵はファイルにしない。ファイルで渡した鍵の指定はそのまま通す\""
+    },
+    {
+      "file": "packages/server/test/start-with-secrets.test.ts",
+      "line": 67,
+      "label": "\"SECRETS_DIR が無ければ、環境をそのまま渡して起こす\""
+    },
+    {
+      "file": "packages/server/test/start-with-secrets.test.ts",
+      "line": 75,
+      "label": "\"書けない置き場ではサーバーを起こさず、値を出さずに止まる\""
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 23,
+      "label": "\"login auto-detects English; selection persists, HTML lang and OS changes follow\""
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 34,
+      "label": "\"all main pages use English while content and reply drafts survive language switching\""
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 51,
+      "label": "\"English destructive confirmation rejects a wrong confirmation word before any delete\""
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 59,
+      "label": "\"unsupported browser language falls back to Japanese and storage failure allows English choice\""
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 67,
+      "label": "\"English navigation and account controls fit a narrow phone screen\""
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 81,
+      "label": "`${language.code}: auto-detection, UI, literal content, drafts, persistence and confirmation`"
+    },
+    {
+      "file": "packages/web/test/browser/localization.spec.ts",
+      "line": 102,
+      "label": "\"visible API errors follow a language change without a retry or loss of request content\""
+    },
+    {
+      "file": "packages/web/test/browser/swipe.spec.ts",
+      "line": 18,
+      "label": "`completed decision returns to inbox with swipe ${dx}`"
+    },
+    {
+      "file": "packages/web/test/browser/swipe.spec.ts",
+      "line": 21,
+      "label": "\"scrolls, short drags and controls do not leave the detail\""
+    },
+    {
+      "file": "packages/web/test/browser/swipe.spec.ts",
+      "line": 24,
+      "label": "`${status} closes with an unsent reply without submitting it`"
+    },
+    {
+      "file": "packages/web/test/browser/swipe.spec.ts",
+      "line": 31,
+      "label": "`pending detail slides in swipe direction ${dx}`"
+    },
+    {
+      "file": "packages/web/test/browser/swipe.spec.ts",
+      "line": 46,
+      "label": "\"reduced motion skips the slide; leaving for another page cancels it\""
+    },
+    {
+      "file": "packages/web/test/browser/swipe.spec.ts",
+      "line": 55,
+      "label": "\"short horizontal drag follows the finger then returns; touch cancel resets\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 8,
+      "label": "\"language priority, regional variants and unsupported fallback\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 15,
+      "label": "\"all catalogs have identical keys and interpolation tokens\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 25,
+      "label": "\"user names with replacement syntax, markup and Japanese remain literal\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 30,
+      "label": "\"labels and plural time formatting follow language changes with unavailable storage\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 39,
+      "label": "\"visible Japanese literals outside the catalog must use a translation key\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 60,
+      "label": "\"Korean and Chinese scripts/regions resolve in preference order and retain literal user text\""
+    },
+    {
+      "file": "packages/web/test/i18n.test.ts",
+      "line": 73,
+      "label": "\"stored product errors and structured upload errors render in the current language\""
+    },
+    {
+      "file": "tools/e2e/parent-preflight.test.mjs",
+      "line": 27,
+      "label": "`${harness}: 設定を保持し隔離した接続で起動依頼まで進む`"
+    }
+  ]
+}

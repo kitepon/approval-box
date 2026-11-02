@@ -1,0 +1,24 @@
+flowchart TD
+ SAVED["回答commit: delivery waiting + delivery_id + route"] --> LOCAL{"route.harness"}
+ LOCAL -->|callbridge| CB["serverDeliveries → markSending"]
+ CB --> SEND["CallBridgeDeliverer → callBridgeSender"]
+ SEND -->|構造化: 通話未開設/未送信 directory_link_down| RETRY["deferServerDelivery: 30秒/回答後10分"]
+ RETRY --> CB
+ SEND -->|送信結果不明 / 再起動でsending| UNKNOWN["reportDelivery unknown: 自動再送しない"]
+ SEND -->|delivered| REPORT["reportDelivery → event updated"]
+ LOCAL -->|通常channel| FETCH["daemon sync: GET deliveries"]
+ FETCH --> PREP["saveAll添付 → journal sendingを先に永続化"]
+ PREP --> ADAPTER["sendChannelAnswer: 既存channel / Codex Aiterm"]
+ ADAPTER -->|submitted| SUCCESS["journal report delivered"]
+ ADAPTER -->|queued| QUEUE["journal queued: 2秒ごとstate照合"]
+ ADAPTER -->|unknown/failed| FAILURE["journal report unknown/failed"]
+ QUEUE -->|emitted| SUCCESS
+ QUEUE -->|unknown/withdrawn/closed| FAILURE
+ SUCCESS --> RPT["POST deliveries/:id: 報告だけ再試行可"]
+ FAILURE --> RPT
+ RPT -->|失敗| KEEP["journal report保持 / 本文再送しない"]
+ KEEP --> RPT
+ RPT -->|受付| CLEAR["journal削除"]
+ FETCH -->|resume/明示getでroute変更/待ち解消| WITHDRAW["未消費本文withdraw / 競合なら不明・再送しない"]
+ UNKNOWN --> GET["get_decision / resume: 保存済み答え取得"]
+ REPORT --> UI["SSE→画面再取得"]
