@@ -22,11 +22,18 @@ async function readToEnd(response: Response, timeoutMs = 2000) {
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let text = "";
-  const deadline = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("流れが閉じませんでした")), timeoutMs).unref());
-  for (;;) {
-    const chunk = await Promise.race([reader.read(), deadline]);
-    if (chunk.done) return text;
-    text += decoder.decode(chunk.value, { stream: true });
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("流れが閉じませんでした")), timeoutMs).unref(); });
+  try {
+    for (;;) {
+      const chunk = await Promise.race([reader.read(), deadline]);
+      if (chunk.done) return text;
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+  } finally {
+    clearTimeout(timer!);
+    await reader.cancel();
+    reader.releaseLock();
   }
 }
 
@@ -56,5 +63,4 @@ test("停止の合図が無ければ、流れは開いたまま", async () => {
   const ctx = setup();
   const response = await ctx.app.request("/v1/events", { headers: { authorization: `Bearer ${ctx.session}` } });
   await assert.rejects(readToEnd(response, 300), /流れが閉じませんでした/);
-  await response.body!.cancel().catch(() => {});
 });
