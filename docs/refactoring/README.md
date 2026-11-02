@@ -1,6 +1,6 @@
 # Approval Box 機能図と責任の対応
 
-基準main90066748。Sol Highの調査・実装と、Astra xhighの図・責務・コード照合を終えた候補。正規CIと成果確認の結果は最終検証記録へ追記する。本番未反映。構造整理と、SSE失敗時の後始末修理は別commit/工程であり、全差分を振る舞い不変とは扱わない。
+基準main90066748。Sol Highの調査・実装と、Astra xhighの図・責務・コード照合を終えた候補。正規CIの全5ジョブも成功し、[draft PR15](https://github.com/kitepon/approval-box/pull/15)で成果確認を進める。本番未反映。構造整理と、SSE失敗時の後始末修理は別commit/工程であり、全差分を振る舞い不変とは扱わない。
 
 読む順序は[最終候補の全体図](final/overview.svg) → 下記の機能詳細 → [責任・異常経路](final/flows.md) → [全コード・関数](final/code-index.md)。[全追跡ファイル](final/scope.md)と[運用・資産・未確認](final/scope-notes.md)も参照する。
 

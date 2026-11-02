@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "97dd816e8214cf925420a8039b2b2e9155c851da",
+  "sourceCommit": "f1e16f71a74ef684133dc333cfb995e01d563caa",
   "note": "Routes include middleware/mount/fallback; dynamic admin actions resolve/reopen and MCP handlers are described in flows.",
   "routes": [
     {

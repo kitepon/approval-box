@@ -32,7 +32,7 @@ Mermaid CLI12.0.0、既存Chromium1248、共通chromium/env.shのfonts/OS依存�
 
 ## 未確認・既知の制限
 
-macOS/Windowsの本候補CI/実機、全OS×4harnessの実AI操作、Docker image build/実image隔離試験、実Appleログイン/購入/APNs、native apps内部の新受入は未実施。詳細と12組の表は[scope-notes](scope-notes.md)。当席にdocker実行入口がなくlocal distで公開契約を確認した。候補完成後の正規PR/CI経路は利用可能だが、まだpush/PRを行っておらず、CI成功とは扱わない。
+macOS/Windowsの実機での製品受入、全OS×4harnessの実AI操作、実Appleログイン/購入/APNs、native apps内部の新受入は未実施。詳細と12組の表は[scope-notes](scope-notes.md)。当席にdocker実行入口がないため、local distの確認に加えて、draft PR15の正規CIでDocker checks/runtime imageと隔離smokeを確認した。
 
 既存の添付DB/FSの非原子的な停止窓、MCP親記録の読取失敗時fallback/open後保存失敗、配送unknownの本文無条件再送禁止は[flows](flows.md)に残す。新しい原子性や全障害からの回復を主張しない。翻訳品質全件/暗号アルゴリズムの独立監査は未実施。レヴィアタンへの報告と確認不足の修正、別2prompt予定の復帰は最終整合後に行う。
 
@@ -45,4 +45,15 @@ get_selfでgpt-6-astra/xhigh/fast=falseの適用を確認した別ターンで�
 
 図の誤りとして、logoutとaccount削除の後始末の混同、CallBridgeのfailedとunknownの省略、EventHubが書くevents rowの主体、admin GETと状態変更の区別、purgeExpiredの非一括取引を補正した。current/finalの両方に基準コードの事実を反映し、製品コードは変更していない。業務commitと冪等応答控えの保存の停止窓、FSの途中削除がDB rollbackで戻らない限界も明記した。
 
-全233 tracked fileのscope掲載を再照合し欠落0。119ソースhash、Markdownの全ローカルファイルリンク、19描画hashを再照合し成功した。最終8図・設計3図・現状の異なる4図をAstraでも目視し、残る4図は原本とPNGが最終と同一と確認した。診断図の長い矢印ラベルの重なりは短いGET/POSTへ直し再描画・目視した。照合原本はvalidation/a1-preservation.json。本文・図の補正だけなので既成功の製品単体試験は反復せず、未実施の3OS・実image検証を正規CIで進める。
+全233 tracked fileのscope掲載を再照合し欠落0。119ソースhash、Markdownの全ローカルファイルリンク、19描画hashを再照合し成功した。最終8図・設計3図・現状の異なる4図をAstraでも目視し、残る4図は原本とPNGが最終と同一と確認した。診断図の長い矢印ラベルの重なりは短いGET/POSTへ直し再描画・目視した。照合原本はvalidation/a1-preservation.json。本文・図の補正だけなので既成功の製品単体試験は反復せず、3OS・実image検証は下記の正規CIで補った。
+
+
+## 正規CI
+
+[draft PR15](https://github.com/kitepon/approval-box/pull/15)の[run41402647664](https://github.com/kitepon/approval-box/actions/runs/41402647664)は、head `f1e16f71a74ef684133dc333cfb995e01d563caa`、2026-11-02 06:52:11〜06:53:37Zで全5ジョブsuccess。原本はvalidation/ci-41402647664.jsonと.logに保存した。以後の変更は文書・索引だけで、製品/試験/構築のコードは同一である。
+
+- Ubuntu/macOS/Windowsの各job: 全build/typecheck、locale14、4harness preflight4、account削除/移行7、診断21、API/connector認証22が成功。各OSの4harnessは実AIを起動しない。
+- browser: Playwright18件成功。
+- server-image: 改変Node archive/署名拒否、固定Node24.22.1/npm11.21.1とCA条件、checks/runtimeのbuild、秘密・本番データなし/read-only/network-noneの起動・公開契約・SIGTERM成功。server試験は103件/pass103/fail0をログで照合した。既存Docker checksはforce-exitオプションを持つため、自然終了の根拠は通常npm testのd1-unit.logを使う。件数不足の旧ログとは分ける。
+
+mainへのmerge、tag、npm公開、本番配備・停止・再起動は行っていない。PRは成果確認用のdraftであり、レヴィアタンの確認後も本番反映は既存承認手順に従う。
