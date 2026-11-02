@@ -1,4 +1,4 @@
-import { supportedLocale, type Locale } from "./locales.ts";
+import { supportedLocale, type Locale } from "./shared/locales.ts";
 /** Old clients without a supported language keep Japanese responses. */
 export function requestLocale(header?: string): Locale {
   const choices = (header ?? "").split(",").map((part, index) => {

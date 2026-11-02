@@ -1,4 +1,4 @@
-import type { Locale } from "./locales.ts";
+import type { Locale } from "./shared/locales.ts";
 // アプリへのプッシュ通知（今はiPhone＝APNsだけ。Android＝FCMは後で足す）。形は api.md の「更新の知らせ」。
 // 申請が来た・直された時だけ鳴らし、取り下げ・回答・配送は音なしでバッジと一覧だけを更新する。
 import { connect, type ClientHttp2Session } from "node:http2";

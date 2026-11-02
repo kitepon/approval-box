@@ -1,9 +1,9 @@
-import { fixedErrorTranslation } from "../../server/src/errors.ts";
+import { fixedErrorTranslation } from "../../server/src/shared/error-translations.ts";
 import { useEffect, useState } from "preact/hooks";
 import { en, type MessageKey } from "./messages.ts";
 import { ko, zhHans, zhHant } from "./messages-east-asian.ts";
-import { LOCALES, supportedLocale, type Locale } from "./locales.ts";
-export type { Locale } from "./locales.ts";
+import { LOCALES, supportedLocale, type Locale } from "../../server/src/shared/locales.ts";
+export type { Locale } from "../../server/src/shared/locales.ts";
 
 
 export type LanguagePreference = Locale | "system";

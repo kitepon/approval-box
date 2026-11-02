@@ -1,0 +1,27 @@
+flowchart TD
+  CLIENT["Web / native / connector / remote AI"] --> ROOT["http.ts createApp: 登録順・onError"]
+  ROOT --> PUBLIC["http/public.ts: Apple・Google・callback・署名通知"]
+  ROOT --> USER["http/user.ts: session認証 → userId"]
+  ROOT --> PAIR["http/connector.ts: 公開pairing 2経路"]
+  PAIR -->|"未一致だけ"| CONN["同connector.ts: connection認証 → conn"]
+  ROOT --> ADMIN["diagnosticsAdmin: LAN + admin token"]
+  ROOT --> MCP["remoteMcpHandler: connection認証"]
+  ROOT --> STATIC["最後にstaticHandler"]
+  PUBLIC --> ACC["Accounts / OIDC / AppStore: 検証と保存"]
+  USER --> DEC["Decisions: 申請・回答・添付結合tx"]
+  USER --> ACC
+  USER --> ATT["Attachments: ファイルとメタデータ"]
+  CONN --> DEC
+  CONN --> ATT
+  USER --> S["http/streams.ts: user queue / connection pending"]
+  CONN --> S
+  S -->|"購読/履歴、通知は再取得の合図"| EV["EventHub"]
+  S -->|"正常終了・abort・shutdown・例外"| CLEAN["finally: unsubscribe / shutdown listener解除"]
+  USER --> H["http/common.ts: body / idempotent / fileResponse"]
+  CONN --> H
+  PUBLIC --> H
+  DEC --> DB[("schema9 + afterCommit")]
+  DB --> EV
+  H -->|"入力例外"| ERROR["root onError: locale / status / extra / headers"]
+  DEC -->|"domain例外"| ERROR
+  ERROR --> CLIENT

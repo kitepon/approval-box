@@ -1,0 +1,21 @@
+flowchart LR
+ NATIVE["native契約 api.md / diagnostics.md"] -->|session + strict JSON + event_id key| DIAG["readDiagnostic / Diagnostics.accept"]
+ DIAG -->|tx: canonical hash / receipt / rate / fingerprint| DDB[("raw diagnostics / receipts / groups / sources")]
+ DIAG -->|202 accepted / duplicate| NATIVE
+ DIAG -->|409内容不一致 / rate / validation| NATIVE
+ DDB -->|GET| ADMIN["diagnosticsAdmin: LAN peer+host / proxy拒否 / token<br/>読取・resolve/reopen"]
+ ADMIN -->|POST| DDB
+ USER["DELETE me"] --> REMOVE["Diagnostics.removeUser: 他userの寄与と共有状態保持"]
+ REMOVE --> DDB
+ STORE["native StoreKit JWS / Apple通知"] --> VERIFY["AppStore.verifier: Apple根まで署名・環境・app"]
+ VERIFY -->|失敗/不一致| STORE
+ VERIFY --> OWNER["original transaction / appAccountToken所有照合"]
+ OWNER --> APPLY["AppStore.apply tx: 古い期限巻戻し防止"]
+ APPLY --> SUB[("appstore_subscriptions + Accounts.setPlan")]
+ SUB --> ME["Accounts.me / assertCanUse / setup gate"]
+ TIME["main hourly"] --> PRUNE["diagnostics.prune / retention / attachments.gc / pairing / events"]
+ PRUNE --> DDB
+
+ LOCALE["shared/locales.ts: 5言語・正規化"] --> APIERR["server/errors.ts: status・extra / 純粋errorMessageへ委譲"]
+ LOCALE --> I18N["web/i18n.ts: 選好・navigator・表示"]
+ I18N --> FIXED["shared/error-translations.ts: 既知固定文だけ逆引き"]

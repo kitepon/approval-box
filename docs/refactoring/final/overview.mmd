@@ -1,0 +1,21 @@
+flowchart LR
+ AI["PCのAI<br/>Claude・Codex・Cursor・Grok"] -->|stdio| MCP["connector/mcp.ts<br/>親識別: parent-channels.ts"]
+ MCP -->|connection Bearer| HTTP["http.ts createApp<br/>public / user / connector<br/>認証・登録順・エラー"]
+ CLIENT["Web / native apps<br/>api.md v0.37契約"] -->|session Bearer| HTTP
+ CLOUD["リモートAI"] -->|connection Bearer| RMCP["remote-mcp.ts"]
+ HTTP --> DEC["Decisions<br/>申請・回答・画像結合・配送状態"]
+ RMCP --> DEC
+ HTTP --> ACC["Accounts / OIDC<br/>本人・接続・端末"]
+ HTTP --> ATT["Attachments<br/>原本・メタデータ"]
+ HTTP --> OPS["Diagnostics / AppStore"]
+ DEC --> DB[("SQLite schema9")]
+ ACC --> DB
+ ATT --> DB
+ OPS --> DB
+ DEC -->|commit後| EVENT["EventHub<br/>保存履歴 / connection合図"]
+ EVENT --> SSE["http/streams.ts<br/>合図 → Web/nativeが再GET<br/>finallyで購読解除"]
+ EVENT --> PUSH["push.ts APNs<br/>通知受付と画面表示は別"]
+ EVENT --> CB["callbridge.ts<br/>外部Bridge → remote AI"]
+ DAEMON["connector/daemon.ts<br/>journal → 外部Steer/Aiterm<br/>元会話へ配送"] -->|deliveries取得・結果報告| HTTP
+ SHARED["shared/locales.ts<br/>error-translations.ts<br/>Web/API共通の純粋な定義"] -.-> HTTP
+ SHARED -.-> CLIENT

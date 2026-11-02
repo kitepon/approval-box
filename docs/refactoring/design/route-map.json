@@ -1,0 +1,675 @@
+{
+  "base": "90066748bf7ca4686716c67c91d76fcd20afa519",
+  "status": "design, not implemented",
+  "note": "All baseline static registrations, including mount/use/fallback. Preserve ordering; expanded_paths/methods supplement the static index. Not an endpoint count.",
+  "registration_order": [
+    "onError",
+    "/api/admin",
+    "/healthz",
+    "public identity and signed Apple notifications",
+    "session /v1",
+    "public pairing /connector/v1",
+    "authenticated /connector/v1",
+    "remote /mcp",
+    "static fallback"
+  ],
+  "routes": [
+    {
+      "file": "packages/server/src/diagnostics.ts",
+      "line": 184,
+      "target": "app",
+      "method": "use",
+      "path": "\"*\"",
+      "planned_file": "packages/server/src/diagnostics.ts",
+      "authentication": "admin LAN + dedicated token"
+    },
+    {
+      "file": "packages/server/src/diagnostics.ts",
+      "line": 195,
+      "target": "app",
+      "method": "get",
+      "path": "\"/logs\"",
+      "planned_file": "packages/server/src/diagnostics.ts",
+      "authentication": "admin LAN + dedicated token"
+    },
+    {
+      "file": "packages/server/src/diagnostics.ts",
+      "line": 215,
+      "target": "app",
+      "method": "patch",
+      "path": "\"/logs/:fingerprint/investigation\"",
+      "planned_file": "packages/server/src/diagnostics.ts",
+      "authentication": "admin LAN + dedicated token"
+    },
+    {
+      "file": "packages/server/src/diagnostics.ts",
+      "line": 230,
+      "target": "app",
+      "method": "post",
+      "path": "`/logs/${action}`",
+      "planned_file": "packages/server/src/diagnostics.ts",
+      "authentication": "admin LAN + dedicated token",
+      "expanded_paths": [
+        "/api/admin/logs/resolve",
+        "/api/admin/logs/reopen"
+      ]
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 115,
+      "target": "app",
+      "method": "route",
+      "path": "\"/api/admin\"",
+      "planned_file": "packages/server/src/http.ts",
+      "authentication": "root composition; see authentication notes"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 117,
+      "target": "app",
+      "method": "get",
+      "path": "\"/healthz\"",
+      "planned_file": "packages/server/src/http.ts",
+      "authentication": "root composition; see authentication notes"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 130,
+      "target": "app",
+      "method": "get",
+      "path": "\"/v1/auth/config\"",
+      "planned_file": "packages/server/src/http/public.ts",
+      "authentication": "provider signature or one-time code; no user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 131,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/auth/apple\"",
+      "planned_file": "packages/server/src/http/public.ts",
+      "authentication": "provider signature or one-time code; no user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 136,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/auth/apple/web/start\"",
+      "planned_file": "packages/server/src/http/public.ts",
+      "authentication": "provider signature or one-time code; no user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 144,
+      "target": "app",
+      "method": "post",
+      "path": "\"/auth/apple/callback\"",
+      "planned_file": "packages/server/src/http/public.ts",
+      "authentication": "provider signature or one-time code; no user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 161,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/auth/google\"",
+      "planned_file": "packages/server/src/http/public.ts",
+      "authentication": "provider signature or one-time code; no user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 164,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/appstore/notifications\"",
+      "planned_file": "packages/server/src/http/public.ts",
+      "authentication": "provider signature or one-time code; no user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 171,
+      "target": "app",
+      "method": "post",
+      "path": "\"/v1/auth/link\"",
+      "planned_file": "packages/server/src/http/public.ts",
+      "authentication": "provider signature or one-time code; no user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 177,
+      "target": "v1",
+      "method": "use",
+      "path": "\"*\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 182,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/diagnostics\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 184,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/decisions\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 191,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/decisions\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 198,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/decisions/:id\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 199,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/decisions/:id/answer\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 206,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/decisions/:id/attachments\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 212,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/decisions/:id/attachments\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 213,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/decisions/:id/attachments/:aid\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 214,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/decisions/:id/attachments/:aid\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 218,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/decisions/:id/hold\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 219,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/decisions/:id/unhold\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 221,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/events\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 249,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/connections\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 250,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/connections/:id\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 252,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/tokens\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 257,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/tokens\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 258,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/tokens/:id\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 259,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/devices\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 270,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/devices/:id\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 271,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/onboarding\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 277,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/pairing/lookup\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 278,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/pairing/:id/claim\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 279,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/pairing/:id/reject\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 281,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/me\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 282,
+      "target": "v1",
+      "method": "delete",
+      "path": "\"/me\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 290,
+      "target": "v1",
+      "method": "get",
+      "path": "\"/me/settings\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 291,
+      "target": "v1",
+      "method": "patch",
+      "path": "\"/me/settings\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 295,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/auth/logout\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 297,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/billing/appstore/verify\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 304,
+      "target": "v1",
+      "method": "post",
+      "path": "\"/billing/:store/:action\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 310,
+      "target": "v1",
+      "method": "all",
+      "path": "\"*\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 311,
+      "target": "app",
+      "method": "route",
+      "path": "\"/v1\"",
+      "planned_file": "packages/server/src/http/user.ts",
+      "authentication": "user session"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 316,
+      "target": "pairing",
+      "method": "post",
+      "path": "\"/pairing\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "public pairing before connection router"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 320,
+      "target": "pairing",
+      "method": "get",
+      "path": "\"/pairing/:id\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "public pairing before connection router"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 328,
+      "target": "app",
+      "method": "route",
+      "path": "\"/connector/v1\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "public pairing before connection router"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 332,
+      "target": "conn",
+      "method": "use",
+      "path": "\"*\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 338,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/connection\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 339,
+      "target": "conn",
+      "method": "delete",
+      "path": "\"/connection\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 340,
+      "target": "conn",
+      "method": "put",
+      "path": "\"/connection/clients\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 345,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/decisions\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 346,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/request-images\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 352,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 358,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/decisions/:id\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 362,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions/:id/fetched\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 367,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions/:id/resume\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 368,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions/:id/amend\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 373,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/decisions/:id/cancel\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 379,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/decisions/:id/attachments/:aid\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 384,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/setup-test\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 391,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/setup-test/confirm\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 395,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/deliveries\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 396,
+      "target": "conn",
+      "method": "post",
+      "path": "\"/deliveries/:id\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 400,
+      "target": "conn",
+      "method": "get",
+      "path": "\"/stream\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 422,
+      "target": "conn",
+      "method": "all",
+      "path": "\"*\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 423,
+      "target": "app",
+      "method": "route",
+      "path": "\"/connector/v1\"",
+      "planned_file": "packages/server/src/http/connector.ts",
+      "authentication": "connection token"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 426,
+      "target": "app",
+      "method": "post",
+      "path": "\"/mcp\"",
+      "planned_file": "packages/server/src/http.ts",
+      "authentication": "root composition; see authentication notes"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 427,
+      "target": "app",
+      "method": "on",
+      "path": "[\"GET\", \"DELETE\"]",
+      "planned_file": "packages/server/src/http.ts",
+      "authentication": "root composition; see authentication notes",
+      "expanded_methods": [
+        "GET",
+        "DELETE"
+      ],
+      "resolved_path": "/mcp"
+    },
+    {
+      "file": "packages/server/src/http.ts",
+      "line": 429,
+      "target": "app",
+      "method": "get",
+      "path": "\"*\"",
+      "planned_file": "packages/server/src/http.ts",
+      "authentication": "root composition; see authentication notes"
+    }
+  ]
+}

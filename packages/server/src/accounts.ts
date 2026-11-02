@@ -1,4 +1,4 @@
-import type { Locale } from "./locales.ts";
+import type { Locale } from "./shared/locales.ts";
 import { createHash } from "node:crypto";
 import { type Db, all, get, run, tx } from "./db.ts";
 import { ApiError } from "./errors.ts";
