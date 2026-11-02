@@ -24,21 +24,25 @@ export function userEvents(c: Context, services: Services, userId: string) {
     stream.onAbort(() => { unsubscribe(); wake?.(); });
     const stop = () => wake?.();
     services.shutdown?.addEventListener("abort", stop, { once: true });
-    let sent = last;
-    while (!stream.aborted && !services.shutdown?.aborted) {
-      while (queue.length) {
-        const event = queue.shift()!;
-        if (event.id <= sent) continue;
-        sent = event.id;
-        await stream.writeSSE({ id: String(event.id), event: event.type, data: JSON.stringify(event.data) });
+    try {
+      let sent = last;
+      while (!stream.aborted && !services.shutdown?.aborted) {
+        while (queue.length) {
+          const event = queue.shift()!;
+          if (event.id <= sent) continue;
+          sent = event.id;
+          await stream.writeSSE({ id: String(event.id), event: event.type, data: JSON.stringify(event.data) });
+        }
+        if (stream.aborted || services.shutdown?.aborted) break;
+        await untilWake(services.shutdown, (resume) => { wake = resume; });
+        wake = null;
+        if (!queue.length && !stream.aborted && !services.shutdown?.aborted) await stream.write(": ping\n\n");
       }
-      await untilWake(services.shutdown, (resume) => { wake = resume; });
-      wake = null;
-      if (!queue.length && !stream.aborted && !services.shutdown?.aborted) await stream.write(": ping\n\n");
+      // 停止の合図では、流れを正しく閉じて返す。利用側は切断でなく正常終了として再接続できる。
+    } finally {
+      services.shutdown?.removeEventListener("abort", stop);
+      unsubscribe();
     }
-    // 停止の合図では、流れを正しく閉じて返す。利用側は切断でなく正常終了として再接続できる。
-    services.shutdown?.removeEventListener("abort", stop);
-    unsubscribe();
   });
 }
 
@@ -51,16 +55,20 @@ export function connectorEvents(c: Context, services: Services, connectionId: st
     stream.onAbort(() => { unsubscribe(); wake?.(); });
     const stop = () => wake?.();
     services.shutdown?.addEventListener("abort", stop, { once: true });
-    while (!stream.aborted && !services.shutdown?.aborted) {
-      if (pending) {
-        pending = false;
-        await stream.writeSSE({ event: "deliveries", data: "{}" });
+    try {
+      while (!stream.aborted && !services.shutdown?.aborted) {
+        if (pending) {
+          pending = false;
+          await stream.writeSSE({ event: "deliveries", data: "{}" });
+        }
+        if (stream.aborted || services.shutdown?.aborted) break;
+        await untilWake(services.shutdown, (resume) => { wake = resume; });
+        wake = null;
+        if (!pending && !stream.aborted && !services.shutdown?.aborted) await stream.write(": ping\n\n");
       }
-      await untilWake(services.shutdown, (resume) => { wake = resume; });
-      wake = null;
-      if (!pending && !stream.aborted && !services.shutdown?.aborted) await stream.write(": ping\n\n");
+    } finally {
+      services.shutdown?.removeEventListener("abort", stop);
+      unsubscribe();
     }
-    services.shutdown?.removeEventListener("abort", stop);
-    unsubscribe();
   });
 }
