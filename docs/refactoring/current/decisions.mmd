@@ -18,7 +18,8 @@ flowchart TD
  ANSWER -->|409: 最新Decisionを返す| ERROR
  ANSWER --> ATX["tx: bindAttachments + answer + history + delivery waiting"]
  ATX --> ANSWERED["answered: 回答保存済み"]
- ANSWERED --> DELIVERY["配送は独立状態: waiting/delivered/unknown/fetched"]
- CANCEL --> DELETE["deleteClosed / purgeExpired / DELETE me"]
+ ANSWERED --> DELIVERY["配送は独立状態: waiting/sending/delivered/failed/unknown/fetched"]
+ CANCEL --> DELETE["deleteClosed: tx / purgeExpired: 1行ずつ削除"]
  ANSWERED --> DELETE
- DELETE --> GC["DB cascade → events deleted → files GC"]
+ DELETE --> GC["添付等のDB cascade → decision.deleted → files GC"]
+ ACCOUNT["DELETE me: 全status / 診断寄与 / 原本削除"] --> ACCOUNT_TX["外側tx: user cascade + eraseFiles / FS失敗でDB rollback"]

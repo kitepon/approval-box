@@ -5,6 +5,9 @@ flowchart TD
  SEND -->|構造化: 通話未開設/未送信 directory_link_down| RETRY["deferServerDelivery: 30秒/回答後10分"]
  RETRY --> CB
  SEND -->|送信結果不明 / 再起動でsending| UNKNOWN["reportDelivery unknown: 自動再送しない"]
+ SEND -->|送信前例外 / open拒否 / 明示delivery error| FAILED["reportDelivery failed: 自動再送しない"]
+ RETRY -->|回答後10分超過| FAILED
+ FAILED --> GET
  SEND -->|delivered| REPORT["reportDelivery → event updated"]
  LOCAL -->|通常channel| FETCH["daemon sync: GET deliveries"]
  FETCH --> PREP["saveAll添付 → journal sendingを先に永続化"]

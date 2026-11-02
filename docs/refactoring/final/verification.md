@@ -1,6 +1,6 @@
 # 候補の検証と未確認
 
-Sol6.1 High、2026-11-02。runtime変更の最終commitはc19258f、shutdown試験5925da9、追加回帰試験97dd816。最終Astraの内容照合とレヴィアタンの成果確認は未完。本番未反映。
+Sol6.1 High、2026-11-02。runtime変更の最終commitはc19258f、shutdown試験5925da9、追加回帰試験97dd816。Astra xhighの図・責務・コード照合を実施。レヴィアタンの成果確認は未完。本番未反映。
 
 | 確認 | 結果 | 原本 |
 |---|---|---|
@@ -35,3 +35,14 @@ Mermaid CLI12.0.0、既存Chromium1248、共通chromium/env.shのfonts/OS依存�
 macOS/Windowsの本候補CI/実機、全OS×4harnessの実AI操作、Docker image build/実image隔離試験、実Appleログイン/購入/APNs、native apps内部の新受入は未実施。詳細と12組の表は[scope-notes](scope-notes.md)。当席にdocker実行入口がなくlocal distで公開契約を確認した。候補完成後の正規PR/CI経路は利用可能だが、まだpush/PRを行っておらず、CI成功とは扱わない。
 
 既存の添付DB/FSの非原子的な停止窓、MCP親記録の読取失敗時fallback/open後保存失敗、配送unknownの本文無条件再送禁止は[flows](flows.md)に残す。新しい原子性や全障害からの回復を主張しない。翻訳品質全件/暗号アルゴリズムの独立監査は未実施。レヴィアタンへの報告と確認不足の修正、別2prompt予定の復帰は最終整合後に行う。
+
+
+## Astra最終整合（2026-11-02）
+
+get_selfでgpt-6-astra/xhigh/fast=falseの適用を確認した別ターンで、設計・全差分・図と状態所有者を照合した。HTTPは旧http.tsの68登録を順序どおりに展開して確認し、SSE2経路を除く登録本体は空白とfiles/sweepへのservices引数以外が一致した。adminの4登録は未変更で計72。認証middleware、公開pairing2経路、fallback、AppStore具体経路の先行を確認した。
+
+親channel5関数とrunMcpの本体保持、MCP schema/定数、lastChannelの更新時点、純粋共通文言のimportとApiErrorのstatus/extra順序を確認した。Claudeのprocess変更・旧channel保持は既存fixture、Codexのthread分離・永続再利用とlastChannel失敗順は追加fixtureに対応する。Cursorのverify→再利用/新規と保存失敗の伝播は本体保持とコード照合で確認したもので、実Cursor/実AIの操作成功とは区別する。
+
+図の誤りとして、logoutとaccount削除の後始末の混同、CallBridgeのfailedとunknownの省略、EventHubが書くevents rowの主体、admin GETと状態変更の区別、purgeExpiredの非一括取引を補正した。current/finalの両方に基準コードの事実を反映し、製品コードは変更していない。業務commitと冪等応答控えの保存の停止窓、FSの途中削除がDB rollbackで戻らない限界も明記した。
+
+全233 tracked fileのscope掲載を再照合し欠落0。119ソースhash、Markdownの全ローカルファイルリンク、19描画hashを再照合し成功した。最終8図・設計3図・現状の異なる4図をAstraでも目視し、残る4図は原本とPNGが最終と同一と確認した。診断図の長い矢印ラベルの重なりは短いGET/POSTへ直し再描画・目視した。照合原本はvalidation/a1-preservation.json。本文・図の補正だけなので既成功の製品単体試験は反復せず、未実施の3OS・実image検証を正規CIで進める。

@@ -5,8 +5,9 @@ sequenceDiagram
  participant S as http/streams.ts<br/>SSE
  participant W as web<br/>App/store
  participant P as push Notifier
- D->>DB: 変更 + events row
+ D->>DB: 業務状態の変更
  D->>E: publish / notifyConnection
+ E->>DB: publishだけevents rowを保存
  E->>DB: afterCommitへ副作用登録
  alt rollback
  DB-->>D: 例外、bus通知なし

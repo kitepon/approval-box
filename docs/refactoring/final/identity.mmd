@@ -16,5 +16,9 @@ flowchart TD
  PERSON -->|reject / 期限切れ| STOP["CLI error: setup中止"]
  CONFIG --> AUTH["Accounts.connectionByToken"]
  AUTH -->|revoked/invalid 401| STOP
- SESSION --> REVOKE["logout / revoke token / revoke connection / DELETE me"]
- REVOKE --> CLEAN["DB cascade・診断寄与除去・ファイル削除"]
+ SESSION --> LOGOUT["logout: そのsessionだけ削除"]
+ SESSION --> REVOKE["revoke token / connection: 失効・setup/未結合画像を削除"]
+ REVOKE --> RETAIN["既存decision・結合済み画像は保持"]
+ SESSION --> DELETE["DELETE me: 外側txで診断寄与除去・user cascade・eraseFiles"]
+ DELETE --> CLEAN["成功: 認証と本人データ削除 / FS失敗: DB rollback"]
+ CLEAN --> LIMIT["途中まで消した原本はDB rollbackで戻らない"]

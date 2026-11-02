@@ -8,37 +8,37 @@
   },
   {
     "file": "docs/refactoring/final/decisions.svg",
-    "sourceSha256": "70b2831c00b808d2e03a9a64c4deca80e289df281232d20346b5a2414ecba0f4",
-    "svgSha256": "1bcc48695109a6a09fe687df228ac5e1a084cc70b7b863fe2ddad06c6f2acaa5",
-    "width": 972.7200317382812,
-    "height": 1723
+    "sourceSha256": "ac454551f067f6eadeb5b1ec90e975a1555e31f4fa5f6ab662faa7e570cf3124",
+    "svgSha256": "b2adefb2b11fd1c019be81ac43e81f2c6b06fd365af7c802254e98d2b1054da7",
+    "width": 1120.6146240234375,
+    "height": 1868
   },
   {
     "file": "docs/refactoring/final/delivery.svg",
-    "sourceSha256": "760c55b433c8e0ec34738bfd2a02313250cc17395f74721e14dbf69abc781689",
-    "svgSha256": "7ebdcd9cd3716cdd85ecb1d9e429f8a6d951082ca4618ec8ef7626e758a2ca6c",
-    "width": 1189.375,
-    "height": 1892
+    "sourceSha256": "633861ba1f891c29cdd1664aa1a77a28eca45402c9829dc10bd7bcd36d03fc9b",
+    "svgSha256": "8d502a2491dd94fed889cecf774882e92d0db3e4668c2ac6eeb6559711498906",
+    "width": 1365.14453125,
+    "height": 1957
   },
   {
     "file": "docs/refactoring/final/events.svg",
-    "sourceSha256": "f1c787b2851ad58a8ad5727e88551b81fc3113efb814780c7240c20c2d779ee8",
-    "svgSha256": "993e0af791538888088a408f70fa714cc3ea01f830a1ea4d15615c3da1ee748a",
-    "width": 1538.5,
-    "height": 1046
+    "sourceSha256": "b6a359fe5377c2070eae5289985ed4902985f65087bdb6a9b2b28a27699ccf7a",
+    "svgSha256": "7c3c8e3d7880cfe10410c89a06a86d29c40d80e1d3d165c3ac30010f0972902b",
+    "width": 1558.5,
+    "height": 1092
   },
   {
     "file": "docs/refactoring/final/identity.svg",
-    "sourceSha256": "4ebef187b1801a43bbd32e165962b6ce3957017bfa01a2946eeebd2278c83c14",
-    "svgSha256": "dab288bb8036c4addef66383d847d2aeb077e5830662c9ded3f4d8fa8f80eea3",
-    "width": 1122.3125,
-    "height": 1362.5947265625
+    "sourceSha256": "a81b28c71cd347afc0a18cf3c5c8ab7d98f2f93f034ce4efa5916d92a2749eb8",
+    "svgSha256": "7c6c3b498f998e64500af14940753a02e662725abb73df96de345c369c59ad8f",
+    "width": 1146.65234375,
+    "height": 1445.5947265625
   },
   {
     "file": "docs/refactoring/final/operations.svg",
-    "sourceSha256": "26b695668c950d67d0c29c7e6df0f8b16580dfb1584dd4f50dd76d40d21f1198",
-    "svgSha256": "625744ec432df89249d01b0e192f601216485d58b34b5fed0af884c4ab1604f4",
-    "width": 1568.34375,
+    "sourceSha256": "1b87c256e0baf1a08c7ec1d3c5c2427e56537a3ebdbcb71589d8d2e2a482539f",
+    "svgSha256": "e45171813347896479f4c6f08b706ef3784d2253fcc21c912fe4913da027581e",
+    "width": 1560.421875,
     "height": 732.7113037109375
   },
   {
@@ -85,37 +85,37 @@
   },
   {
     "file": "docs/refactoring/current/decisions.svg",
-    "sourceSha256": "70b2831c00b808d2e03a9a64c4deca80e289df281232d20346b5a2414ecba0f4",
-    "svgSha256": "1bcc48695109a6a09fe687df228ac5e1a084cc70b7b863fe2ddad06c6f2acaa5",
-    "width": 972.7200317382812,
-    "height": 1723
+    "sourceSha256": "ac454551f067f6eadeb5b1ec90e975a1555e31f4fa5f6ab662faa7e570cf3124",
+    "svgSha256": "b2adefb2b11fd1c019be81ac43e81f2c6b06fd365af7c802254e98d2b1054da7",
+    "width": 1120.6146240234375,
+    "height": 1868
   },
   {
     "file": "docs/refactoring/current/delivery.svg",
-    "sourceSha256": "d238202fc72a38a252727322e24e6327d314fbdcbd9ad61c97e9977c583233ab",
-    "svgSha256": "d96b738d89c25e6846c650945fd4966e1b9b6a0f2978c1fef4b988613212d030",
-    "width": 1133.078125,
-    "height": 1533
+    "sourceSha256": "3e3afdf988f94a08697039310de1099a32ee96408f17c22ab4013d0cf40f0f12",
+    "svgSha256": "3379d23ac7bb0acd7c4aa67b610f2beaca57a77b1192ae6b814c2fb787a13583",
+    "width": 1382.16015625,
+    "height": 1598
   },
   {
     "file": "docs/refactoring/current/events.svg",
-    "sourceSha256": "6baa51a51a2b9d10f558e95c5961de347a36d0b185531268a6a82549f51f1bad",
-    "svgSha256": "7dccc89050addd61a6804f7ffa2c3b258b7870e1c347e46a9a9ea42cc5846794",
-    "width": 1538.5,
-    "height": 1027
+    "sourceSha256": "778a75c2563ca7f108c97ec179b0f4dfa19c50d9a242e1338ca7ea4aa1db0ebc",
+    "svgSha256": "ce57f1a8a5d6600e7cf7d6532fe70b1080f780623a250fb93c7430a723dea5aa",
+    "width": 1558.5,
+    "height": 1073
   },
   {
     "file": "docs/refactoring/current/identity.svg",
-    "sourceSha256": "4ebef187b1801a43bbd32e165962b6ce3957017bfa01a2946eeebd2278c83c14",
-    "svgSha256": "dab288bb8036c4addef66383d847d2aeb077e5830662c9ded3f4d8fa8f80eea3",
-    "width": 1122.3125,
-    "height": 1362.5947265625
+    "sourceSha256": "a81b28c71cd347afc0a18cf3c5c8ab7d98f2f93f034ce4efa5916d92a2749eb8",
+    "svgSha256": "7c6c3b498f998e64500af14940753a02e662725abb73df96de345c369c59ad8f",
+    "width": 1146.65234375,
+    "height": 1445.5947265625
   },
   {
     "file": "docs/refactoring/current/operations.svg",
-    "sourceSha256": "af13371c39d2974e12227653898172129cf7eb10f234d3840f25a17da273730f",
-    "svgSha256": "af93e7f8bdcc989afd57023c320ba1527b09e56cacb04fea987649405ec933e3",
-    "width": 1536.734375,
+    "sourceSha256": "d58bc858bed818dc0c00aa9b9119689cf9010b42ef595cecb56d938825e4d431",
+    "svgSha256": "62555f970679a190dd34f317e510ccdadf543f5e52a7511989b7ec0898a2ffeb",
+    "width": 1528.8125,
     "height": 515.7113647460938
   },
   {

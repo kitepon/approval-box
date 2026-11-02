@@ -1,6 +1,6 @@
 # 実装工程の記録
 
-2026-11-02、Sol6.1 High、fast OFF。設計4c04cd2から専用worktreeで実装した。本番反映は行っていない。最終図・全域scope・Astra最終整合は続行する。
+2026-11-02、Sol6.1 High、fast OFF。設計4c04cd2から専用worktreeで実装した。本番反映は行っていない。D1の最終図・全域scopeを追加し、Astra xhighで図とコードを照合した。最新の結果は[最終検証記録](final/verification.md)を参照。
 
 | commit | 変更と理由 | 確認 |
 |---|---|---|
@@ -24,7 +24,7 @@ finallyでlistener/購読を解除し、待機前にabort/shutdownを再確認�
 
 旧shutdown.testの`readToEnd`はreaderを取得したままtimeoutで抜け、外から`response.body.cancel()`を呼んでもlock中のため失敗し、catchで隠していた。helper自身のfinallyでreaderを閉じる形へ直した。`npm test`を一度中断した記録と、修正後の完走結果を区別する。
 
-初期の`--test-force-exit`付き試験には、通常実行より少ない件数でexit0になったものがあった。そのログを全件完了の根拠には使わない。最終根拠はforceなしの`full-unit.log`（server102/connector37、両fail0、command exit0）。既存baselineの件数を改修後成功件数へ足していない。
+初期の`--test-force-exit`付き試験には、通常実行より少ない件数でexit0になったものがあった。そのログを全件完了の根拠には使わない。実装直後の根拠はforceなしの`full-unit.log`（server102/connector37、両fail0、command exit0）。追加回帰97dd816後は`d1-unit.log`でserver103/connector38、exit0を確認した。既存baselineの件数を改修後成功件数へ足していない。
 
 ## 保存した検証原本
 
@@ -44,6 +44,6 @@ locale/翻訳辞書3ファイルは移動前のbyteと一致することをasser
 
 ## 残る確認と成果物
 
-最終route/全callerの機械照合、親のClaude/Cursor分岐とlastChannel失敗時の詳細照合、idempotencyの設計試験との突合、全trackedファイルのscope表、未読tools内部の調査、最終8図・コード索引の同期、全図の実描画/目視、配布物の隔離起動と可能な既存CI経路、Astra最終整合が残る。実Apple/購入/APNs/実AI×全OSの確認済み範囲は独立に明記する。
+D1で元72登録、全追跡233ファイル、全caller/export、親分岐の本体保持とlastChannel失敗時、idempotencyを照合した。最終8図・全コード索引と19図の実描画、配布物の隔離起動も完了した。97dd816はMCP文脈とHTTP冪等性の追加回帰試験で、製品コードの修理を含まない。Astraの補正は図と説明に限る。正規CIとレヴィアタンの成果確認は引き続き進める。実Apple/購入/APNs/実AI×全OSの未確認は最終検証記録で区別する。
 
 実装の段階commitは候補であり、専任任務の完了報告はまだ行っていない。レヴィアタンの確認と不足修正後に別2prompt予定を復帰する。
