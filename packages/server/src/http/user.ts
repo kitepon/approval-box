@@ -1,4 +1,4 @@
-import { LOCALES } from "../locales.ts";
+import { LOCALES } from "../shared/locales.ts";
 import { requestLocale } from "../locale.ts";
 import { Diagnostics, readDiagnostic } from "../diagnostics.ts";
 

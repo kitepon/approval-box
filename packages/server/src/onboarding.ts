@@ -1,4 +1,4 @@
-import type { Locale } from "./locales.ts";
+import type { Locale } from "./shared/locales.ts";
 // クライアント別の登録手順（GET /v1/onboarding）。文面はアプリに焼き込まず、ここから配る。
 
 export const SETUP_PHRASE = "Approval Boxのsetup_testを実行して";
