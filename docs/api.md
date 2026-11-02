@@ -1,5 +1,7 @@
 # Approval Box API（アプリ・Web版向け） v0.37
 
+2026-11-02 server配送修理: 公開API v0.37のenumは維持。Bridgeのqueued/inflightは`waiting`、submittedはgateway受付（AIの作業完了ではない）。通話/seq/終端をschema10の`bridge_deliveries`へ保存し、再起動や通信断でも同通話を追跡する。詳細は[配送図と検証](architecture/grok-delivery/README.md)。
+
 v0.37（2026-10-30）: AI向けの一覧・申請前確認・重複候補は要約だけを返す。回答本文・背景・選択肢・添付・取消理由を含めない。回答は明示的な `get_decision` または既存の回答配送で受け取る。利用者向けAPIと保存内容は変更しない。
 
 AIの認証・認可は接続トークン単位。同じトークンを共有するAIは同じ権限を持つ。`requester` / `requester_name` は表示用の自己申告であり、`channel_id` は配送先で、どちらも別の認証主体を作らない。AIごとのアクセス分離には別の接続トークンが必要。

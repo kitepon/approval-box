@@ -1,0 +1,15 @@
+flowchart LR
+ Owner["Web / native: answer"] --> HTTP["HTTP: authentication / validation"]
+ HTTP --> Decisions["Decisions: answer + waiting"]
+ Decisions --> DB[("SQLite schema10")]
+ Decisions --> Events["commit / connection event"]
+ Events --> Worker["CallBridgeDeliverer: serial sync"]
+ Timer["main.ts: startup / 60-second sync"] --> Worker
+ Worker --> Journal["bridge_deliveries: session / seq / terminal / closed"]
+ Journal --> DB
+ Worker --> Sender["callBridgeSender"]
+ Sender --> Bridge["Bridge MCP: open / send / info / hangup"]
+ Bridge --> Courier["External courier / gateway"]
+ Worker --> Result["Decisions.reportDelivery / UI event"]
+ Result --> UI["Web / native reload: waiting / delivered / unknown / fetched"]
+ Remote["Remote MCP: explicit get_decision"] --> Decisions

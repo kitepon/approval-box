@@ -1,0 +1,25 @@
+flowchart TD
+ Answer["answer commit: waiting"] --> Claim["markSending: no second body send"]
+ Claim --> Open["call_open"]
+ Open -->|guaranteed unopened directory_link_down| Retry["30 seconds / answer + 10-minute bound"]
+ Retry --> Claim
+ Open -->|session known| Checkpoint["DB: session_id before call_send"]
+ Checkpoint --> Send["call_send once"]
+ Send -->|queued / response lost| Track["DB: session + optional seq; pending"]
+ Track --> Info["same-party call_info: no read marking"]
+ Info -->|queued / inflight / network failure| Track
+ Info -->|one seq 1 after lost response| Seq["persist recovered seq"]
+ Seq --> Info
+ Info -->|submitted / failed / unknown| Commit["transaction: journal terminal + reportDelivery"]
+ Send -->|legacy delivered / explicit error| Commit
+ Commit --> Close["call_hangup only after terminal commit"]
+ Close -->|response failure| Again["keep terminal; retry only hangup"]
+ Again --> Close
+ Close -->|accepted| Closed["closed journal until decision deletion"]
+ Restart["process restart"] -->|journal exists| Track
+ Restart -->|terminal journal| Close
+ Restart -->|old sending without session| Unknown["unknown; never resend body"]
+ Get["explicit get / fetched"] --> Preserve["keep fetched; track original call only"]
+ Preserve --> Track
+ Info -->|no matching receipt / ambiguous seq| Track
+ Commit --> UI["submitted = gateway accepted; not AI work complete"]

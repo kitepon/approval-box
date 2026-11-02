@@ -347,6 +347,14 @@ const MIGRATIONS: ((db: Db) => void)[] = [
       select id,user_id,platform,push_key,apns_token,apns_env,fcm_token,web_push_subscription,created_at,updated_at,locale from locale_legacy_devices`);
     db.exec("drop table locale_legacy_devices");
   },
+  // 10: Bridge配送の追跡。本文と資格は保存せず、元の通話だけを再照会する。
+  (db) => {
+    db.exec(`create table if not exists bridge_deliveries (
+      decision_id text primary key references decisions(id) on delete cascade,
+      session_id text not null, seq integer, state text not null,
+      detail text, closed integer not null default 0
+    )`);
+  },
 ];
 
 function migrate(db: Db) {
