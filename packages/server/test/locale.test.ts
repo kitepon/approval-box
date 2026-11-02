@@ -78,7 +78,7 @@ test("schema 7 device migration preserves existing fields and defaults only the 
     accounts.registerDevice(id,{platform:"ios",apns_token:"fixture",apns_env:"sandbox"});
     db.exec("alter table devices drop column locale; pragma user_version=7");
     const before=all(db,"select * from devices");db.close();db=openDb(file);
-    assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version,9);
+    assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version,10);
     const after=all<Record<string,unknown>>(db,"select * from devices");assert.equal(after[0]!.locale,"ja");
     assert.deepEqual(after.map(({locale,...rest})=>rest),before.map(row=>({...row as object})));db.close();
   } finally { rmSync(dir,{recursive:true,force:true}); }
@@ -122,7 +122,7 @@ test("schema 8 locale constraint upgrade preserves all old device values and all
     db.exec("alter table devices rename to prior_devices");db.exec(definition.replace(",'ko','zh-Hans','zh-Hant'",""));
     db.exec("insert into devices select * from prior_devices; drop table prior_devices; pragma user_version=8");
     const before=all(db,"select * from devices order by id");db.close();db=openDb(file);
-    assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version,9);
+    assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version,10);
     assert.deepEqual(all(db,"select * from devices order by id"),before);
     const updated=new Accounts(db,new EventHub(db),"off");updated.registerDevice(id,{platform:"ios",apns_token:"e",locale:"zh-Hant"});
     assert.equal(get<{locale:string}>(db,"select locale from devices where apns_token='e'")?.locale,"zh-Hant");

@@ -1,16 +1,17 @@
 // 答えを call-bridge の通話で届ける（GrokBotなど、端末にコネクタを置けないAI向け）。
-// 1件ごとに通話を開き、本文の頭に申請番号を書いて送り、閉じる（マリアンとの取り決め 2026-10-02）。
+// 1件ごとに通話を保存し、配達待ちは同じ通話を追跡して終端の保存後に閉じる。
 // 届いたか確かめられない送信は、送り直さず unknown にする。AIは get_decision で拾える。
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { readFileSync } from "node:fs";
-import { type Db, get } from "./db.ts";
+import { type Db, get, all, run, tx } from "./db.ts";
 import type { Decisions } from "./decisions.ts";
 import type { EventHub } from "./events.ts";
 
-export type SendResult = { state: "delivered" | "unknown" | "failed"; detail?: string } | { state: "retry"; retry_after_seconds: 30; detail?: string };
+export type BridgeProgress = { sessionId?: string; seq?: number; save: (sessionId: string, seq?: number) => void };
+export type SendResult = { state: "pending"; detail?: string } | { state: "delivered" | "unknown" | "failed"; detail?: string } | { state: "retry"; retry_after_seconds: 30; detail?: string };
 /** 宛先のメンバー（電話帳のid）へ本文を送る。 */
-export type CallSender = (memberId: string, decisionId: string, text: string) => Promise<SendResult>;
+export type CallSender = ((memberId: string, decisionId: string, text: string, progress?: BridgeProgress) => Promise<SendResult>) & { close?: (sessionId: string) => Promise<void> };
 
 export type CallBridgeConfig = {
   url: string;
@@ -41,45 +42,75 @@ function payload(result: ToolResult): Record<string, unknown> {
   try { return JSON.parse(text) as Record<string, unknown>; } catch { return { text }; }
 }
 
-/** call-bridge のMCPへ、call_open → call_send → call_hangup で送る。 */
+/** queued/inflightは取り消さず、保存済み通話の公開metadataで追跡する。 */
 export function callBridgeSender(config: CallBridgeConfig): CallSender {
-  return async (memberId, decisionId, text) => {
+  const connect = async () => {
     const client = new Client({ name: "approval-box-server", version: "1" });
-    const transport = new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: config.headers } });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: config.headers } }));
+      return client;
+    } catch (error) { await client.close().catch(() => {}); throw error; }
+  };
+  const send: CallSender = async (memberId, decisionId, text, progress) => {
+    let client: Client | undefined;
+    let sessionId = progress?.sessionId;
+    let seq = progress?.seq;
     let sent = false;
     try {
-      await client.connect(transport);
-      const opened = await client.callTool({
-        name: "call_open",
-        arguments: { local_system: config.localSystem, local_id: config.localId, local_label: config.localLabel, member_name: memberId, member_system: config.memberSystem, purpose: `Approval Box ${decisionId} の答え` },
-      }) as ToolResult;
-      const open = payload(opened);
-      const sessionId = typeof open.session_id === "string" ? open.session_id : undefined;
-      if (opened.isError || !sessionId) {
-        // Bridgeが未開設・未送信を保証する一時切断だけを再試行する。
-        if (!sessionId && open.ok === false && open.code === "directory_link_down" && open.retryable === true && open.retry_after_seconds === 30 && open.session_created === false) {
-          return { state: "retry", retry_after_seconds: 30, detail: "directory_link_down" };
+      client = await connect();
+      if (!sessionId) {
+        const opened = await client.callTool({ name: "call_open", arguments: {
+          local_system: config.localSystem, local_id: config.localId, local_label: config.localLabel,
+          member_name: memberId, member_system: config.memberSystem, purpose: `Approval Box ${decisionId} の答え`,
+        } }) as ToolResult;
+        const open = payload(opened);
+        sessionId = typeof open.session_id === "string" ? open.session_id : undefined;
+        if (opened.isError || !sessionId) {
+          if (!sessionId && open.ok === false && open.code === "directory_link_down" && open.retryable === true && open.retry_after_seconds === 30 && open.session_created === false) {
+            return { state: "retry", retry_after_seconds: 30, detail: "directory_link_down" };
+          }
+          return { state: "failed", detail: "call_open rejected or session unavailable" };
         }
-        return { state: "failed", detail: `call_open: ${JSON.stringify(open).slice(0, 300)}` };
+        // この保存が失敗したら本文を送らない。再起動も新しいcall_sendへ戻さない。
+        progress?.save(sessionId);
+        sent = true;
+        const result = await client.callTool({ name: "call_send", arguments: { session_id: sessionId, from_party: "local", message: text, reply_required: false } }) as ToolResult;
+        const body = payload(result);
+        seq = Number.isSafeInteger(body.seq) && Number(body.seq) > 0 ? Number(body.seq) : undefined;
+        progress?.save(sessionId, seq);
+        const status = (body.delivery as { status?: string } | undefined)?.status;
+        if (!result.isError && status === "delivered") return { state: "delivered", detail: `call ${sessionId}: accepted` };
+        if (!result.isError && status === "error") return { state: "failed", detail: `call ${sessionId}: delivery error` };
+        return { state: progress ? "pending" : "unknown", detail: `call ${sessionId}: awaiting delivery receipt` };
       }
-      sent = true; // ここから先の失敗は、届いたか分からない
-      const result = await client.callTool({
-        name: "call_send",
-        arguments: { session_id: sessionId, from_party: "local", message: text, reply_required: false },
-      }) as ToolResult;
-      const body = payload(result);
-      const status = (body.delivery as { status?: string } | undefined)?.status;
-      try { await client.callTool({ name: "call_hangup", arguments: { session_id: sessionId, by_party: "local", reason: "Approval Boxの答えを届けた" } }); } catch { /* 閉じられなくても配送の結果は変わらない */ }
-      if (!result.isError && status === "delivered") return { state: "delivered", detail: `call ${sessionId}` };
-      if (status === "error" && !result.isError) return { state: "failed", detail: `call_send: ${JSON.stringify(body.delivery).slice(0, 300)}` };
-      return { state: "unknown", detail: `call_send: ${JSON.stringify(body.delivery ?? body).slice(0, 300)}` };
-    } catch (error) {
-      return { state: sent ? "unknown" : "failed", detail: (error as Error).message.slice(0, 300) };
-    } finally {
-      void client.close().catch(() => {});
-    }
+      const result = await client.callTool({ name: "call_info", arguments: { session_id: sessionId } }) as ToolResult;
+      const info = payload(result);
+      if (result.isError || !Array.isArray(info.grokbot_delivery)) return { state: "pending", detail: "call_info unavailable" };
+      const rows = info.grokbot_delivery as { seq?: number; state?: string }[];
+      // 専用の新規通話へ一度だけ送る。応答消失時も唯一のseq=1だけを採用する。
+      if (seq === undefined && rows.length === 1 && rows[0]?.seq === 1) {
+        seq = 1;
+        progress?.save(sessionId, seq);
+      }
+      const receipt = rows.find(r => seq !== undefined && r.seq === seq);
+      if (receipt?.state === "submitted") return { state: "delivered", detail: `call ${sessionId} seq ${seq}: gateway submitted` };
+      if (receipt?.state === "failed" || receipt?.state === "unknown") return { state: receipt.state, detail: `call ${sessionId} seq ${seq}: ${receipt.state}` };
+      return { state: "pending", detail: `call ${sessionId}: ${receipt?.state === "inflight" ? "inflight" : "awaiting receipt"}` };
+    } catch {
+      return { state: progress && sessionId ? "pending" : sent ? "unknown" : "failed", detail: "Bridge response unavailable; original message is not resent" };
+    } finally { await client?.close().catch(() => {}); }
   };
+  send.close = async sessionId => {
+    const client = await connect();
+    try {
+      const result = await client.callTool({ name: "call_hangup", arguments: { session_id: sessionId, by_party: "local", reason: "Approval Box delivery terminal state saved" } }) as ToolResult;
+      if (result.isError || payload(result).error || payload(result).ok === false) throw new Error("call_hangup rejected");
+    } finally { await client.close().catch(() => {}); }
+  };
+  return send;
 }
+
+type BridgeRow = { decision_id: string; session_id: string; seq: number | null; state: string; detail: string | null; closed: number };
 
 /** 指定した接続の答えを、サーバーが通話で届ける。 */
 export class CallBridgeDeliverer {
@@ -98,7 +129,9 @@ export class CallBridgeDeliverer {
     for (const id of this.connectionIds) {
       // 前回の送信の途中で止まったものは、届いたか分からない。送り直さない。
       const conn = this.connection(id);
-      if (conn) for (const decisionId of this.decisions.interruptedServerDeliveries(id)) this.decisions.reportDelivery(conn, decisionId, "unknown", "送信の途中でサーバーが止まりました");
+      if (conn) for (const decisionId of this.decisions.interruptedServerDeliveries(id)) {
+        if (!get(this.db, "select 1 from bridge_deliveries where decision_id = ?", decisionId)) this.decisions.reportDelivery(conn, decisionId, "unknown", "送信の途中でサーバーが止まりました");
+      }
       events.subscribeConnection(id, () => { void this.sync(); });
     }
   }
@@ -116,19 +149,52 @@ export class CallBridgeDeliverer {
         for (const id of this.connectionIds) {
           const conn = this.connection(id);
           if (!conn) continue;
+          const tracked = all<BridgeRow>(this.db, `select b.* from bridge_deliveries b join decisions d on d.id = b.decision_id where d.connection_id = ? and b.closed = 0`, id);
+          for (const row of tracked) {
+            if (row.state === "pending") await this.deliver(conn, row.decision_id, "", "", row);
+            else await this.close(row);
+          }
           for (const item of this.decisions.serverDeliveries(id)) {
             if (!this.decisions.markSending(item.decision_id)) continue;
-            const outcome = await this.send(item.route.channel_id, item.decision_id, `Approval Box ${item.decision_id}\n${item.text}`);
-            if (outcome.state === "retry") {
-              if (!this.decisions.deferServerDelivery(item.decision_id, outcome.retry_after_seconds)) {
-                this.decisions.reportDelivery(conn, item.decision_id, "failed", "directory_link_down: 回答後10分の再試行期限を超えました。get_decisionで取得してください");
-              }
-            } else this.decisions.reportDelivery(conn, item.decision_id, outcome.state, outcome.detail);
-            console.log(`callbridge ${item.decision_id} → ${item.route.channel_id.slice(0, 8)} ${outcome.state}${outcome.detail ? ` (${outcome.detail.slice(0, 120)})` : ""}`);
+            await this.deliver(conn, item.decision_id, item.route.channel_id, `Approval Box ${item.decision_id}\n${item.text}`);
           }
         }
       } while (this.again);
     })().catch((error) => { console.error("callbridge:", error); }).finally(() => { this.running = null; });
     return this.running;
   }
+
+  private async deliver(conn: { id: string; user_id: string; label: string; os: string | null }, id: string, member: string, text: string, previous?: BridgeRow) {
+    const outcome = await this.send(member, id, text, {
+      sessionId: previous?.session_id, seq: previous?.seq ?? undefined,
+      save: (sessionId, seq) => {
+        run(this.db, `insert into bridge_deliveries (decision_id, session_id, seq, state) values (?, ?, ?, 'pending')
+          on conflict(decision_id) do update set seq = coalesce(excluded.seq, bridge_deliveries.seq)`, id, sessionId, seq ?? null);
+      },
+    });
+    if (outcome.state === "pending") {
+      run(this.db, "update bridge_deliveries set detail = ? where decision_id = ?", outcome.detail ?? null, id);
+      return;
+    }
+    if (outcome.state === "retry") {
+      if (!this.decisions.deferServerDelivery(id, outcome.retry_after_seconds)) this.decisions.reportDelivery(conn, id, "failed", "directory_link_down: 回答後10分の再試行期限を超えました。get_decisionで取得してください");
+      return;
+    }
+    tx(this.db, () => {
+      run(this.db, "update bridge_deliveries set state = ?, detail = ? where decision_id = ?", outcome.state, outcome.detail ?? null, id);
+      this.decisions.reportDelivery(conn, id, outcome.state, outcome.detail);
+    });
+    const row = get<BridgeRow>(this.db, "select * from bridge_deliveries where decision_id = ?", id);
+    if (row) await this.close(row);
+    console.log(`callbridge ${id} ${outcome.state}`);
+  }
+
+  private async close(row: BridgeRow) {
+    if (!this.send.close) return;
+    try {
+      await this.send.close(row.session_id);
+      run(this.db, "update bridge_deliveries set closed = 1 where decision_id = ?", row.decision_id);
+    } catch { /* 確定結果は保持し、次回はcloseだけ再試行する。 */ }
+  }
+
 }
