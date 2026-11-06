@@ -36,3 +36,6 @@ Bridgeの`queued`は保存完了であり、配達前に`call_hangup`すると�
 call_open応答が消えてsession不明の場合は再送しない。call_send応答が消え、公開metadataでseqを一意に特定できない場合は同sessionを保持し照会を続ける。期限で元本文を再送/通話取消しないため、receiptが永久に現れない場合は自動完了しない。元会話の明示get_decisionで保存回答を取得できる。複数serverの同時稼働は既存の単一worker構成を前提とし、本修理で分散claimを追加しない。
 
 非秘密検証原本: ナユタの `docs/approval-box/grokbot-delivery-20261102/`、Bridge調査契約正本: リターの `docs/approval-box-delivery-20261102.md`。責任境界と本番条件は各担当の既手順を維持する。
+# 全体の機能とデータフロー
+
+[現用製品の全体図](../README.md)と[保存・実行環境](../storage-lifecycle.md)から、この配送詳細へ辿る。
