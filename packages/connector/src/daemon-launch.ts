@@ -1,12 +1,35 @@
 import { spawn, spawnSync } from "node:child_process";
-import { appendFileSync, closeSync, openSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { home } from "./profile.ts";
+
+/** import失敗も含め、両OSの常駐ログを直近1MiBの一個に保つ。 */
+export function daemonBootstrap(entry: string, cwd: string, environment: NodeJS.ProcessEnv = {}) {
+  return `Object.assign(process.env,${JSON.stringify(environment)});
+const fs=require('node:fs'),file=${JSON.stringify(join(cwd, "daemon.log"))},fallback=process.stderr.write.bind(process.stderr);
+process.stderr.write=(chunk,encoding,callback)=>{
+  try {
+    const limit=1024*1024,next=Buffer.from(chunk,typeof encoding==='string'?encoding:undefined).subarray(-limit);
+    const fd=fs.openSync(file,fs.constants.O_CREAT|fs.constants.O_RDWR,0o600);
+    try {
+      const size=fs.fstatSync(fd).size,keep=Math.min(size,limit-next.length),data=Buffer.alloc(keep+next.length);
+      const read=keep?fs.readSync(fd,data,0,keep,size-keep):0;
+      next.copy(data,read);
+      fs.writeFileSync(fd,data.subarray(0,read+next.length));
+      fs.ftruncateSync(fd,read+next.length);
+    } finally { fs.closeSync(fd); }
+  } catch { try { fallback('approval-box: daemon log write failed\\n'); } catch {} }
+  if(typeof encoding==='function')encoding();else if(typeof callback==='function')callback();
+  return true;
+};
+process.argv=[process.execPath,${JSON.stringify(entry)},'daemon'];
+import(require('node:url').pathToFileURL(${JSON.stringify(entry)}).href).catch(error=>{process.stderr.write(String(error)+'\\n');process.exit(1);});`;
+}
 
 /** CIMの子はSSHセッションのJobに所属させず、状態とCLI探索に必要な環境だけ渡す。 */
 export function windowsDaemonLaunchScript(executable: string, entry: string, cwd: string, environment: NodeJS.ProcessEnv) {
   const env = Object.fromEntries(["APPROVAL_BOX_HOME", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "PATH", "CODEX_HOME", "GROK_HOME", "CODEX_BIN"].flatMap(key => environment[key] === undefined ? [] : [[key, environment[key]]]));
-  const bootstrap = `Object.assign(process.env,${JSON.stringify(env)});const fs=require('node:fs');process.stderr.write=(text)=>{fs.appendFileSync(${JSON.stringify(join(cwd, "daemon.log"))},text);return true;};process.argv=[process.execPath,${JSON.stringify(entry)},'daemon'];import(require('node:url').pathToFileURL(${JSON.stringify(entry)}).href).catch(error=>{process.stderr.write(String(error)+'\\n');process.exit(1);});`;
+  const bootstrap = daemonBootstrap(entry, cwd, env);
   // 引数に埋め込むJSはbase64にし、ユーザーのpathをshellとして解釈させない。
   const command = `"${executable}" -e "eval(Buffer.from('${Buffer.from(bootstrap).toString("base64")}','base64').toString())"`;
   const literal = (s: string) => `'${s.replaceAll("'", "''")}'`;
@@ -23,16 +46,12 @@ export function launchDaemon(executable: string, entry: string, cwd: string) {
     return;
   }
   const file = join(cwd, "daemon.log");
-  const log = openSync(file, "a", 0o600);
-  try {
-    const child = spawn(executable, [entry, "daemon"], { cwd, detached: true, stdio: ["ignore", "ignore", log], windowsHide: true });
-    // 起動先が無い時、spawnは後から error を出す。受け手が無いと、呼び出した側のprocess（会話のMCP）ごと落ちる。名前を付けて記録する。
-    child.on("error", error => {
-      const line = `approval-box: 配送デーモンを起動できません（DAEMON_LAUNCH_FAILED）: ${executable}: ${error.message}\n`;
-      try { appendFileSync(file, `${new Date().toISOString()} ${line}`, { mode: 0o600 }); } catch { /* 記録先が無くても、下のstderrへは出す */ }
-      process.stderr.write(line);
-    });
-    child.unref();
-  }
-  finally { closeSync(log); }
+  const child = spawn(executable, ["-e", daemonBootstrap(entry, cwd)], { cwd, detached: true, stdio: "ignore", windowsHide: true });
+  // 起動先が無い時、spawnは後から error を出す。受け手が無いと、呼び出した側のprocess（会話のMCP）ごと落ちる。名前を付けて記録する。
+  child.on("error", error => {
+    const line = `approval-box: 配送デーモンを起動できません（DAEMON_LAUNCH_FAILED）: ${executable}: ${error.message}\n`;
+    try { writeFileSync(file, Buffer.from(`${new Date().toISOString()} ${line}`).subarray(-1024 * 1024), { mode: 0o600 }); } catch { /* 記録先が無くても、下のstderrへは出す */ }
+    process.stderr.write(line);
+  });
+  child.unref();
 }
