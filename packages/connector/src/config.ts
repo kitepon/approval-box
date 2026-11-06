@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { home } from "./profile.ts";
 
@@ -21,8 +21,14 @@ export function requireConfig(): Config & { token: string } {
 export function writeJsonFile(file: string, value: unknown) {
   mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
   const temp = `${file}.${process.pid}.tmp`;
-  writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-  renameSync(temp, file);
+  try {
+    writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+    renameSync(temp, file);
+  } catch (error) {
+    try { rmSync(temp, { force: true }); }
+    catch { process.stderr.write("approval-box: 保存に失敗した一時ファイルを回収できませんでした。\n"); }
+    throw error;
+  }
 }
 
 export function writeConfig(config: Config) {
