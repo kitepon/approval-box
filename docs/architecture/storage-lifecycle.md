@@ -14,13 +14,15 @@ fileのopen/read/write/truncate失敗は元stderrへの短いbest effort通知�
 
 ## 生成・保存・複製と回収
 
-### 設定とjournalの一時ファイル（0.1.29の実装前設計）
+### 設定とjournalの一時ファイル（0.1.30の実装前設計）
 
 foxの標準setupで、通常fileの.claude.jsonへのrenameがEPERMとなり、writeJsonFileの専有.pid.tmpが残った。targetはArchive/readOnly=falseだが、Claudeだけの限定再試行も拒否された。OS側の原因は未特定で、保護変更やin-place上書きで迂回しない。config.ts writeJsonFileはharness設定・接続config・MCP親表・daemon lock/journalの共通writer。JSON→同directoryの.pid.tmp→rename確定、readerは各正規fileである。
 
-writeまたはrenameが例外で終わった場合に、自分のその一時fileだけを回収し、元の例外をそのまま呼出元へ返す。回収自体が失敗した場合は短い診断を残し、元の保存失敗を隠さない。他PIDのtemp・正規file・唯一のjournalを消さず、書込みの再試行や配送の再送を追加しない。SIGKILL等でcatchが走らない場合は残るため、結果不明の古いtempを一括GCせず個別の保全確認を要する。
+0.1.29の共通writer一律回収を狭める。一度だけ受け取るconnection tokenと、結果不明のjournal/親表の唯一の新状態は復旧に必要なので、writeJsonFileの既定は従来のtemp保全へ戻す。harness.tsのsetMcpJson・setCursorPermissions・setCursorContextだけが、旧正規設定と登録入力から再生成できる設定としてdiscardTemporaryOnErrorを明示する。
 
-一時ファイル回収はlogのbest effort動作と異なり、正規状態の保存失敗を成功へ変えない。通常成功の一個の正規file、rename失敗時の旧対象保持/元エラー/専有temp0を直接試験する。
+この三callerでwriteまたはrenameが例外で終わった場合に、自分のその一時fileだけを回収し、元の例外をそのまま呼出元へ返す。回収自体が失敗した場合は短い診断を残し、元の保存失敗を隠さない。他PIDのtemp・正規file・唯一のjournalを消さず、書込みの再試行や配送の再送を追加しない。SIGKILL等でcatchが走らない場合は残るため、結果不明の古いtempを一括GCせず個別の保全確認を要する。
+
+一時ファイル回収はlogのbest effort動作と異なり、正規状態の保存失敗を成功へ変えない。通常成功の一個の正規file、再生成設定のrename失敗時の旧対象保持/元エラー/専有temp0、既定の資格・不明状態のtemp保全を直接試験する。
 
 | 入口/生成元 | 保存・reader | 正常終了 | 異常/不明と次入口 |
 | --- | --- | --- | --- |
