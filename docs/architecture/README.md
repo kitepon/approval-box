@@ -17,7 +17,7 @@
 
 ## 90066748から501c880への対応
 
-差分の機能変更は8895ff8（schema9→10、Bridge session/seq/終端/closed journalと同通話追跡）。fbf78a5はshutdown試験でtimeout時のreader取消を行う試験変更。全体の他責務/公開窓口は同じで、PR15の構造整理は含まない。今回の変更範囲は常駐ログwriterと対応試験・版metadataだけ。
+差分の機能変更は8895ff8（schema9→10、Bridge session/seq/終端/closed journalと同通話追跡）。fbf78a5はshutdown試験でtimeout時のreader取消を行う試験変更。全体の他責務/公開窓口は同じで、PR15の構造整理は含まない。容量是正は常駐ログwriter、harnessの再生成できる登録設定の失敗temp回収、対応試験・版metadataを変更する。資格・結果不明の状態は共通writerの既定でtempを保全する。詳細は[保存図](storage-lifecycle.md)を参照する。
 
 ## データフローと状態の所有
 

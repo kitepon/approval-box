@@ -70,7 +70,7 @@ function setCursorPermissions(enable: boolean) {
   const ours = new Set(CURSOR_TOOLS.map((tool) => `Mcp(${MCP_SERVER}:${tool})`));
   const allow = (permissions.allow ?? []).filter((rule) => !ours.has(rule));
   if (enable) allow.push(...ours);
-  writeJsonFile(file, { ...current, permissions: { ...permissions, allow, deny: permissions.deny ?? [] } });
+  writeJsonFile(file, { ...current, permissions: { ...permissions, allow, deny: permissions.deny ?? [] } }, { discardTemporaryOnError: true });
 }
 
 /**
@@ -89,7 +89,7 @@ function setCursorContext(enable: boolean) {
   const rest = (hooks.sessionStart ?? []).filter((entry) => !ours(entry));
   if (enable) rest.push({ command: `${steer.cursorParentHookCommand({ command: stableNode(), script: runtimeEntry("cli") })} ${CURSOR_CONTEXT}`, timeout: 10 });
   if (rest.length) hooks.sessionStart = rest; else delete hooks.sessionStart;
-  writeJsonFile(target, { version: 1, ...current, hooks });
+  writeJsonFile(target, { version: 1, ...current, hooks }, { discardTemporaryOnError: true });
 }
 export const cursorContextRegistered = () => JSON.stringify(readJson(join(cursorDir(), "hooks.json")).hooks ?? {}).includes(` ${CURSOR_CONTEXT}"`);
 
@@ -111,7 +111,7 @@ function setMcpJson(file: string, value: Record<string, unknown> | null) {
   const servers = { ...((current.mcpServers as Record<string, unknown> | undefined) ?? {}) };
   if (value) servers[MCP_SERVER] = value;
   else delete servers[MCP_SERVER];
-  writeJsonFile(file, { ...current, mcpServers: servers });
+  writeJsonFile(file, { ...current, mcpServers: servers }, { discardTemporaryOnError: true });
 }
 
 async function withCodexConfig<T>(fn: (request: (method: string, params: unknown) => Promise<any>) => Promise<T>) {

@@ -18,15 +18,18 @@ export function requireConfig(): Config & { token: string } {
   return config as Config & { token: string };
 }
 
-export function writeJsonFile(file: string, value: unknown) {
+export function writeJsonFile(file: string, value: unknown, options: { discardTemporaryOnError?: boolean } = {}) {
   mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
   const temp = `${file}.${process.pid}.tmp`;
   try {
     writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
     renameSync(temp, file);
   } catch (error) {
-    try { rmSync(temp, { force: true }); }
-    catch { process.stderr.write("approval-box: 保存に失敗した一時ファイルを回収できませんでした。\n"); }
+    // 一度だけ取得する資格や結果不明のjournalは、復旧用tempを残す。
+    if (options.discardTemporaryOnError) {
+      try { rmSync(temp, { force: true }); }
+      catch { process.stderr.write("approval-box: 保存に失敗した一時ファイルを回収できませんでした。\n"); }
+    }
     throw error;
   }
 }
