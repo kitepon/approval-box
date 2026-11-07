@@ -102,6 +102,30 @@ From 0.1.31 the daemon decides from the receiver, every 2 seconds, for each `que
 
 The server marks the delivery `unknown`, the app shows the answer as not received, and the AI gets the answer with `list_my_decisions` / `resume_decision` in its next conversation (the documented path for a conversation with a new `session_id`). Nothing is resent.
 
-Not covered: Cursor and background channels (Grok) have no bound process; they keep waiting as before (two Grok deliveries of 2026-11-07 00:45 UTC are in that state on BellTeam). The waiter record is read from the shared module's state layout; it will move to an exported function when the module offers one.
+Not covered in 0.1.31: Cursor and background channels (Grok) have no bound process; they kept waiting as before. Background channels are covered from 0.1.32 (next section). The waiter record is read from the shared module's state layout; it will move to an exported function when the module offers one.
 
 Scope: the daemon on macOS, Linux and Windows, Claude Code deliveries only. No server, app or Web API change.
+
+## Answers on a background channel with no receiver running (connector 0.1.32)
+
+Grok (and any client the MCP cannot bind to a conversation) gets its answers through a background channel: `request_decision` tells the AI to start the receive process (`approval-box-receive.mjs --channel <id>`) in the background, the process claims the next answer from the channel inbox, prints it and exits, and the AI has to start the `next_wait_process` for the next answer. Nothing else emits from a background channel. Up to 0.1.31 the daemon did not look at that process: an answer that arrived while no receiver was running stayed in the inbox, the journal entry stayed `queued`, and the server kept `delivery=waiting` with no error. Observed on BellTeam: K-7T8TZ2 and K-YF7BB8 (requested 2026-11-06 23:06 UTC from a Grok session, answered 00:45 and 00:46 UTC, no claim for 12 hours until the AI fetched them by hand with `resume_decision`), and K-7USNQ6 (2026-10-29: the receiver had just emitted another answer 39 seconds earlier and was not restarted; the body waited 9 days).
+
+From 0.1.32:
+
+- The receive entry writes `state/background-receivers/<channel_id>.json` (pid plus process start identity) before it starts waiting. The latest receiver of a channel overwrites the record.
+- For a `queued` delivery on a channel of kind `background`, the daemon's receiver check is: the recorded receiver process is running → `present`; no record, unreadable record, or process gone → `gone`. The same 5-minute grace and the same withdraw-then-`failed` report as for Claude apply, with the detail "the background receive process is not running". `closed.json` still ends it at once.
+- Cursor channels are unchanged (their hooks claim pending answers when the conversation runs).
+
+The server marks the delivery `unknown`, the app shows the answer as not received, and the AI gets the answer with `list_my_decisions` / `resume_decision`. Nothing is resent. A receiver started within 5 minutes of the answer still claims it (the hard-link claim and the daemon's withdraw cannot both succeed).
+
+Not covered: a Grok conversation hosted by Aiterm has no delivery path other than this receiver. Aiterm's parent delivery (`aiterm-parent-delivery`) accepts only Codex parents; a Grok parent would need that command and the shared module to grow a Grok target (owner of the shared module). Until then a Grok AI that lets its receiver end gets the answer only by fetching it.
+
+Scope: the daemon and the receive entry on macOS, Linux and Windows. No server, app or Web API change.
+
+## Replacing a settings file that another program holds open on Windows (connector 0.1.32)
+
+`setup` writes each settings file by writing a temporary file next to it and renaming it over the target. On Windows the rename is refused with `EPERM` (or `EACCES`/`EBUSY`) while another program has the target open without delete sharing: Claude Code rewriting `.claude.json`, an antivirus scanning it. On the machine `fox` the Claude Code registration failed this way on every `setup` from 0.1.28 to 0.1.31 (`rename '.claude.json.<pid>.tmp' -> '.claude.json'`), while the Codex, Cursor and Grok files were written. The file's ACL and attributes were normal (checked by the host's owner on 2026-11-07).
+
+From 0.1.32 `writeJsonFile` retries the rename on Windows for those three codes, 30 attempts with a growing pause (about 46 seconds in total), like graceful-fs does. Other errors and other platforms are not retried. When the retries run out, the original error is thrown with a note that another program holds the target. The temporary-file handling (keep for credentials and unknown journals, discard for regenerable settings) is unchanged.
+
+Not covered: a program that keeps the file open for longer than the retries (then the message names the file and `setup` is run again after closing it).

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import * as steer from "aiterm-steer-delivery";
 import { type Entry, abandoned, daemonNode, receiverOf, shouldReplaceDaemon, versionOfEntry } from "../src/daemon.ts";
 import { writeJsonFile } from "../src/config.ts";
+import { recordBackgroundReceiver } from "../src/background-receiver.ts";
 import { PROFILE } from "../src/profile.ts";
 
 const entry = (version: string) => `/home/u/.approval-box/runtime/${version}/cli.mjs`;
@@ -58,8 +59,16 @@ test("受け口の有無: 閉じた印、結んだprocess、起動し直した�
   assert.equal(receiverOf(channel.channel_id, profile, running), "present");
   steer.closeChannel(profile, channel.channel_id);
   assert.equal(receiverOf(channel.channel_id, profile, running), "closed");
-  // 背景channel（Grok等）は結んだprocessが無いので、今までどおり待つ。読めないchannelでも諦めない。
-  assert.equal(receiverOf(steer.openChannel(profile, null).channel_id, profile, running), "present");
+  // 背景channel（Grok等）は、AIが背景で起こした受信processが居る間だけ出せる。2026-11-07 K-7T8TZ2/K-YF7BB8 は受信が居ないまま12時間待った。
+  const background = steer.openChannel(profile, null).channel_id;
+  assert.equal(receiverOf(background, profile, running), "gone");
+  assert.equal(recordBackgroundReceiver(background, profile, 999, "r"), true);
+  assert.equal(receiverOf(background, profile, running), "gone");
+  alive.add("999:r");
+  assert.equal(receiverOf(background, profile, running), "present");
+  assert.equal(recordBackgroundReceiver(background, profile, 1000, undefined), false);
+  assert.equal(receiverOf(background, profile, running), "present");
+  // 読めないchannelでも諦めない。
   assert.equal(receiverOf(randomUUID(), profile, running), "present");
 });
 

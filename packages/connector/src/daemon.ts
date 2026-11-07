@@ -8,6 +8,7 @@ import { type AttachmentMeta, pruneAttachments, saveAll } from "./attachments.ts
 import { readConfig, requireConfig, writeJsonFile } from "./config.ts";
 import { PROFILE, stateRoot } from "./profile.ts";
 import { runtimeEntry } from "./runtime.ts";
+import { backgroundReceiverRunning } from "./background-receiver.ts";
 
 type Delivery = { decision_id: string; delivery_id: string; route: { channel_id: string; harness: string }; text: string; attachments?: AttachmentMeta[] };
 export type Entry = {
@@ -21,7 +22,7 @@ type Journal = Record<string, Entry>;
 const lockFile = () => join(stateRoot(), "daemon.json");
 const journalFile = () => join(stateRoot(), "deliveries.json");
 const IDLE_EXIT_MS = 30 * 60_000;
-/** 結んだprocessが消えてから、起動し直した同じ会話の待機を待つ時間。 */
+/** 結んだprocess（背景channelでは受信process）が消えてから、起動し直しを待つ時間。 */
 const ORPHAN_GRACE_MS = 5 * 60_000;
 
 function alive(pid: number) {
@@ -71,11 +72,15 @@ export type Receiver = "present" | "closed" | "gone";
  * 結んだprocessも、同じ会話の待機（起動し直した会話のhook）も居なければ、誰も出せない。
  */
 export function receiverOf(channelId: string, profile = PROFILE, running: (pid: number, startedIdentity: string) => boolean = steer.processIsRunning): Receiver {
-  let claude;
+  let channel;
   try {
     if (steer.channelClosed(profile, channelId)) return "closed";
-    claude = steer.readChannel(profile, channelId).claude;
+    channel = steer.readChannel(profile, channelId);
   } catch { return "present"; } // 読めない時は諦めない。記録が無い配送は safeState が先に failed にする
+  // 背景channel（Grok等）は、AIが背景で起こした受信processだけが本文を出せる。受信は一通出すと終わり、起こし直すのはAI。
+  // 受信が居ない間に届いた本文は受信箱に残り、サーバーは配送待ちのまま止まっていた（2026-11-07 K-7T8TZ2/K-YF7BB8、2026-10-29 K-7USNQ6）。
+  if (channel.kind === "background") return backgroundReceiverRunning(channelId, profile, running) ? "present" : "gone";
+  const claude = channel.claude;
   if (!claude || running(claude.parent_pid, claude.parent_started_identity)) return "present";
   // shortcut: 待機の記録（claude-sessions/<会話>/waiter.json）は aiterm-steer-delivery の内部配置を読む。公開の口ができたら置き換える。
   try {
@@ -190,7 +195,7 @@ export async function runDaemon() {
         if (!giveUp) continue;
         // 遅れて起動し直した会話が二重に受け取らないよう、未取得の本文を取り下げる。取られていたら次の確認で emitted/unknown を追う。
         if (!steer.withdrawFromChannel(PROFILE, entry.channel_id, entry.delivery_id)) continue;
-        Object.assign(entry, { state: "report", result: "failed", detail: "申請を出したAIの会話が終わっています" });
+        Object.assign(entry, { state: "report", result: "failed", detail: entry.harness === "claude" ? "申請を出したAIの会話が終わっています" : "答えを受け取る背景の受信processが動いていません" });
       }
       else continue;
       save();
