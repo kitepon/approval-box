@@ -89,3 +89,19 @@ Not covered: an MCP process that was started before 0.1.25 was installed keeps i
 The paths written to settings (`setup`) already used the Homebrew `opt` path (`setupNodeExecutable`) and are unchanged. On machines without Homebrew Node the values are the same as before.
 
 Scope: the connector on macOS, Linux and Windows. The value changes only on machines where Node is installed by Homebrew. No server, app or Web API change.
+
+## Answers to a conversation whose Claude Code process ended without SessionEnd (connector 0.1.31)
+
+The daemon follows a `queued` Claude delivery until the hook of that conversation emits it or the channel is closed. Up to 0.1.30 "closed" meant only the `closed.json` mark that the `SessionEnd` hook writes. When the Claude Code process ends without running that hook (Aiterm starts the next conversation in a new process and ends the old one, a crash, a reboot), the mark is never written: the body stays in the inbox, the journal entry stays `queued`, and the server keeps `delivery=waiting` with no error. Observed on BellTeam on 2026-11-07 (K-CNYUNZ: answered 11:29:18 UTC, the applicant's process had ended before, nobody waited; the AI fetched it by hand at 11:46) and on 2026-10-24 (two deliveries still `queued` two weeks later). On the BellTeam device 65 of 612 channels ever received the mark.
+
+From 0.1.31 the daemon decides from the receiver, every 2 seconds, for each `queued` Claude delivery:
+
+- `closed`: the `closed.json` mark exists. Give up at once (as before).
+- `present`: the process the channel is bound to (pid plus start time) is running, or a waiter of the same `session_id` (`claude-sessions/<session_id>/waiter.json`, the hook of a restarted Claude Code that resumed the conversation) is running. Keep waiting.
+- `gone`: neither is running. Remember the first time this was seen (`orphaned_at` in the journal). After 5 minutes without a receiver, withdraw the unclaimed body from the inbox (so a late restart cannot receive it twice) and report `failed` with "the AI's conversation has ended". If the body was claimed meanwhile, follow it as emitted or unknown as before. When a receiver returns within the 5 minutes, the count restarts.
+
+The server marks the delivery `unknown`, the app shows the answer as not received, and the AI gets the answer with `list_my_decisions` / `resume_decision` in its next conversation (the documented path for a conversation with a new `session_id`). Nothing is resent.
+
+Not covered: Cursor and background channels (Grok) have no bound process; they keep waiting as before (two Grok deliveries of 2026-11-07 00:45 UTC are in that state on BellTeam). The waiter record is read from the shared module's state layout; it will move to an exported function when the module offers one.
+
+Scope: the daemon on macOS, Linux and Windows, Claude Code deliveries only. No server, app or Web API change.

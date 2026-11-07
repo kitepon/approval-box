@@ -10,15 +10,19 @@ import { PROFILE, stateRoot } from "./profile.ts";
 import { runtimeEntry } from "./runtime.ts";
 
 type Delivery = { decision_id: string; delivery_id: string; route: { channel_id: string; harness: string }; text: string; attachments?: AttachmentMeta[] };
-type Entry = {
+export type Entry = {
   delivery_id: string; channel_id: string; harness: string;
   state: "sending" | "queued" | "report"; result?: "delivered" | "unknown" | "failed"; detail?: string; at: string;
+  /** 受け口が居ないと初めて見た時刻。戻れば消す。 */
+  orphaned_at?: string;
 };
 type Journal = Record<string, Entry>;
 
 const lockFile = () => join(stateRoot(), "daemon.json");
 const journalFile = () => join(stateRoot(), "deliveries.json");
 const IDLE_EXIT_MS = 30 * 60_000;
+/** 結んだprocessが消えてから、起動し直した同じ会話の待機を待つ時間。 */
+const ORPHAN_GRACE_MS = 5 * 60_000;
 
 function alive(pid: number) {
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; }
@@ -57,6 +61,36 @@ export function shouldReplaceDaemon(runningEntry: string | undefined, myEntry: s
  */
 export function daemonNode(executable: string = process.execPath, exists: (file: string) => boolean = existsSync): string {
   return steer.liveNodeExecutable(executable, exists);
+}
+
+export type Receiver = "present" | "closed" | "gone";
+
+/**
+ * channelの本文を出せる受け口が居るか。閉じた印（SessionEnd hook）は確定。Claude Codeのprocessが印を書かずに終わると
+ * （Aitermの会話替え、強制終了、再起動）印は付かず、本文は受信箱に残り、サーバーは配送待ちのまま止まっていた（2026-11-07 K-CNYUNZ、2026-10-24の2件）。
+ * 結んだprocessも、同じ会話の待機（起動し直した会話のhook）も居なければ、誰も出せない。
+ */
+export function receiverOf(channelId: string, profile = PROFILE, running: (pid: number, startedIdentity: string) => boolean = steer.processIsRunning): Receiver {
+  let claude;
+  try {
+    if (steer.channelClosed(profile, channelId)) return "closed";
+    claude = steer.readChannel(profile, channelId).claude;
+  } catch { return "present"; } // 読めない時は諦めない。記録が無い配送は safeState が先に failed にする
+  if (!claude || running(claude.parent_pid, claude.parent_started_identity)) return "present";
+  // shortcut: 待機の記録（claude-sessions/<会話>/waiter.json）は aiterm-steer-delivery の内部配置を読む。公開の口ができたら置き換える。
+  try {
+    const waiter = JSON.parse(readFileSync(join(steer.channelRoot(profile), "claude-sessions", claude.session_id, "waiter.json"), "utf8")) as { pid?: unknown; started_identity?: unknown };
+    if (typeof waiter.pid === "number" && typeof waiter.started_identity === "string" && running(waiter.pid, waiter.started_identity)) return "present";
+  } catch { /* 待機の記録が無い */ }
+  return "gone";
+}
+
+/** 受け口が居ない本文を諦めるか。閉じた印は即。processが消えただけなら、起動し直しを ORPHAN_GRACE_MS の間だけ待つ。 */
+export function abandoned(entry: Entry, receiver: Receiver, now = Date.now()): boolean {
+  if (receiver === "present") { delete entry.orphaned_at; return false; }
+  if (receiver === "closed") return true;
+  entry.orphaned_at ??= new Date(now).toISOString();
+  return now - Date.parse(entry.orphaned_at) >= ORPHAN_GRACE_MS;
 }
 
 /** 配送デーモンが動いていなければ起動する。利用者ごとに1つ。 */
@@ -149,7 +183,15 @@ export async function runDaemon() {
       if (current === "emitted") Object.assign(entry, { state: "report", result: "delivered" });
       else if (current === "unknown") Object.assign(entry, { state: "report", result: "unknown", detail: "受け口の出力を確かめられませんでした" });
       else if (current === null || current === "withdrawn") Object.assign(entry, { state: "report", result: "failed", detail: "配送の記録が見つかりません" });
-      else if (current === "queued" && steer.channelClosed(PROFILE, entry.channel_id)) Object.assign(entry, { state: "report", result: "failed", detail: "申請を出したAIの会話が終わっています" });
+      else if (current === "queued") {
+        const before = entry.orphaned_at;
+        const giveUp = abandoned(entry, receiverOf(entry.channel_id));
+        if (entry.orphaned_at !== before) save();
+        if (!giveUp) continue;
+        // 遅れて起動し直した会話が二重に受け取らないよう、未取得の本文を取り下げる。取られていたら次の確認で emitted/unknown を追う。
+        if (!steer.withdrawFromChannel(PROFILE, entry.channel_id, entry.delivery_id)) continue;
+        Object.assign(entry, { state: "report", result: "failed", detail: "申請を出したAIの会話が終わっています" });
+      }
       else continue;
       save();
       log(`配送 ${id} → ${entry.result}`);
