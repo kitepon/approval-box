@@ -135,8 +135,9 @@ async function setup() {
   else connection = await pair(server, targets);
   writeConfig({ server, token: connection.token, ...(connection.connection_id ? { connection_id: connection.connection_id } : {}), device_name: option("name") ?? hostname() });
   const api = new Api({ server, token: connection.token });
+  let existingClients: string[];
   try {
-    await api.call("GET", "/connection");
+    existingClients = (await api.call<{ clients: string[] }>("GET", "/connection")).clients;
   } catch (error) {
     if (error instanceof ServerError && error.code === "network" && !option("server") && server !== OFFICIAL_SERVER) {
       throw new Error(`${error.message}\n前に保存した接続先（${server}）を使いました。公式サーバーを使うなら: npx approval-box setup --server ${OFFICIAL_SERVER}`);
@@ -148,7 +149,8 @@ async function setup() {
   const { spawnSync } = await import("node:child_process");
   const result = spawnSync(process.execPath, [cli, "register", "--targets", targets.join(","), ...(instructions ? ["--instructions"] : [])], { stdio: "inherit" });
   if (result.status !== 0) throw new Error("AIへの登録に失敗しました。");
-  await api.call("PUT", "/connection/clients", { clients: targets.map((t) => CLIENT[t]), os: osName() });
+  const clients = targets.map((t) => CLIENT[t]);
+  await api.call("PUT", "/connection/clients", { clients: option("only") ? [...new Set([...existingClients, ...clients])] : clients, os: osName() });
   if (flag("no-test")) return;
   await waitForChecks(api, targets.map((t) => CLIENT[t]));
 }
