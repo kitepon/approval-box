@@ -51,9 +51,9 @@ test("Windowsの置き換え拒否（EPERM/EACCES/EBUSY）は短く待って繰�
   calls = 0;
   assert.throws(() => renameWithRetry("a", "b", flaky(1), false, () => assert.fail("waited")), /EPERM/);
   assert.equal(calls, 1);
-  // 繰り返しても断られ続けたら、元のエラーに相手が開いている旨を添えて伝える
+  // 繰り返しても拒否されたら、ロックと断定せず対象と失敗を伝える
   calls = 0; waits.length = 0;
-  assert.throws(() => renameWithRetry("a", "C:\\u\\.claude.json", flaky(99), true, ms => waits.push(ms)), (error: NodeJS.ErrnoException) => error.code === "EPERM" && error.message.includes(".claude.json を別のprogramが開いています"));
+  assert.throws(() => renameWithRetry("a", "C:\\u\\.claude.json", flaky(99), true, ms => waits.push(ms)), (error: NodeJS.ErrnoException) => error.code === "EPERM" && error.message.includes(".claude.json の置き換えが拒否されました"));
   assert.equal(calls, 30);
   assert.equal(waits.length, 29);
   // ENOENTのような別の失敗は繰り返さない

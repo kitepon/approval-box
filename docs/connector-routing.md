@@ -128,4 +128,6 @@ Scope: the daemon and the receive entry on macOS, Linux and Windows. No server, 
 
 From 0.1.32 `writeJsonFile` retries the rename on Windows for those three codes, 30 attempts with a growing pause (about 46 seconds in total), like graceful-fs does. Other errors and other platforms are not retried. When the retries run out, the original error is thrown with a note that another program holds the target. The temporary-file handling (keep for credentials and unknown journals, discard for regenerable settings) is unchanged.
 
+Version 0.1.33 corrects that diagnostic: a replacement denial does not prove a sharing lock. Windows Claude MCP registration/removal alone may use the [original-preserving direct save](architecture/storage-lifecycle.md#windows-claude-registration-under-rename-denial) after EPERM/EACCES retries. It requires the original snapshot to still match, saves a durable recovery copy, flushes and verifies the new bytes, and rolls back caught failures. Other clients and credentials/journals keep the original atomic-save contract. Hard interruption of a direct save can require the retained recovery copy; no ESET settings are changed.
+
 Not covered: a program that keeps the file open for longer than the retries (then the message names the file and `setup` is run again after closing it).

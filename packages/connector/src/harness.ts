@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
-import { writeJsonFile } from "./config.ts";
+import { writeJsonFile, writeJsonFileInPlace } from "./config.ts";
 import { hasInstructions, hasInstructionsInDir, managedElsewhere, removeInstructions, writeInstructions } from "./instructions.ts";
 import { MCP_SERVER, PROFILE } from "./profile.ts";
 import { runtimeEntry } from "./runtime.ts";
@@ -105,13 +105,20 @@ function backupOnce(file: string) {
   if (existsSync(file) && !existsSync(copy)) copyFileSync(file, copy);
 }
 
-function setMcpJson(file: string, value: Record<string, unknown> | null) {
+function setMcpJson(file: string, value: Record<string, unknown> | null, windowsInPlace = false) {
   backupOnce(file);
-  const current = readJson(file);
+  const original = existsSync(file) ? readFileSync(file, "utf8") : null;
+  const current = original === null ? {} : JSON.parse(original.replace(/^\uFEFF/, "")) as Record<string, unknown>;
   const servers = { ...((current.mcpServers as Record<string, unknown> | undefined) ?? {}) };
   if (value) servers[MCP_SERVER] = value;
   else delete servers[MCP_SERVER];
-  writeJsonFile(file, { ...current, mcpServers: servers }, { discardTemporaryOnError: true });
+  const next = { ...current, mcpServers: servers };
+  try { writeJsonFile(file, next, { discardTemporaryOnError: true }); }
+  catch (error) {
+    const failure = error as NodeJS.ErrnoException;
+    if (!windowsInPlace || process.platform !== "win32" || failure.syscall !== "rename" || !["EPERM", "EACCES"].includes(failure.code ?? "")) throw error;
+    writeJsonFileInPlace(file, next, original);
+  }
 }
 
 async function withCodexConfig<T>(fn: (request: (method: string, params: unknown) => Promise<any>) => Promise<T>) {
@@ -136,7 +143,7 @@ async function registerTools(target: Target, options: { instructions?: boolean }
   const hook = (kind: "claude" | "cursor") => ({ command: stableNode(), script: runtimeEntry(kind) });
   try {
     if (target === "claude") {
-      setMcpJson(claudeJson(), { type: "stdio", ...registration() });
+      setMcpJson(claudeJson(), { type: "stdio", ...registration() }, true);
       steer.mergeClaudeParentHooks(PROFILE, join(claudeDir(), "settings.json"), hook("claude"));
       return { target, status: "registered" };
     }
@@ -175,7 +182,7 @@ export async function unregister(target: Target): Promise<RegisterResult> {
     const file = instructionsFileOf(target);
     if (file) removeInstructions(file);
     if (target === "claude") {
-      if (existsSync(claudeJson())) setMcpJson(claudeJson(), null);
+      if (existsSync(claudeJson())) setMcpJson(claudeJson(), null, true);
       steer.removeClaudeParentHooks(PROFILE, join(claudeDir(), "settings.json"));
     } else if (target === "cursor") {
       if (existsSync(join(cursorDir(), "mcp.json"))) setMcpJson(join(cursorDir(), "mcp.json"), null);

@@ -37,3 +37,17 @@ foxの標準setupで、通常fileの.claude.jsonへのrenameがEPERMとなり、
 | 専有検証scratch | 署名archive/source/lock→展開tree・依存/cache→結果原本 | worker終端・未参照・必要証拠確定後、生成物だけ回収 | active/未完/ignored固有物/refを守る。旧実験は再開せず次入口で同じ終了条件を適用 |
 
 当席専用の配備・保持helperの正本は `/srv/bellteam/bots/bot-4366a50b/docs/approval-box/storage-lifecycle-20261106.md` とそこから辿る既配備手順。製品repoへ別コピーを作らない。
+
+## Windows Claude registration under rename denial
+
+Owner selected product handling on 2026-11-08. Diesel established that ESET browser enhanced data protection denies the rename-target directory open for ancestors of protected browser profiles, including the default `.claude.json` directory. Earlier unknown-cause/no-in-place text above is historical. No protection setting changes are part of this repair.
+
+| Function / caller | Input → output / owned state | Failure / recovery |
+| --- | --- | --- |
+| harness.setMcpJson (Claude register/unregister only) | Snapshot original UTF-8 JSON → merge only this product's MCP entry → normal writeJsonFile | Windows EPERM/EACCES after existing bounded rename retries permits writeJsonFileInPlace with the original snapshot. Cursor and other shared-writer callers keep atomic replacement only. |
+| config.writeJsonFileInPlace | Prepared JSON + expected original (or absent) → same file handle, positional writes → fsync → truncate → fsync → readback | Open existing r+ without truncation; reject a changed original/path identity before any write. A new file uses exclusive wx. Save an exclusive UUID recovery copy of the exact existing bytes, mode0600, fsynced before modifying the target. |
+| Error rollback / cleanup | Original bytes + same open handle → restore + fsync + truncate + fsync | A write/readback failure restores the original through the same handle, or removes only the newly created file. If rollback fails, preserve the recovery copy and report its path without content. Success or successful rollback removes its own recovery copy; normal temporary-file policy is unchanged. |
+
+Data flow: setup/uninstall → Claude original snapshot → merge MCP entry → prepared sibling temp → bounded rename → success, or Windows permission denial → compare current original/path identity → durable original recovery copy → overwrite existing descriptor without an initial truncate → flush/truncate/flush → exact readback → remove own recovery copy. A snapshot conflict leaves the current file untouched; the next normal setup reads the new state and can finish without any protection change. This conflict protects another program's settings, not an unknown-state lock.
+
+This fallback is not atomic and cannot lock out a foreign writer. A hard interruption during the direct write can require restoring the surviving UUID recovery copy; do not automatically discard these copies or overwrite a subsequently changed config. Caught write failures roll back immediately. The shared credential/parent/receiver/daemon journals never enter this weaker save path. No fallback to direct writing on EBUSY, other errors, or other platforms is introduced.
