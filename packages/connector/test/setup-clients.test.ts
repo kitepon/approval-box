@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +9,8 @@ import { test } from "node:test";
 import { buildSync } from "esbuild";
 
 test("partial standard setup keeps the other clients in the server registration", { timeout: 30_000 }, async t => {
-  const root = mkdtempSync(join(tmpdir(), "ab-setup-clients-"));
+  // macOS tmpdir is /var → /private/var; the CLI derives its runtime entry from the real path, so the fake daemon entry must match it.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "ab-setup-clients-")));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const version = "0.0.0-test", product = join(root, "product"), claude = join(root, "claude");
   mkdirSync(claude);
