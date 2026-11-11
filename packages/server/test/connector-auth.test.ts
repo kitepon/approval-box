@@ -14,6 +14,32 @@ function setup() {
   return { db, accounts, app };
 }
 
+test("sessionと接続tokenを区別し、未知APIへstatic HTMLを返さない", async t => {
+  const { db, accounts } = setup();
+  t.after(() => db.close());
+  const events = new EventHub(db);
+  const app = createApp({ db, accounts, events, decisions: new Decisions(db, events), publicUrl: "https://kb.test" },
+    { staticHandler: c => c.html("<main>app</main>") });
+  const user = accounts.createUser();
+  const { session } = accounts.issueSession(user, "test");
+  const { token } = accounts.createConnection(user, "test", "linux", ["codex"]);
+  for (const [path, bearer, status] of [
+    ["/v1/me", token, 401], ["/connector/v1/connection", session, 401],
+    ["/v1/unknown", session, 404], ["/connector/v1/unknown", token, 404],
+    ["/v1/unknown", "", 401], ["/connector/v1/unknown", "", 401],
+  ] as const) {
+    const res = await app.request(path, { headers: { authorization: `Bearer ${bearer}` } });
+    assert.equal(res.status, status, path);
+    assert.match(res.headers.get("content-type")!, /application\/json/);
+  }
+  assert.equal((await app.request("/v1/auth/config")).status, 200);
+  for (const method of ["GET", "DELETE"]) {
+    const res = await app.request("/mcp", { method });
+    assert.equal(res.status, 405); assert.equal(res.headers.get("allow"), "POST");
+  }
+  assert.match(await (await app.request("/web-route")).text(), /<main>app<\/main>/);
+});
+
 test("pairingを含む業務経路や未知の経路も接続トークンを必須とする", async (t) => {
   const { db, app } = setup();
   t.after(() => db.close());

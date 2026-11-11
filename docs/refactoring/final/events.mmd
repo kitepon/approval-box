@@ -1,0 +1,23 @@
+sequenceDiagram
+ participant D as Decisions<br/>Accounts
+ participant DB as SQLite tx
+ participant E as EventHub
+ participant S as http/streams.ts<br/>SSE
+ participant W as web<br/>App/store
+ participant P as push Notifier
+ D->>DB: 業務状態の変更
+ D->>E: publish / notifyConnection
+ E->>DB: publishだけevents rowを保存
+ E->>DB: afterCommitへ副作用登録
+ alt rollback
+ DB-->>D: 例外、bus通知なし
+ else commit
+ DB-->>E: hooks実行
+ E-->>S: user event / connection wake
+ E-->>P: decision created/updated
+ S-->>W: id/type/data (履歴since・Last-Event-ID)
+ W->>W: bump → useResource再GET → 画面反映
+ P->>P: APNs送信、無効tokenだけ削除
+ end
+ Note over D,W: HTTP受付・DB確定・配送受付<br/>画面反映は別の観測
+ Note over S,W: 切断後はbackoff再接続<br/>停止/abort/例外時finally解除<br/>待機前にabort再確認

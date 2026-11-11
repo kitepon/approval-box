@@ -1,0 +1,17 @@
+flowchart TD
+  TOOL["mcp.ts: CallTool handler / schemas / result"] -->|"clientName + metadata"| P["parent-channels.ts: harnessOf / channelFor"]
+  P --> C["Codex: home + thread_id / Claude: session + process"]
+  P --> B["Cursor: verify / Grok・other: background"]
+  C --> FILE[("parents.json: 永続key → channel")]
+  B --> MAP[("processChannels: process内だけ")]
+  FILE --> OPEN["外部steer: channelClosed / openChannel"]
+  MAP --> OPEN
+  OPEN -->|"channelId"| TOOL
+  P -->|"親不明 / open・保存失敗"| ERR["MCP isError: 元のcode/message"]
+  TOOL --> LAST[("mcp.ts lastChannel: list/getの文脈")]
+  LAST -->|"channel query"| LIST["list_my_decisions / get_decision"]
+  TOOL --> API["Api: request / amend / resume / setup"]
+  API -->|"保存結果 / confirm_required / error"| RESULT["MCP text + structuredContent"]
+  API -->|"回答後の別工程"| D["daemon journal → channel配送"]
+  D --> UNKNOWN["不明結果は照合・報告、本文を無条件再送しない"]
+  NOTE["request/setup: API前にlastChannel更新<br/>amend/resume: API成功後に更新<br/>停止しても親記録と残答えを保持"] -.-> LAST

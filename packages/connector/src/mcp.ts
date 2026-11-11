@@ -1,31 +1,21 @@
+import { channelFor, harnessOf, type Harness } from "./parent-channels.ts";
+export { harnessOf, type Harness } from "./parent-channels.ts";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import * as steer from "aiterm-steer-delivery";
-import { existsSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { basename } from "node:path";
 import { Api, ServerError } from "./api.ts";
 import { type AttachmentMeta, saveAttachment } from "./attachments.ts";
-import { requireConfig, writeJsonFile } from "./config.ts";
+import { requireConfig } from "./config.ts";
 import { ensureDaemon } from "./daemon.ts";
 import { uploadImagePaths } from "./request-images.ts";
 import { runtimeEntry } from "./runtime.ts";
-import { claudeChannelIsCurrent } from "./claude-channel.ts";
-import { MCP_SERVER, PROFILE, stateRoot } from "./profile.ts";
+import { MCP_SERVER, PROFILE } from "./profile.ts";
 import { osName, VERSION } from "./version.ts";
 
-export type Harness = "claude" | "codex" | "cursor" | "grok" | "other";
-
 const CLIENT_OF: Record<Harness, string> = { claude: "claude-code", codex: "codex", cursor: "cursor", grok: "grok", other: "other" };
-
-export function harnessOf(clientName: string | undefined): Harness {
-  const name = clientName ?? "";
-  if (name === "codex-mcp-client") return "codex";
-  if (name === "claude-code") return "claude";
-  if (name === "Cursor" || steer.isCursorMcpClient(name)) return "cursor";
-  if (name.startsWith("grok")) return "grok";
-  return "other";
-}
 
 const QUESTION_STYLE = "申請文は unai（https://github.com/kitepon/unai）の方針で推敲する。各AIの人格・口調と、承認の対象・範囲・費用・危険・期限・未確認事項を保つ。件名は何を決めてほしいかを一文で書く。背景は判断に必要な理由と影響を先に書き、作業履歴や内部IDの羅列を避ける。誰が何をするかを明確にし、専門用語は説明を添え、曖昧な比喩・重複・不要な前置きを除く。選択肢は選んだ後に何が起きるか分かる短い文にする。意味や条件を変えず、必要な情報は省かない。";
 
@@ -128,73 +118,7 @@ const TOOLS = [
 const VIEWABLE_IMAGES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const MAX_INLINE_IMAGE = 5 * 1024 * 1024;
 
-// ---- 親の会話ごとのchannel ----
-
-type ParentKey = string;
-const parentsFile = () => join(stateRoot(), "parents.json");
-const processChannels = new Map<ParentKey, string>();
 let lastChannel: string | undefined;
-
-function savedParents(): Record<ParentKey, string> {
-  try { return existsSync(parentsFile()) ? (JSON.parse(readFileSync(parentsFile(), "utf8")) as Record<ParentKey, string>) : {}; } catch { return {}; }
-}
-
-function reuse(key: ParentKey, persistent: boolean): string | undefined {
-  const id = persistent ? savedParents()[key] : processChannels.get(key);
-  if (!id) return undefined;
-  try { return steer.channelClosed(PROFILE, id) ? undefined : id; } catch { return undefined; }
-}
-
-function remember(key: ParentKey, channelId: string, persistent: boolean) {
-  if (persistent) {
-    const all = savedParents();
-    all[key] = channelId;
-    writeJsonFile(parentsFile(), all);
-  } else processChannels.set(key, channelId);
-}
-
-/** 申請を出した会話（親）を特定し、その会話のchannelを返す。channelは会話ごとに使い回す。 */
-async function channelFor(harness: Harness, clientName: string | undefined, meta: unknown) {
-  if (harness === "codex") {
-    const parent = steer.codexParentFromRequest(clientName, meta);
-    if (!parent) throw new Error("Codexの会話を特定できませんでした。Codexを更新してから試してください。");
-    const key = `codex:${parent.codex_home}:${parent.thread_id}`;
-    const existing = reuse(key, true);
-    if (existing) return existing;
-    // MCPが渡した元会話へ結ぶ。配送機構の状態や親アプリの起動時刻を、申請受付の条件にしない。
-    const channel = steer.openChannel(PROFILE, parent);
-    remember(key, channel.channel_id, true);
-    return channel.channel_id;
-  }
-  if (harness === "claude") {
-    const parent = steer.claudeParentFromRequest(PROFILE, clientName, meta, steer.claudeHookRoot(PROFILE));
-    if (!parent) throw new Error("Claude Codeのhookが見つかりません。npx approval-box setup をやり直し、Claude Codeを再起動してください。");
-    // /clear で session_id が変わる。依頼のたびに親を特定し、変わっていたら開き直す。
-    const key = `claude:${parent.session_id}`;
-    const existing = reuse(key, true);
-    // アプリの起動し直しでは、session_id が同じままprocessが替わる。古いprocessに結んだchannelは使い回さない。
-    // 古いchannelは閉じない。同じ会話の待機が、そこに残った答えも一緒に引き取る。
-    if (existing && claudeChannelIsCurrent(PROFILE, existing, parent)) return existing;
-    const channel = steer.openChannel(PROFILE, parent);
-    remember(key, channel.channel_id, true);
-    return channel.channel_id;
-  }
-  if (harness === "cursor") {
-    steer.verifyCursorParent(PROFILE, { kind: "cursor", hook_root: steer.cursorHookRoot(PROFILE) });
-    const key = "cursor";
-    const existing = reuse(key, false);
-    if (existing) return existing;
-    const channel = steer.openChannel(PROFILE, { kind: "cursor" });
-    remember(key, channel.channel_id, false);
-    return channel.channel_id;
-  }
-  const key = "background";
-  const existing = reuse(key, false);
-  if (existing) return existing;
-  const channel = steer.openChannel(PROFILE, null);
-  remember(key, channel.channel_id, false);
-  return channel.channel_id;
-}
 
 /** Cursor・Grokへ返す、答えの受け取り方の案内。Cursor CLIのmodelはstructuredContentを読まないので本文に書く。 */
 /** 答えの届き方と確かめ方。AIが自分で呼んだ道具の返りで先に伝え、あとから届く文の出どころを判断できるようにする。 */

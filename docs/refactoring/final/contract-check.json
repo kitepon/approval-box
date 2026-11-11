@@ -1,0 +1,20 @@
+{
+  "base": "90066748bf7ca4686716c67c91d76fcd20afa519",
+  "checks": [
+    "HTTP helper body unchanged: body",
+    "HTTP helper body unchanged: bearer",
+    "HTTP helper body unchanged: idempotent",
+    "HTTP helper body unchanged: fileResponse",
+    "Parent branch body unchanged: harnessOf",
+    "Parent branch body unchanged: channelFor",
+    "Parent branch body unchanged: savedParents",
+    "Parent branch body unchanged: reuse",
+    "Parent branch body unchanged: remember",
+    "MCP complete handler/schema use unchanged",
+    "Moved bytes unchanged: locales.ts",
+    "Moved bytes unchanged: error-messages-en.ts",
+    "Moved bytes unchanged: error-messages-east-asian.ts",
+    "Fixed translation lookup order unchanged"
+  ],
+  "productionChanges": "SSE error/abort cleanup is an intentional behavior fix in 9b55bf6, excluded from equality checks."
+}

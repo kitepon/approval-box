@@ -1,0 +1,135 @@
+[
+  {
+    "file": "docs/refactoring/final/attachments.svg",
+    "sourceSha256": "d7676d74b4ab8cebe860451c111951e957cec94725e93647742405971b3cf3af",
+    "svgSha256": "c8e90009a878156a4ff10c57b6a1e0c4bd971b78ec0f974d90bb3efd341c1645",
+    "width": 2750.671875,
+    "height": 430.27435302734375
+  },
+  {
+    "file": "docs/refactoring/final/decisions.svg",
+    "sourceSha256": "ac454551f067f6eadeb5b1ec90e975a1555e31f4fa5f6ab662faa7e570cf3124",
+    "svgSha256": "b2adefb2b11fd1c019be81ac43e81f2c6b06fd365af7c802254e98d2b1054da7",
+    "width": 1120.6146240234375,
+    "height": 1868
+  },
+  {
+    "file": "docs/refactoring/final/delivery.svg",
+    "sourceSha256": "633861ba1f891c29cdd1664aa1a77a28eca45402c9829dc10bd7bcd36d03fc9b",
+    "svgSha256": "8d502a2491dd94fed889cecf774882e92d0db3e4668c2ac6eeb6559711498906",
+    "width": 1365.14453125,
+    "height": 1957
+  },
+  {
+    "file": "docs/refactoring/final/events.svg",
+    "sourceSha256": "b6a359fe5377c2070eae5289985ed4902985f65087bdb6a9b2b28a27699ccf7a",
+    "svgSha256": "7c3c8e3d7880cfe10410c89a06a86d29c40d80e1d3d165c3ac30010f0972902b",
+    "width": 1558.5,
+    "height": 1092
+  },
+  {
+    "file": "docs/refactoring/final/identity.svg",
+    "sourceSha256": "a81b28c71cd347afc0a18cf3c5c8ab7d98f2f93f034ce4efa5916d92a2749eb8",
+    "svgSha256": "7c6c3b498f998e64500af14940753a02e662725abb73df96de345c369c59ad8f",
+    "width": 1146.65234375,
+    "height": 1445.5947265625
+  },
+  {
+    "file": "docs/refactoring/final/operations.svg",
+    "sourceSha256": "1b87c256e0baf1a08c7ec1d3c5c2427e56537a3ebdbcb71589d8d2e2a482539f",
+    "svgSha256": "e45171813347896479f4c6f08b706ef3784d2253fcc21c912fe4913da027581e",
+    "width": 1560.421875,
+    "height": 732.7113037109375
+  },
+  {
+    "file": "docs/refactoring/final/overview.svg",
+    "sourceSha256": "835b853ef653ea4cad37917dc3e95a1b47d3482dfd6795b66d733d8951191ea2",
+    "svgSha256": "6f334b395ef493a54d5975fd70562177687e7f33f6898cf4956973d78e04dc1e",
+    "width": 1820.890625,
+    "height": 644.6666870117188
+  },
+  {
+    "file": "docs/refactoring/final/runtime.svg",
+    "sourceSha256": "8cf5b65d080dcee0dcabbd6bb50abb39c880db57f82b202ec6cac4f7b7c55b4e",
+    "svgSha256": "ebbf713743f40647f25ea4b3831d55a08c0085adcdb34184bf9e32db43159253",
+    "width": 1150.8828125,
+    "height": 1264
+  },
+  {
+    "file": "docs/refactoring/design/http.svg",
+    "sourceSha256": "df8a44ef8d8922276c991e52a3d49fcf7679995868788fa19cfdf666d8ab470d",
+    "svgSha256": "e705ee3a7358e7d7143e79b6f2794edb1e871a2a823a9b834fab0e0973c3d2f9",
+    "width": 1379.824951171875,
+    "height": 1127.148681640625
+  },
+  {
+    "file": "docs/refactoring/design/localization.svg",
+    "sourceSha256": "abd6601b8d54e94e9daac08681eb2b752c691c183f7aad61852d5f4263732f12",
+    "svgSha256": "89aac7834832340dfca21a95adffedc13753da7220403b963ed8c0131e12c3e1",
+    "width": 1280.484375,
+    "height": 493.6000061035156
+  },
+  {
+    "file": "docs/refactoring/design/parent-channels.svg",
+    "sourceSha256": "ccc2577eef6a76fa159f300aecc10ab5210e6bdee4e1ee0131368e463eb931c8",
+    "svgSha256": "e0f403523d2019b7ecd982af8de70c2850257adf7b0db0386dbfad9ce3d0a790",
+    "width": 1226.0494384765625,
+    "height": 944.0422973632812
+  },
+  {
+    "file": "docs/refactoring/current/attachments.svg",
+    "sourceSha256": "d7676d74b4ab8cebe860451c111951e957cec94725e93647742405971b3cf3af",
+    "svgSha256": "c8e90009a878156a4ff10c57b6a1e0c4bd971b78ec0f974d90bb3efd341c1645",
+    "width": 2750.671875,
+    "height": 430.27435302734375
+  },
+  {
+    "file": "docs/refactoring/current/decisions.svg",
+    "sourceSha256": "ac454551f067f6eadeb5b1ec90e975a1555e31f4fa5f6ab662faa7e570cf3124",
+    "svgSha256": "b2adefb2b11fd1c019be81ac43e81f2c6b06fd365af7c802254e98d2b1054da7",
+    "width": 1120.6146240234375,
+    "height": 1868
+  },
+  {
+    "file": "docs/refactoring/current/delivery.svg",
+    "sourceSha256": "3e3afdf988f94a08697039310de1099a32ee96408f17c22ab4013d0cf40f0f12",
+    "svgSha256": "3379d23ac7bb0acd7c4aa67b610f2beaca57a77b1192ae6b814c2fb787a13583",
+    "width": 1382.16015625,
+    "height": 1598
+  },
+  {
+    "file": "docs/refactoring/current/events.svg",
+    "sourceSha256": "778a75c2563ca7f108c97ec179b0f4dfa19c50d9a242e1338ca7ea4aa1db0ebc",
+    "svgSha256": "ce57f1a8a5d6600e7cf7d6532fe70b1080f780623a250fb93c7430a723dea5aa",
+    "width": 1558.5,
+    "height": 1073
+  },
+  {
+    "file": "docs/refactoring/current/identity.svg",
+    "sourceSha256": "a81b28c71cd347afc0a18cf3c5c8ab7d98f2f93f034ce4efa5916d92a2749eb8",
+    "svgSha256": "7c6c3b498f998e64500af14940753a02e662725abb73df96de345c369c59ad8f",
+    "width": 1146.65234375,
+    "height": 1445.5947265625
+  },
+  {
+    "file": "docs/refactoring/current/operations.svg",
+    "sourceSha256": "d58bc858bed818dc0c00aa9b9119689cf9010b42ef595cecb56d938825e4d431",
+    "svgSha256": "62555f970679a190dd34f317e510ccdadf543f5e52a7511989b7ec0898a2ffeb",
+    "width": 1528.8125,
+    "height": 515.7113647460938
+  },
+  {
+    "file": "docs/refactoring/current/overview.svg",
+    "sourceSha256": "5b62a48d504028aff430f01ede6562a487cb31d2146124964da76552981a84c5",
+    "svgSha256": "c7e83d884bcbd13e7d9d69685331d159bf0b321842393d8cec1e9731f3332844",
+    "width": 2899.375,
+    "height": 649.6279296875
+  },
+  {
+    "file": "docs/refactoring/current/runtime.svg",
+    "sourceSha256": "8cf5b65d080dcee0dcabbd6bb50abb39c880db57f82b202ec6cac4f7b7c55b4e",
+    "svgSha256": "ebbf713743f40647f25ea4b3831d55a08c0085adcdb34184bf9e32db43159253",
+    "width": 1150.8828125,
+    "height": 1264
+  }
+]

@@ -479,3 +479,24 @@ test("答えを届ける文は、利用者へ件名で伝えるようAIへ添え
   assert.ok(text.endsWith("利用者へこの申請の話をする時は、件名で伝えてください。アプリには件名・申請者・作業名が出て、申請のIDは出ません。IDは道具を呼ぶ時に使います。"), text);
 });
 
+
+test('冪等応答は最初の言語を保持し、5xx・rate limit・一度返すtokenを保存しない', async t => {
+  const { ApiError } = await import('../src/errors.ts');
+  const ctx=setup('off');t.after(()=>ctx.db.close());
+  // Use the real domain instance wired to createApp; fail only the mutation.
+  const events=new EventHub(ctx.db), decisions=new Decisions(ctx.db,events);
+  const app=createApp({db:ctx.db,accounts:ctx.accounts,decisions,events,publicUrl:'https://kb.test'});
+  let code:'conflict'|'internal'|'rate_limited'='conflict',calls=0;
+  t.mock.method(decisions,'setHold',()=>{calls++;throw new ApiError(code,'現在の状態と競合しています。');});
+  const send=(key:string,language:string,path='/v1/decisions/K-TEST/hold')=>app.request(path,{method:'POST',headers:{authorization:`Bearer ${ctx.session}`,'idempotency-key':key,'accept-language':language}});
+  const first=await send('conflict','en');const payload=await first.json();
+  assert.equal(first.status,409);assert.deepEqual(await (await send('conflict','ja')).json(),payload);assert.equal(calls,1);
+  const other=await send('conflict','ja','/v1/decisions/K-TEST/unhold');assert.equal(other.status,400);assert.equal(calls,1);
+  t.mock.method(console,'error',()=>{});
+  for(const next of ['internal','rate_limited'] as const){code=next;
+    for(let n=0;n<2;n++)assert.equal((await send(next,'en')).status,next==='internal'?500:429);
+    assert.equal(ctx.db.prepare('select count(*) n from idempotency where key=?').get(next)?.n,0);
+  }
+  const token=await app.request('/v1/tokens',{method:'POST',headers:{authorization:`Bearer ${ctx.session}`,'content-type':'application/json','idempotency-key':'token-once'},body:'{"label":"isolated"}'});
+  assert.equal(token.status,200);assert.equal(ctx.db.prepare('select count(*) n from idempotency where key=?').get('token-once')?.n,0);
+});

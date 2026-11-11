@@ -11,8 +11,8 @@ import { Notifier } from "../src/push.ts";
 import { onboarding } from "../src/onboarding.ts";
 import { ApiError } from "../src/errors.ts";
 import { createApp } from "../src/http.ts";
-import { errorMessagesEn } from "../src/error-messages-en.ts";
-import { errorMessagesKo, errorMessagesHans, errorMessagesHant } from "../src/error-messages-east-asian.ts";
+import { errorMessagesEn } from "../src/shared/error-messages-en.ts";
+import { errorMessagesKo, errorMessagesHans, errorMessagesHant } from "../src/shared/error-messages-east-asian.ts";
 import { requestLocale } from "../src/locale.ts";
 
 test("language negotiation honors quality, region and exclusions; legacy defaults to Japanese", () => {

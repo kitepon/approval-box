@@ -1,0 +1,25 @@
+flowchart LR
+ AI["PCのAI: Claude / Codex / Cursor / Grok"] -->|stdio MCP| MCP["connector/mcp.ts runMcp"]
+ MCP -->|JSON + connection Bearer| HTTP["server/http.ts createApp"]
+ CLOUD["リモートAI"] -->|POST /mcp + connection Bearer| RMCP["remote-mcp.ts remoteMcpHandler"]
+ RMCP --> DEC["decisions.ts Decisions"]
+ HTTP --> DEC
+ HTTP --> ACC["accounts.ts Accounts / OIDC"]
+ HTTP --> ATT["attachments.ts Attachments"]
+ HTTP --> OPS["diagnostics.ts / appstore.ts"]
+ WEB["web: App / pages / api.ts"] -->|/v1 + session Bearer| HTTP
+ NATIVE["外部native apps: api.md契約まで"] -->|/v1 JSON / binary / SSE| HTTP
+ DEC --> DB[("db.ts SQLite schema9 / files")]
+ ACC --> DB
+ ATT --> DB
+ OPS --> DB
+ DEC -->|取引commit後| EV["events.ts EventHub"]
+ EV -->|SSE: 再取得の合図| WEB
+ EV -->|APNs: 機能完了とは別| NATIVE
+ EV -->|connection wake| DAEMON["connector/daemon.ts journal"]
+ DAEMON -->|GET deliveries / POST report| HTTP
+ DAEMON -->|sendChannelAnswer| STEER["外部aiterm-steer-delivery / Aiterm"]
+ STEER -->|元channelへ受付/出力| AI
+ EV --> CB["callbridge.ts CallBridgeDeliverer"]
+ CB -->|open/send/hangup| BRIDGE["外部call-bridge"]
+ BRIDGE --> CLOUD
