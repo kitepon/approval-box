@@ -5,11 +5,11 @@ flowchart LR
  Decisions --> Events["commit / connection event"]
  Events --> Worker["CallBridgeDeliverer: serial sync"]
  Timer["main.ts: startup / 60-second sync"] --> Worker
- Worker --> Journal["bridge_deliveries: session / seq / terminal / closed"]
+ Worker --> Journal["bridge_deliveries: session / seq / handoff result"]
  Journal --> DB
  Worker --> Sender["callBridgeSender"]
- Sender --> Bridge["Bridge MCP: open / send / info / hangup"]
- Bridge --> Courier["External courier / gateway"]
+ Sender --> Bridge["Bridge MCP: call_open / call_send only"]
+ Bridge --> Recipient["External: Bridge adapters wake recipient (GrokBot courier, BellTeam socket) and recover"]
  Worker --> Result["Decisions.reportDelivery / UI event"]
  Result --> UI["Web / native reload: waiting / delivered / unknown / fetched"]
- Remote["Remote MCP: explicit get_decision"] --> Decisions
+ Remote["Remote MCP: request_decision(requester_id) / explicit get_decision"] --> Decisions

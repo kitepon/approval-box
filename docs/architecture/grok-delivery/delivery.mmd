@@ -1,25 +1,18 @@
 flowchart TD
  Answer["answer commit: waiting"] --> Claim["markSending: no second body send"]
- Claim --> Open["call_open"]
+ Claim --> Open["call_open(member_system = CALL_BRIDGE_MEMBER_SYSTEM, member_name = route.channel_id)"]
  Open -->|guaranteed unopened directory_link_down| Retry["30 seconds / answer + 10-minute bound"]
  Retry --> Claim
+ Open -->|rejected / no session| Failed["reportDelivery failed -> unknown shown"]
  Open -->|session known| Checkpoint["DB: session_id before call_send"]
- Checkpoint --> Send["call_send once"]
- Send -->|queued / response lost| Track["DB: session + optional seq; pending"]
- Track --> Info["same-party call_info: no read marking"]
- Info -->|queued / inflight / network failure| Track
- Info -->|one seq 1 after lost response| Seq["persist recovered seq"]
- Seq --> Info
- Info -->|submitted / failed / unknown| Commit["transaction: journal terminal + reportDelivery"]
- Send -->|legacy delivered / explicit error| Commit
- Commit --> Close["call_hangup only after terminal commit"]
- Close -->|response failure| Again["keep terminal; retry only hangup"]
- Again --> Close
- Close -->|accepted| Closed["closed journal until decision deletion"]
- Restart["process restart"] -->|journal exists| Track
- Restart -->|terminal journal| Close
- Restart -->|old sending without session| Unknown["unknown; never resend body"]
- Get["explicit get / fetched"] --> Preserve["keep fetched; track original call only"]
- Preserve --> Track
- Info -->|no matching receipt / ambiguous seq| Track
- Commit --> UI["submitted = gateway accepted; not AI work complete"]
+ Checkpoint --> Send["call_send once, reply_required=false"]
+ Send -->|accepted: queued / delivered / stored| Handed["transaction: journal delivered + seq; reportDelivery delivered (handed to Bridge)"]
+ Send -->|explicit delivery error| Failed
+ Send -->|response lost| Unknown["journal unknown; reportDelivery unknown; never resend body"]
+ Handed --> Open2["call stays open; no call_info polling, no call_hangup"]
+ Open2 --> BridgeOwns["Bridge owns wake + recipient delivery + courier recovery"]
+ Restart["process restart"] -->|legacy pending journal with seq| Handed
+ Restart -->|legacy pending journal without seq| Unknown
+ Restart -->|old sending without session| Unknown
+ Get["explicit get / fetched"] --> Preserve["reportDelivery never overwrites fetched"]
+ Handed --> UI["delivered = Bridge accepted the handoff; not proof the AI ran"]
