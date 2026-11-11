@@ -22,72 +22,65 @@ function deliverer(db: ReturnType<typeof openDb>) {
 }
 function status(db: ReturnType<typeof openDb>) { return get<{ delivery: string }>(db, "select delivery from decisions where id='K-TEST'")!.delivery; }
 
-for (const terminal of ["submitted", "failed", "unknown"] as const) test(`queued→inflight→${terminal}: restart tracks same call; terminal persisted before hangup`, async t => {
-  const dir = mkdtempSync(join(tmpdir(), "ab-bridge-"));
-  const file = join(dir, "db.sqlite");
-  let db = openDb(file); seed(db);
-  t.after(() => { db.close(); rmSync(dir, { recursive: true, force: true }); });
+function mockClient(t: { mock: { method: typeof import("node:test").mock.method } }, onTool: (name: string) => unknown) {
   t.mock.method(Client.prototype, "connect", async () => {});
   t.mock.method(Client.prototype, "close", async () => {});
   const calls: string[] = [];
-  let receipt = "inflight";
-  t.mock.method(Client.prototype, "callTool", async ({ name, arguments: args }: { name: string; arguments: Record<string, unknown> }) => {
-    calls.push(name);
+  t.mock.method(Client.prototype, "callTool", async ({ name }: { name: string }) => { calls.push(name); return onTool(name); });
+  return calls;
+}
+function bridgeRow(db: ReturnType<typeof openDb>) { return get<{ state: string; seq: number | null; session_id: string }>(db, "select state, seq, session_id from bridge_deliveries"); }
+
+test("accepted queued send hands off once: no call_info, no call_hangup", async t => {
+  const db = openDb(":memory:"); seed(db); t.after(() => db.close());
+  const calls = mockClient(t, name => {
     if (name === "call_open") return { structuredContent: { session_id: "s" }, content: [] };
-    if (name === "call_send") {
-      assert.equal(get<{ session_id: string }>(db, "select session_id from bridge_deliveries")!.session_id, "s", "checkpoint before effect");
-      return { structuredContent: { session_id: "s", seq: 1, delivery: { status: "queued" } }, content: [] };
-    }
-    assert.equal(args.session_id, "s");
-    if (name === "call_info") return { structuredContent: { grokbot_delivery: [{ seq: 1, state: receipt }] }, content: [] };
-    assert.equal(name, "call_hangup");
-    assert.equal(status(db), terminal === "submitted" ? "delivered" : "unknown");
-    assert.equal(get<{ state: string }>(db, "select state from bridge_deliveries")!.state, terminal === "submitted" ? "delivered" : terminal);
-    return { content: [] };
+    assert.equal(bridgeRow(db)!.session_id, "s", "checkpoint before call_send");
+    return { structuredContent: { session_id: "s", seq: 1, delivery: { status: "queued" } }, content: [] };
   });
-  await deliverer(db).sync();
-  assert.equal(status(db), "waiting");
+  const d = deliverer(db);
+  await d.sync();
   assert.deepEqual(calls, ["call_open", "call_send"]);
-  db.close(); db = openDb(file);
-  const resumed = deliverer(db);
-  await resumed.sync();
-  assert.equal(status(db), "waiting");
-  assert.equal(calls.filter(n => n === "call_send").length, 1);
-  receipt = terminal;
-  await resumed.sync(); await resumed.sync();
-  assert.equal(calls.filter(n => n === "call_hangup").length, 1);
-  assert.equal(get<{ closed: number }>(db, "select closed from bridge_deliveries")!.closed, 1);
+  assert.equal(status(db), "delivered");
+  assert.deepEqual({ ...bridgeRow(db) }, { state: "delivered", seq: 1, session_id: "s" });
+  await d.sync(); await d.sync();
+  assert.deepEqual(calls, ["call_open", "call_send"]);
 });
 
-test("lost send response + unavailable info keeps session; fetched result and failed close do not resend", async t => {
+test("lost call_send response is unknown and never resent", async t => {
   const db = openDb(":memory:"); seed(db); t.after(() => db.close());
-  t.mock.method(Client.prototype, "connect", async () => {});
-  t.mock.method(Client.prototype, "close", async () => {});
-  const calls: string[] = [];
-  let polls = 0, closes = 0;
-  t.mock.method(Client.prototype, "callTool", async ({ name }: { name: string }) => {
-    calls.push(name);
-    if (name === "call_open") return { structuredContent: { session_id: "s" }, content: [] };
-    if (name === "call_send") throw new Error("response lost");
-    if (name === "call_info") {
-      if (++polls === 1) throw new Error("network unavailable");
-      return { structuredContent: { grokbot_delivery: [{ seq: 1, state: "submitted" }] }, content: [] };
-    }
-    if (++closes === 1) throw new Error("hangup response lost");
-    return { content: [] };
-  });
+  const calls = mockClient(t, name => { if (name === "call_open") return { structuredContent: { session_id: "s" }, content: [] }; throw new Error("response lost"); });
+  const d = deliverer(db);
+  await d.sync(); await d.sync();
+  assert.equal(status(db), "unknown");
+  assert.deepEqual(calls, ["call_open", "call_send"]);
+});
+
+test("explicit delivery error is shown as unknown", async t => {
+  const db = openDb(":memory:"); seed(db); t.after(() => db.close());
+  mockClient(t, name => name === "call_open" ? { structuredContent: { session_id: "s" }, content: [] } : { structuredContent: { delivery: { status: "error" } }, content: [] });
   await deliverer(db).sync();
-  assert.equal(get<{ seq: number | null }>(db, "select seq from bridge_deliveries")!.seq, null);
-  const resumed = deliverer(db);
-  await resumed.sync(); assert.equal(status(db), "waiting");
-  run(db, "update decisions set delivery='fetched' where id='K-TEST'");
-  await resumed.sync();
-  assert.equal(status(db), "fetched");
-  assert.equal(get<{ seq: number }>(db, "select seq from bridge_deliveries")!.seq, 1);
-  await deliverer(db).sync();
-  assert.equal(calls.filter(n => n === "call_send").length, 1);
-  assert.equal(closes, 2);
-  assert.equal(get<{ closed: number }>(db, "select closed from bridge_deliveries")!.closed, 1);
+  assert.equal(status(db), "unknown");
+  assert.equal(bridgeRow(db)!.state, "failed");
+});
+
+test("checkpoint failure never sends answer", async t => {
+  const calls = mockClient(t, () => ({ structuredContent: { session_id: "s" }, content: [] }));
+  const result = await callBridgeSender(config)("member", "K-TEST", "answer", { save: () => { throw new Error("disk failure"); } });
+  assert.equal(result.state, "failed");
+  assert.deepEqual(calls, ["call_open"]);
+});
+
+for (const [name, seq, expected, delivery] of [["with seq", 1, "delivered", "waiting"], ["without seq", null, "unknown", "waiting"], ["fetched stays fetched", 1, "fetched", "fetched"]] as const) test(`legacy pending row on restart (${name}) is settled without any tool call`, async t => {
+  const db = openDb(":memory:"); seed(db); t.after(() => db.close());
+  run(db, "insert into bridge_deliveries(decision_id,session_id,seq,state) values('K-TEST','s',?,'pending')", seq);
+  run(db, "update decisions set delivery = ? where id = 'K-TEST'", delivery);
+  const calls = mockClient(t, () => assert.fail("legacy rows must not call the Bridge"));
+  const d = deliverer(db);
+  await d.sync();
+  assert.equal(status(db), expected);
+  assert.equal(bridgeRow(db)!.state, seq === null ? "unknown" : "delivered");
+  assert.deepEqual(calls, []);
 });
 
 test("schema9 migration preserves legacy answers and unknown; journal cascades with decision deletion", () => {
@@ -105,34 +98,3 @@ test("schema9 migration preserves legacy answers and unknown; journal cascades w
   db.close(); rmSync(dir, { recursive: true, force: true });
 });
 
-for (const rows of [[], [{ seq: 2, state: "submitted" }], [{ seq: 1, state: "submitted" }, { seq: 2, state: "submitted" }]]) test(`lost response never guesses another message: ${JSON.stringify(rows)}`, async t => {
-  t.mock.method(Client.prototype, "connect", async () => {});
-  t.mock.method(Client.prototype, "close", async () => {});
-  const calls: string[] = [];
-  t.mock.method(Client.prototype, "callTool", async ({ name }: { name: string }) => { calls.push(name); return { structuredContent: { grokbot_delivery: rows }, content: [] }; });
-  const result = await callBridgeSender(config)("member", "K-TEST", "", { sessionId: "s", save: () => assert.fail("ambiguous seq must not be adopted") });
-  assert.equal(result.state, "pending");
-  assert.deepEqual(calls, ["call_info"]);
-});
-
-test("checkpoint failure never sends answer", async t => {
-  t.mock.method(Client.prototype, "connect", async () => {});
-  t.mock.method(Client.prototype, "close", async () => {});
-  const calls: string[] = [];
-  t.mock.method(Client.prototype, "callTool", async ({ name }: { name: string }) => { calls.push(name); return { structuredContent: { session_id: "s" }, content: [] }; });
-  await callBridgeSender(config)("member", "K-TEST", "answer", { save: () => { throw new Error("disk failure"); } });
-  assert.deepEqual(calls, ["call_open"]);
-});
-
-test("queued is not cancelled by immediate hangup", async t => {
-  t.mock.method(Client.prototype, "connect", async () => {});
-  t.mock.method(Client.prototype, "close", async () => {});
-  const calls: string[] = [];
-  t.mock.method(Client.prototype, "callTool", async ({ name }: { name: string }) => {
-    calls.push(name);
-    return { structuredContent: name === "call_open" ? { session_id: "s" } : { seq: 1, delivery: { status: "queued" } }, content: [] };
-  });
-  const result = await callBridgeSender(config)("member", "K-TEST", "synthetic answer", { save: () => {} });
-  assert.deepEqual(calls, ["call_open", "call_send"]);
-  assert.equal(result.state, "pending");
-});
