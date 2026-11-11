@@ -12,4 +12,4 @@ flowchart LR
  Bridge --> Recipient["External: Bridge adapters wake recipient (GrokBot courier, BellTeam socket) and recover"]
  Worker --> Result["Decisions.reportDelivery / UI event"]
  Result --> UI["Web / native reload: waiting / delivered / unknown / fetched"]
- Remote["Remote MCP: request_decision(requester_id, optional requester_system) / explicit get_decision"] --> Decisions
+ Remote["Remote MCP: request_decision(requester_id) / explicit get_decision"] --> Decisions

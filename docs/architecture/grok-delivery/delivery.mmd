@@ -1,6 +1,6 @@
 flowchart TD
  Answer["answer commit: waiting"] --> Claim["markSending: no second body send"]
- Claim --> Open["call_open(member_system = route.system or default, member_name = route.channel_id)"]
+ Claim --> Open["call_open(member_system = CALL_BRIDGE_MEMBER_SYSTEM, member_name = route.channel_id)"]
  Open -->|guaranteed unopened directory_link_down| Retry["30 seconds / answer + 10-minute bound"]
  Retry --> Claim
  Open -->|rejected / no session| Failed["reportDelivery failed -> unknown shown"]

@@ -9,7 +9,8 @@
 - `Decisions`が回答・公開deliveryを所有。API enumは不変。`waiting`は配送待ち、`delivered`はBridgeが受け付けた（GrokBotは`queued`の耐久保存、BellTeamは受付）、`unknown`は結果不明または失敗、`fetched`は明示取得。`delivered`はAIが動いた証明ではない。
 - `CallBridgeDeliverer`がschema10の`bridge_deliveries`を所有（decision_id・session_id・seq・state・detail・closed）。stateはpending/delivered/failed/unknown。`closed`は旧版の列で、新しい行では使わない（schema変更なし）。
 - `callBridgeSender`はApproval Box自身の認証で`call_open`と`call_send`だけを呼ぶ。`call_info`の追跡、`call_hangup`（queuedのGrokBot宛てを取り消す）、receipt、既読変更は使わない。通話は開いたまま残す。
-- 宛先は`route.channel_id`（電話帳のid）と`route.system`（電話帳のsystem）。`route.system`が無い旧行・旧clientは環境変数`CALL_BRIDGE_MEMBER_SYSTEM`（既定grokbot）を使う。remote MCPの`request_decision`は任意の`requester_system`を受ける。
+- 宛先は`route.channel_id`（電話帳のid）と、Bridge接続ごとの環境変数`CALL_BRIDGE_MEMBER_SYSTEM`（既定grokbot、電話帳のsystem）。申請ごとのsystem指定は持たない。
+- Bridge経路は明示的に指定された接続だけに使う。通常のBellTeam・stdio・コネクタ配送経路は変更しない。
 - 新規通話のsessionを本文送信より先にDB保存する。`call_send`が受け付けたら、journal deliveredとreportDeliveryを同じtransactionで確定する。応答が消えた送信は再送せずunknown。
 - `call_open`の保証付き未開設`directory_link_down`だけ、30秒/回答後10分の再試行を維持する（Bridgeは本文を受けていない）。
 - 再起動時、旧版が残したpending行はseqがあればBridge受付済みとしてdelivered、seqが無ければunknownで確定する。どちらも本文を再送しない。通話のない旧sendingは以前どおりunknown。
@@ -20,7 +21,7 @@
 | 窓口 | callerと試験 |
 |---|---|
 | callbridge.ts: CallSender/SendResult/callBridgeSender/CallBridgeDeliverer | main.tsが生成しstartup/60秒でsync。callbridge-tracking.test.tsを受け渡し方式の試験へ置き換え、callbridge-retry.test.tsは未開設再試行を維持、remote-mcp.test.tsは偽senderで既存経路 |
-| remote-mcp.ts / decisions.ts route | `requester_system`を任意で受け`route.system`へ保存。既存の`requester_id`必須は不変 |
+| remote-mcp.ts / decisions.ts route | 不変（`requester_id`→`route.channel_id`） |
 | Web/API/connector/native | 公開enum・認証・本文・添付の契約は不変 |
 
 ## 限界
