@@ -129,3 +129,21 @@ Scope: the daemon and the receive entry on macOS, Linux and Windows. No server, 
 From 0.1.32 `writeJsonFile` retries the rename on Windows for those three codes, 30 attempts with a growing pause (about 46 seconds in total), like graceful-fs does. Other errors and other platforms are not retried. When the retries run out, the original error is thrown with a note that another program holds the target. The temporary-file handling (keep for credentials and unknown journals, discard for regenerable settings) is unchanged.
 
 Not covered: a program that keeps the file open for longer than the retries (then the message names the file and `setup` is run again after closing it).
+
+## Waking a BellTeam seat whose conversation stopped before the answer (connector 0.1.34)
+
+On BellTeam each Bot runs Claude Code in a seat. Aiterm can hibernate an idle seat: the native Claude Code process ends, and with it the hook waiter that would emit the answer. The seat resumes the same conversation (same `session_id`) when BellTeam delivers the next message to it. Up to 0.1.33 an answer that arrived during hibernation followed the 0.1.31 path: the channel was closed (SessionEnd) or had no receiver for 5 minutes, the daemon withdrew the body and reported `failed`, the server marked the delivery `unknown`, and nothing woke the seat. The AI got the answer only if it happened to call `resume_decision` later.
+
+From 0.1.34:
+
+- When `request_decision`, `amend_decision`, `resume_decision` or `setup_test` uses a channel and the MCP process runs in a BellTeam seat (`AITERM_SESSION_ID` is a seat name: a Bot ID, or `<bot-id>-1st|2nd-<suffix>`; fork seats excluded), the MCP writes `state/bellteam-requesters/<channel_id>.json` with that Bot ID. The daemon is shared by all conversations of the user and never uses its own environment to choose a Bot.
+- When the daemon gives up a delivery because nobody can emit it (the channel was closed when sending, the closed mark appeared while queued, or no receiver for 5 minutes and the body was withdrawn), and the channel has such a record, it adds one entry to `state/bellteam-wakes.json` before reporting `failed`. A delivery is added once.
+- For each entry the daemon first reads the decision. If the AI already fetched it (`delivery=fetched`) or it is no longer answered, the entry is dropped. Otherwise it calls BellTeam's public MCP (`POST http://127.0.0.1:4181/mcp`, header `X-Bellteam-Seat: <bot-id>`, tool `sendmessage`, target the same Bot ID) once. The message names the request by ID and subject, says the answer could not reach the stopped conversation, and asks to call `resume_decision` with that `decision_id`. It does not carry the answer: the AI gets it from Approval Box with `resume_decision` (the server returns the saved answer and marks it fetched).
+- Accepted (`running`, `steered`, `delivered`), refused by BellTeam (an MCP error such as `BOT_NOT_FOUND`), or unknown (timeout, a reply that cannot be read, a daemon stop while sending): the entry is removed and not sent again. Only a failure before BellTeam received the request (connection refused, BellTeam restarting) keeps the entry and tries again later, at most every 10 minutes, until the decision is fetched.
+- BellTeam wakes a hibernated seat when it delivers a message, in the same conversation. Waking and the conversation's lifecycle are BellTeam's and Aiterm's; Approval Box only sends the message.
+
+Timing: when the seat ended with `SessionEnd`, the message is sent right after the answer; otherwise 5 minutes after the answer (the same grace as 0.1.31, which lets a restarted conversation receive the body directly). The app shows the answer as not received (`unknown`) until the AI fetches it, then `fetched`.
+
+Not covered: conversations whose MCP process started before 0.1.34 was installed write no record and are not woken (they are replaced when the seat restarts its CLI). Outside BellTeam nothing changes. The local BellTeam MCP address is fixed (`shortcut: BellTeam's local MCP address 127.0.0.1:4181, read it from BellTeam if it ever becomes configurable`).
+
+Scope: the connector MCP and daemon on Linux in BellTeam seats, all channel kinds that the daemon gives up (Claude Code and background). No server, app or Web API change.
