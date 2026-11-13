@@ -1,5 +1,7 @@
 # Approval Box API（アプリ・Web版向け） v0.37
 
+2026-11-13 pairing期限: `POST /connector/v1/pairing` の `expires_at` を10分から7日へ延ばした。応答の形・受取り（ログイン中の本人による claim）・tokenの一回取得は変わらない。呼出元は `expires_at` に従い、固定の待ち時間を持たない。
+
 2026-11-02 server配送修理: 公開API v0.37のenumは維持。Bridgeのqueued/inflightは`waiting`、submittedはgateway受付（AIの作業完了ではない）。通話/seq/終端をschema10の`bridge_deliveries`へ保存し、再起動や通信断でも同通話を追跡する。詳細は[配送図と検証](architecture/grok-delivery/README.md)。
 
 v0.37（2026-10-30）: AI向けの一覧・申請前確認・重複候補は要約だけを返す。回答本文・背景・選択肢・添付・取消理由を含めない。回答は明示的な `get_decision` または既存の回答配送で受け取る。利用者向けAPIと保存内容は変更しない。
@@ -255,7 +257,7 @@ setup: {
 
 | メソッド | パス | 呼ぶ側 | 内容 |
 |---|---|---|---|
-| POST | `/pairing` | コネクタ（認証なし） | `{ device_name, os, clients: string[] }` → `{ pairing_id, code: "ABCD-EFGH", qr_url, poll_secret, expires_at }`（10分で失効） |
+| POST | `/pairing` | コネクタ（認証なし） | `{ device_name, os, clients: string[] }` → `{ pairing_id, code: "ABCD-EFGH", qr_url, poll_secret, expires_at }`（7日で失効。利用者が不在でも、戻った時に受けられる長さ） |
 | GET | `/pairing/{pairing_id}` | コネクタ | `X-Poll-Secret` 付き。結ばれるまで待つ（長いポーリング、最大30秒で返る）。結ばれたら `{ status: "claimed", token }` を1回だけ返す |
 | GET | `/pairing/lookup?code=ABCD-EFGH` | アプリ | 確認画面用 `{ pairing_id, device_name, os, clients, expires_at }` |
 | POST | `/pairing/{pairing_id}/claim` | アプリ | 利用者が「この端末を追加」を押した時。自分のアカウントに結ぶ → `{ connection_id }` |

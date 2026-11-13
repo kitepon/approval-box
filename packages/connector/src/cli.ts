@@ -70,7 +70,7 @@ async function pair(server: string, targets: Target[]): Promise<{ token: string;
   out(await QRCode.toString(started.qr_url, { type: "terminal", small: true }));
   out(`  コード: ${started.code}`);
   out(`  URL:    ${started.qr_url}`);
-  out(`  （10分で期限が切れます）\n`);
+  out(`  （期限: ${new Date(started.expires_at).toLocaleString()}）\n`);
   for (;;) {
     const result = await api.call<{ status: string; token?: string; connection_id?: string }>("GET", `/pairing/${started.pairing_id}`, undefined, { "x-poll-secret": started.poll_secret });
     if (result.status === "claimed" && result.token) return { token: result.token, connection_id: result.connection_id! };

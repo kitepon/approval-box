@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | Web/nativeの利用者API | server/http.ts createApp、Accounts、Decisions、Attachments | session Bearer＋JSON/binary→SQLite確定状態→Web/native。契約は[api.md](../api.md) | 検証/権限エラー、409は最新状態を返す。欠測や通信中断を保存成功へしない |
 | AIの申請・取得 | connector/mcp.ts runMcp、server/remote-mcp.ts remoteMcpHandler | stdioまたはPOST /mcp＋connection Bearer→Decisions→要約/確認札/申請/取得 | 同connection・channel境界を維持。AIの本文を自動再POSTしない |
-| 認証・接続・課金 | server/accounts.ts Accounts、oidc.ts、appstore.ts | Apple/Google署名/nonce/公開鍵、pairing→session/connection token/plan | 期限・一回取得・所有者検査、未知の署名は拒否。解除とアカウント削除は別 |
+| 認証・接続・課金 | server/accounts.ts Accounts、oidc.ts、appstore.ts | Apple/Google署名/nonce/公開鍵、pairing→session/connection token/plan | 期限・一回取得・所有者検査、未知の署名は拒否。解除とアカウント削除は別。pairingは7日有効（利用者が不在でも後で受けられる。受取りはログイン中の本人だけ、tokenはPCが一度取りに来るまで）。期限1日後にprune |
 | 申請・回答・画像 | server/decisions.ts、attachments.ts、db.ts | 検証済入力→SQLite schema10＋添付原本→利用者/AI | DBとFSは別境界。24h下書き/1h part/孤立原本GC、closedの設定保持期間。現用/唯一データを容量理由で消さない |
 | 更新通知・画面 | EventHub、push.ts、http.ts SSE、web/api.tsとApp/pages | commit→event保存→SSE/APNs→再GET→表示 | 切断backoff、通知受理と端末反映を区別。未採用のPR15 SSE finally修理を描かない |
 | PCへの回答配送 | connector/daemon.ts、channel-delivery.ts、外部Steer | API待ち→deliveries.json sending→親channel投函→queued/report→API報告後journal削除 | 再起動時sendingは元state照合。不明を未送信とせず、本文を再送しない。queuedのclaude channelは受け口（閉じた印・結んだprocess・同じ会話の待機）、背景channel（Grok等）は受信processの記録（state/background-receivers/<channel>.json、hooks/receive.tsが起動時に書く）を2秒ごとに見る。閉じた印は即、受け口が消えて5分で、未取得の本文を取り下げてfailed報告（0.1.31/0.1.32） |
