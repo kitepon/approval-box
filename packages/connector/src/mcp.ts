@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { Api, ServerError } from "./api.ts";
 import { type AttachmentMeta, saveAttachment } from "./attachments.ts";
+import { rememberRequester } from "./bellteam-wake.ts";
 import { requireConfig, writeJsonFile } from "./config.ts";
 import { ensureDaemon } from "./daemon.ts";
 import { uploadImagePaths } from "./request-images.ts";
@@ -153,8 +154,15 @@ function remember(key: ParentKey, channelId: string, persistent: boolean) {
   } else processChannels.set(key, channelId);
 }
 
-/** 申請を出した会話（親）を特定し、その会話のchannelを返す。channelは会話ごとに使い回す。 */
+/** BellTeamの席なら、答えが届かなかった時に起こす相手として申請元のBotを控える（デーモンは全会話で共有なので、自分の環境からは選べない）。 */
 async function channelFor(harness: Harness, clientName: string | undefined, meta: unknown) {
+  const channelId = await openChannelFor(harness, clientName, meta);
+  rememberRequester(channelId);
+  return channelId;
+}
+
+/** 申請を出した会話（親）を特定し、その会話のchannelを返す。channelは会話ごとに使い回す。 */
+async function openChannelFor(harness: Harness, clientName: string | undefined, meta: unknown) {
   if (harness === "codex") {
     const parent = steer.codexParentFromRequest(clientName, meta);
     if (!parent) throw new Error("Codexの会話を特定できませんでした。Codexを更新してから試してください。");

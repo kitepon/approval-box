@@ -3,7 +3,8 @@ import { launchDaemon } from "./daemon-launch.ts";
 import { sendChannelAnswer, channelAnswerState } from "./channel-delivery.ts";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { Api } from "./api.ts";
+import { Api, ServerError } from "./api.ts";
+import { type Wakes, queueWake, sendWake, wakeMessage } from "./bellteam-wake.ts";
 import { type AttachmentMeta, pruneAttachments, saveAll } from "./attachments.ts";
 import { readConfig, requireConfig, writeJsonFile } from "./config.ts";
 import { PROFILE, stateRoot } from "./profile.ts";
@@ -21,6 +22,7 @@ type Journal = Record<string, Entry>;
 
 const lockFile = () => join(stateRoot(), "daemon.json");
 const journalFile = () => join(stateRoot(), "deliveries.json");
+const wakesFile = () => join(stateRoot(), "bellteam-wakes.json");
 const IDLE_EXIT_MS = 30 * 60_000;
 /** 結んだprocess（背景channelでは受信process）が消えてから、起動し直しを待つ時間。 */
 const ORPHAN_GRACE_MS = 5 * 60_000;
@@ -128,7 +130,18 @@ export async function runDaemon() {
   const api = new Api(requireConfig());
   let journal: Journal = existsSync(journalFile()) ? (JSON.parse(readFileSync(journalFile(), "utf8")) as Journal) : {};
   const save = () => writeJsonFile(journalFile(), journal);
+  let wakes: Wakes = {};
+  try { if (existsSync(wakesFile())) wakes = JSON.parse(readFileSync(wakesFile(), "utf8")) as Wakes; } catch { /* 読めなければ空から */ }
+  const saveWakes = () => writeJsonFile(wakesFile(), wakes);
   const log = (message: string) => process.stderr.write(`${new Date().toISOString()} ${message}\n`);
+
+  // 送信の途中で止まった起こし知らせは、届いたか分からない。再送しない。
+  for (const [id, wake] of Object.entries(wakes)) {
+    if (wake.state !== "sending") continue;
+    delete wakes[id];
+    log(`起こし知らせ ${id} → unknown（送信の途中で止まりました。再送しません）`);
+  }
+  saveWakes();
 
   // 前回の途中で落ちた送信は、届いたか分からない。送り直さず unknown として返す（受信箱に残っていれば待つ）。
   for (const [id, entry] of Object.entries(journal)) {
@@ -170,6 +183,7 @@ export async function runDaemon() {
     } catch (error) {
       const e = error as { outcome_unknown?: boolean; closed?: boolean; delivery_code?: string; message: string };
       Object.assign(entry, { state: "report", result: e.outcome_unknown ? "unknown" : "failed", detail: e.closed ? e.message : `${e.delivery_code ?? "send_failed"}: ${e.message}` });
+      if (e.closed && queueWake(wakes, item.decision_id, item.route.channel_id)) saveWakes();
     }
     save();
     log(`配送 ${item.decision_id} → ${entry.state}${entry.result ? `/${entry.result}` : ""}`);
@@ -195,12 +209,59 @@ export async function runDaemon() {
         if (!giveUp) continue;
         // 遅れて起動し直した会話が二重に受け取らないよう、未取得の本文を取り下げる。取られていたら次の確認で emitted/unknown を追う。
         if (!steer.withdrawFromChannel(PROFILE, entry.channel_id, entry.delivery_id)) continue;
+        if (queueWake(wakes, id, entry.channel_id)) saveWakes();
         Object.assign(entry, { state: "report", result: "failed", detail: entry.harness === "claude" ? "申請を出したAIの会話が終わっています" : "答えを受け取る背景の受信processが動いていません" });
       }
       else continue;
       save();
       log(`配送 ${id} → ${entry.result}`);
       await report(id);
+    }
+  }
+
+  async function processWakes() {
+    for (const [id, wake] of Object.entries(wakes)) {
+      if (wake.state !== "pending" || (wake.next_at && Date.parse(wake.next_at) > Date.now())) continue;
+      let decision: Record<string, unknown>;
+      try { decision = await api.call<Record<string, unknown>>("GET", `/decisions/${encodeURIComponent(id)}`); }
+      catch (error) {
+        if (error instanceof ServerError && error.status === 404) {
+          delete wakes[id];
+          saveWakes();
+          log(`起こし知らせ ${id} → 不要（申請が見つかりません）`);
+          continue;
+        }
+        wake.next_at = new Date(Date.now() + 60_000).toISOString();
+        saveWakes();
+        continue;
+      }
+      if (decision.status !== "answered" || decision.delivery === "fetched" || decision.delivery === "delivered") {
+        delete wakes[id];
+        saveWakes();
+        log(`起こし知らせ ${id} → 不要（${decision.status}/${decision.delivery}）`);
+        continue;
+      }
+      wake.state = "sending";
+      saveWakes();
+      try {
+        const result = await sendWake(wake.bot_id, wakeMessage(id, String(decision.title ?? "")));
+        if (result.outcome === "retry") {
+          wake.state = "pending";
+          wake.tries += 1;
+          wake.next_at = new Date(Date.now() + Math.min(10 * 60_000, 30_000 * 2 ** (wake.tries - 1))).toISOString();
+          saveWakes();
+          log(`起こし知らせ ${id} → retry ${wake.bot_id} ${result.detail}`);
+        } else {
+          delete wakes[id];
+          saveWakes();
+          log(`起こし知らせ ${id} → ${result.outcome} ${wake.bot_id} ${result.detail}`);
+        }
+      } catch (error) {
+        // 送信の結果が分からないまま「sending」を残さない。再送しない。
+        delete wakes[id];
+        try { saveWakes(); } catch { /* 次の保存で直る */ }
+        log(`起こし知らせ ${id} → unknown（${(error as Error).message}）`);
+      }
     }
   }
 
@@ -277,13 +338,14 @@ export async function runDaemon() {
   while (!stopping) {
     await sleep(2000);
     await checkQueued();
+    await processWakes();
     if (++tick % 30 === 0) {
       await sync();
       // 待つものが無くなって30分たったら終わる。次の申請でMCPが起こし直す。
       try {
         const { items } = await api.call<{ items: { status: string }[] }>("GET", "/decisions");
         const open = items.some((d) => d.status === "pending" || d.status === "held");
-        if (open || Object.keys(journal).length) idleSince = Date.now();
+        if (open || Object.keys(journal).length || Object.keys(wakes).length) idleSince = Date.now();
         else if (Date.now() - idleSince > IDLE_EXIT_MS) stop();
       } catch { idleSince = Date.now(); }
     }
