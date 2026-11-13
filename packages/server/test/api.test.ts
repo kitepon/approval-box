@@ -29,6 +29,8 @@ function setup(billing: "off" | "store" = "store") {
 async function paired(ctx: ReturnType<typeof setup>) {
   const start = await ctx.call("POST", "/connector/v1/pairing", { body: { device_name: "dev-pc", os: "linux", clients: ["claude-code", "codex"] } });
   assert.equal(start.status, 200);
+  const ahead = Date.parse(start.json.expires_at) - Date.now();
+  assert.ok(ahead > 6.9 * 86400_000 && ahead < 7.1 * 86400_000);
   const lookup = await ctx.call("GET", `/v1/pairing/lookup?code=${start.json.code.toLowerCase().replace("-", "")}`, { token: ctx.session });
   assert.equal(lookup.json.device_name, "dev-pc");
   const claim = await ctx.call("POST", `/v1/pairing/${lookup.json.pairing_id}/claim`, { token: ctx.session });

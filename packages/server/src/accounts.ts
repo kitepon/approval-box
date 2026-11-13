@@ -8,7 +8,8 @@ import type { Connection } from "./decisions.ts";
 import { Diagnostics } from "./diagnostics.ts";
 
 const SESSION_DAYS = 90;
-const PAIRING_MINUTES = 10;
+// 利用者が席を外していても、戻った時にリンクを受け取れるようにする。
+const PAIRING_DAYS = 7;
 const LOGIN_LINK_MINUTES = 15;
 
 /** 期限を過ぎた契約は、更新の知らせが来るまで切れたものとして扱う。 */
@@ -271,7 +272,7 @@ export class Accounts {
     const pollSecret = secret("kps");
     let code = pairingCode();
     while (get(this.db, "select 1 from pairings where code = ?", code)) code = pairingCode();
-    const expires = new Date(Date.now() + PAIRING_MINUTES * 60_000).toISOString();
+    const expires = new Date(Date.now() + PAIRING_DAYS * 86400_000).toISOString();
     run(this.db, "insert into pairings (id, code, poll_secret_hash, device_name, os, clients, status, created_at, expires_at) values (?, ?, ?, ?, ?, ?, 'waiting', ?, ?)",
       id, code, hash(pollSecret), deviceName, os, JSON.stringify(clients), now(), expires);
     return { pairing_id: id, code, qr_url: `${publicUrl}/pair?c=${code}`, poll_secret: pollSecret, expires_at: expires };
