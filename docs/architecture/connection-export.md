@@ -30,6 +30,9 @@ flowchart LR
   B -->|existing connector HTTPS API / Bearer| S[Approval Box server]
   R -->|unavailable: no credential stdout| E[Exit 1 / fixed stderr]
   E -->|existing setup or fix local file, then invoke again| R
+  V[Installed bundle metadata] --> Q[version --json]
+  Q -->|versioned capability JSON| I[BellTeam IdleSessions]
+  I --> D[BellTeam idle-close policy]
 ```
 
 Private path, storage format and filesystem validation remain Approval Box's responsibility. The reader checks realpath equality, a regular single-link file, 1..65536 bytes, POSIX current UID/GID and exact mode 0600 where UID/GID exist. It bounds the read on one descriptor, checks size/mtime/ctime again, and clears its byte buffer. On platforms without POSIX UID/GID, the regular-file/link/size/race checks remain; filesystem access control is provided by the platform. This preserves the prior Linux consumer's file protections without requiring BellTeam to know a private path.
@@ -41,3 +44,11 @@ There are no automatic writes or retry loops. Correction/setup is an existing st
 ## Verification scope
 
 Use synthetic profiles only. Exercise the public source/built CLI and package bundle: exact output/schema/minimal fields, no network/state changes, unavailable config, malformed config/value, permission/link rejection, and an empty stdout without leaked synthetic token for errors. POSIX-only ownership/mode/link cases are conditional on the platform. Existing server/API/native behavior is outside this additive local interface change.
+
+## Installed bundle capabilities (since 0.1.36)
+
+Invoke the same stable executable with argv `version --json`. Stdout is exactly one JSON object and newline: `{"schema":"approval-box.version.v1","version":"0.1.36","capabilities":["bellteam-requester-wake"]}` (version tracks the installed package). Plain `version` remains the existing version line. The query reads no config, state or processes, makes no network request and changes nothing.
+
+The capability declares the installed bundle's requester-wake support documented since 0.1.34: a BellTeam-origin request whose receiver is lost gets one public sendmessage wake with resume_decision guidance. It is not a receipt for an individual wake or answer, nor a promise about a historical running process's ancestry. BellTeam's existing deployment owns installing supported MCP/daemon versions; a local runtime install alone does not restart previously registered processes.
+
+Function: product CLI version/VERSION → explicit versioned capability JSON → BellTeam IdleSessions (Kiro, bd03). Data flow: installed product bundle metadata → captured stable CLI output → BellTeam capability validation → BellTeam's idle-close policy for every harness. BellTeam no longer derives this product fact from Claude hook ancestry or private config/state. Kiro owns the corresponding consumer diagrams and absent/invalid-capability handling. No per-seat pending-decision count or new product state is exposed.

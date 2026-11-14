@@ -287,7 +287,13 @@ const commands: Record<string, () => Promise<void> | void> = {
   "cursor-context": cursorContext,
   mcp: runMcp,
   daemon: runDaemon,
-  version: () => { out(VERSION); },
+  version: () => {
+    if (argv.length === 2 && argv[1] === "--json") {
+      out(JSON.stringify({ schema: "approval-box.version.v1", version: VERSION, capabilities: ["bellteam-requester-wake"] }));
+      return;
+    }
+    out(VERSION);
+  },
 };
 
 const run = commands[command];
