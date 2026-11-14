@@ -2,6 +2,14 @@
 
 Public interface since connector 0.1.35: `approval-box connection export --json` (also `npx --yes approval-box@0.1.35 connection export --json`). This is a local CLI contract, not a published JavaScript module or a server endpoint.
 
+## Stable executable and installation
+
+The product-owned executable is `<profile>/bin/approval-box`; for the default BellTeam profile it is `/home/bell/.approval-box/bin/approval-box`. Invoke that executable with argv `connection export --json`. The launcher uses `node` from the caller PATH and imports the installed versioned CLI; callers never construct a `runtime/<version>` path.
+
+`approval-box install-runtime` copies the current published bundle to its versioned runtime and atomically replaces the stable executable (mode 0755). It prints the stable path, performs no network request, and does not pair, change config/hooks or start a daemon. Normal `setup` uses the same installer, so each installed release refreshes the executable. `uninstall` removes the stable launcher while retaining the existing historical-runtime policy for old conversations. To bootstrap without an existing launcher, use `npx --yes approval-box@0.1.35 install-runtime`; subsequent releases can be installed through the same published command.
+
+Installation flow: published package → existing product runtime copier → versioned CLI → atomic same-directory rename of the stable executable → consumer invocation. A failed launcher write preserves the prior executable and cleans only its own temporary file; the next install can regenerate it from the package. The contract protects against replacing an existing executable with a partial file.
+
 ## Function contract
 
 | Owner / function | Input | Output / caller | Failure and next transition |
