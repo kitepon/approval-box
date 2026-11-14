@@ -5,8 +5,9 @@ import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { writeJsonFile } from "./config.ts";
 import { hasInstructions, hasInstructionsInDir, managedElsewhere, removeInstructions, writeInstructions } from "./instructions.ts";
-import { MCP_SERVER, PROFILE } from "./profile.ts";
+import { HOOK_FILES, MCP_SERVER, PROFILE } from "./profile.ts";
 import { runtimeEntry } from "./runtime.ts";
+import { VERSION } from "./version.ts";
 
 export const HARNESSES = ["claude", "codex", "cursor", "grok"] as const;
 export type Target = (typeof HARNESSES)[number];
@@ -94,6 +95,37 @@ function setCursorContext(enable: boolean) {
 export const cursorContextRegistered = () => JSON.stringify(readJson(join(cursorDir(), "hooks.json")).hooks ?? {}).includes(` ${CURSOR_CONTEXT}"`);
 
 const registration = () => ({ command: stableNode(), args: [runtimeEntry("cli"), "mcp"] });
+// CodexはMCPへ決まった環境変数しか渡さない。CODEX_HOMEを渡さないと、MCPは別のCODEX_HOME（~/.codex）を親だと思い、hookの確認に失敗する。
+const CODEX_ENV_VARS = ["CODEX_HOME"];
+const hookRuntime = (kind: "claude" | "cursor") => ({ command: stableNode(), script: runtimeEntry(kind) });
+const cursorHookEntry = () => ({ command: steer.cursorParentHookCommand(hookRuntime("cursor")), timeout: 15 });
+
+/**
+ * BellTeam's bellteam.harness-entries.v1 (v1.1, docs/architecture/harness-entries.md): exactly the native entries registerTools()
+ * writes, for a host that is the single writer of the CLI files. Built from the same pieces, so the two cannot drift.
+ */
+export function harnessEntries() {
+  return {
+    schema: "bellteam.harness-entries.v1",
+    product: MCP_SERVER,
+    version: VERSION,
+    mcpServers: {
+      [MCP_SERVER]: {
+        claude: { type: "stdio", ...registration() },
+        codex: { ...registration(), env_vars: CODEX_ENV_VARS },
+        cursor: registration(),
+        grok: registration(),
+      },
+    },
+    hooks: {
+      claude: steer.claudeParentHookEntries(PROFILE, hookRuntime("claude")),
+      cursor: { afterMCPExecution: [cursorHookEntry()], postToolUse: [cursorHookEntry()] },
+    },
+    permissions: { cursor: { allow: CURSOR_TOOLS.map((tool) => `Mcp(${MCP_SERVER}:${tool})`) } },
+    // 版ごとにruntimeのpathが変わるので、前の版が書いたhookも入口のファイル名で自分の物と分かるようにする。
+    owns: { commandIncludes: [HOOK_FILES.claude, HOOK_FILES.cursor] },
+  };
+}
 
 function readJson(file: string): Record<string, unknown> {
   if (!existsSync(file)) return {};
@@ -133,26 +165,24 @@ export async function register(target: Target, options: { instructions?: boolean
 }
 
 async function registerTools(target: Target, options: { instructions?: boolean }): Promise<RegisterResult> {
-  const hook = (kind: "claude" | "cursor") => ({ command: stableNode(), script: runtimeEntry(kind) });
   try {
     if (target === "claude") {
       setMcpJson(claudeJson(), { type: "stdio", ...registration() });
-      steer.mergeClaudeParentHooks(PROFILE, join(claudeDir(), "settings.json"), hook("claude"));
+      steer.mergeClaudeParentHooks(PROFILE, join(claudeDir(), "settings.json"), hookRuntime("claude"));
       return { target, status: "registered" };
     }
     if (target === "cursor") {
       setMcpJson(join(cursorDir(), "mcp.json"), registration());
-      steer.mergeCursorParentHooks(PROFILE, join(cursorDir(), "hooks.json"), hook("cursor"));
+      steer.mergeCursorParentHooks(PROFILE, join(cursorDir(), "hooks.json"), hookRuntime("cursor"));
       setCursorPermissions(true);
       setCursorContext(!!options.instructions);
       return { target, status: "registered" };
     }
     if (target === "codex") {
-      // CodexはMCPへ決まった環境変数しか渡さない。CODEX_HOMEを渡さないと、MCPは別のCODEX_HOME（~/.codex）を親だと思い、hookの確認に失敗する。
       const config = join(codexHome(), "config.toml");
       backupOnce(config);
       await withCodexConfig(async (request) => {
-        await request("config/batchWrite", { filePath: config, edits: [{ keyPath: `mcp_servers.${MCP_SERVER}`, value: { ...registration(), env_vars: ["CODEX_HOME"] }, mergeStrategy: "replace" }] });
+        await request("config/batchWrite", { filePath: config, edits: [{ keyPath: `mcp_servers.${MCP_SERVER}`, value: { ...registration(), env_vars: CODEX_ENV_VARS }, mergeStrategy: "replace" }] });
       });
       // 旧版の専用登録と承認だけを撤去する。回答配送はAitermの共通Steerが所有する。
       // 旧会話が保持する入口のため、旧runtimeは消さず専用設定を無効にする。
