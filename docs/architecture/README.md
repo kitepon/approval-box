@@ -14,6 +14,7 @@
 | 診断・言語 | server/diagnostics.ts、locales.ts、web/locales.ts | strict診断→raw/group/receipt→管理出力。固定文locale変換 | raw30日/10000件、group120日、receiptは重複防止保持。本文・回答・識別子は翻訳しない |
 | 導入・常駐・終了 | connector/cli.ts、harness.ts、runtime.ts、daemon-launch.ts、server/main.ts | bundle→版固定runtime→設定控え/登録→MCP/daemon。serverはDB/サービス/HTTP組立て | SIGTERM/INT、daemon idle、server abort/close/DB close。旧会話のruntimeを一律削除しない。設定の置き換え（config.ts writeJsonFile）はWindowsのEPERM/EACCES/EBUSYだけ短く待って繰り返し、それでも断られれば相手が開いている旨を添えて失敗（0.1.32） |
 | Local connection handoff and capabilities | connector/cli.ts `connection export --json` / `version --json`, connection-export.ts | Product-owned paired profile → validated `{schema, server, token}` through captured stdout → BellTeam usage/auth; installed version/capabilities → BellTeam IdleSessions; [public contract and data flow](connection-export.md) | No network/write; export rejects unsafe/malformed/missing profiles without credential stdout, setup/correction enables the next invocation; capability query reads bundle metadata only and needs no profile |
+| CLI登録の公開（0.1.37） | connector/cli.ts `harness-entries --json`、harness.ts harnessEntries、`setup --no-register` | 導入済みruntime→registerと同じ部品から`bellteam.harness-entries.v1`→BellTeamがCLI設定の唯一の書き手。詳細は[harness-entries.md](harness-entries.md) | 導入済みruntime以外から呼ぶとexit 1（消えるpathを登録させない）。install-runtime後の再実行で抜ける。設定・資格は読まず、何も書かない |
 | 配備・控え・開発生成物 | Dockerfile、tools/deploy、製品担当の通常配備入口 | [保存と実行環境の詳細](storage-lifecycle.md) | 現用＋直前のimage、NAS検証後のlocal回収。未知run/唯一archiveを保持 |
 
 ## 90066748から501c880への対応

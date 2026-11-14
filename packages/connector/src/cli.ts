@@ -9,7 +9,7 @@ import { Api, ServerError } from "./api.ts";
 import { OFFICIAL_SERVER, readConfig, renameWithRetry, requireConfig, writeConfig } from "./config.ts";
 import { daemonStatus, ensureDaemon, runDaemon } from "./daemon.ts";
 import { exportConnection } from "./connection-export.ts";
-import { CLIENT, HARNESSES, LABEL, type Target, detect, filesOf, instructionsFileOf, register, registered, unregister } from "./harness.ts";
+import { CLIENT, HARNESSES, LABEL, type Target, detect, filesOf, harnessEntries, instructionsFileOf, register, registered, unregister } from "./harness.ts";
 import { INSTRUCTION_TEXT, managedElsewhere } from "./instructions.ts";
 import { runMcp } from "./mcp.ts";
 import { home } from "./profile.ts";
@@ -121,23 +121,28 @@ async function setup() {
 
   out(`Approval Box ${VERSION} のセットアップ`);
   out(`サーバー: ${server}\n`);
-  out("次のAIにApproval Boxを登録します。書き換えるファイル:");
-  for (const target of targets) out(`  ${LABEL[target]}: ${filesOf(target).join(", ")}`);
-  out("");
+  // 席のCLI設定を一人で書く管理元（BellTeam）は、harness-entries --json を読んで自分で登録する。
+  const noRegister = flag("no-register");
+  if (noRegister) out(`AIの設定ファイルは書き換えません（登録は harness-entries --json を読む管理元が行います）。対象: ${targets.map((t) => LABEL[t]).join(", ")}\n`);
+  else {
+    out("次のAIにApproval Boxを登録します。書き換えるファイル:");
+    for (const target of targets) out(`  ${LABEL[target]}: ${filesOf(target).join(", ")}`);
+    out("");
+  }
   if (targets.includes("claude")) out("・Claude Code の Stop hook と SessionStart hook は、すべての会話で、ターンが終わるたび・会話が始まるたびに node を1回起動します（Approval Boxの申請が無ければすぐ終わります）。");
   if (targets.includes("codex")) out("・Codex の答えは Aiterm の Steer で元の会話へ返します。旧版のApproval Box専用配送hookは撤去します。");
   if (targets.includes("cursor") || targets.includes("grok")) out("・Cursor（止まっている時）と Grok は、申請の時にAIが背景で受信を起動します。");
   out(`・書き換える前のファイルは「${".approval-box-backup"}」を付けて控えます。元に戻すには npx approval-box uninstall。\n`);
   if (!flag("yes") && !/^y(es)?$/i.test(await ask("続けますか？ [y/N] "))) { out("やめました。"); return; }
 
-  out("\nAIが毎回読む全体の指示に、次の一節を足すと、AIがApproval Boxを使うようになります（外す時は uninstall）。");
-  out(`  「${INSTRUCTION_TEXT}」`);
-  for (const target of targets) {
+  if (!noRegister) out("\nAIが毎回読む全体の指示に、次の一節を足すと、AIがApproval Boxを使うようになります（外す時は uninstall）。");
+  if (!noRegister) out(`  「${INSTRUCTION_TEXT}」`);
+  for (const target of noRegister ? [] : targets) {
     const file = instructionsFileOf(target);
     const link = file ? managedElsewhere(file) : null;
     out(`  ${LABEL[target]}: ${!file ? "会話の始まりのhook（hooks.json の sessionStart）で渡します" : link ? `${file} は ${link} への参照で、別の所で管理されているので書きません（管理元の規範に一節を足してください）` : file}`);
   }
-  const instructions = !flag("no-instructions") && (flag("yes") || !/^n(o)?$/i.test(await ask("足しますか？ [Y/n] ")));
+  const instructions = !noRegister && !flag("no-instructions") && (flag("yes") || !/^n(o)?$/i.test(await ask("足しますか？ [Y/n] ")));
 
   const cli = installRuntime();
   const token = option("token") ?? (config?.server === server ? config?.token : undefined);
@@ -157,7 +162,7 @@ async function setup() {
 
   // ここからは複製した置き場のコードで登録する（hookに書かれるpathを固定するため）。
   const { spawnSync } = await import("node:child_process");
-  const result = spawnSync(process.execPath, [cli, "register", "--targets", targets.join(","), ...(instructions ? ["--instructions"] : [])], { stdio: "inherit" });
+  const result = spawnSync(process.execPath, [cli, "register", "--targets", noRegister ? "" : targets.join(","), ...(instructions ? ["--instructions"] : [])], { stdio: "inherit" });
   if (result.status !== 0) throw new Error("AIへの登録に失敗しました。");
   await api.call("PUT", "/connection/clients", { clients: targets.map((t) => CLIENT[t]), os: osName() });
   if (flag("no-test")) return;
@@ -174,7 +179,7 @@ async function registerTargets() {
     if (result.status === "failed") failed = true;
   }
   ensureDaemon();
-  out("\n登録したAIは、開いている会話を閉じて開き直すとApproval Boxを使えます。");
+  if (targets.length) out("\n登録したAIは、開いている会話を閉じて開き直すとApproval Boxを使えます。");
   if (failed) process.exit(1);
 }
 
@@ -260,9 +265,11 @@ async function test() {
 function help() {
   out(`Approval Box ${VERSION}
 
-  npx approval-box setup [--server URL] [--token TOKEN] [--only claude,codex,cursor,grok] [--no-instructions] [--yes]
+  npx approval-box setup [--server URL] [--token TOKEN] [--only claude,codex,cursor,grok] [--no-instructions] [--no-register] [--yes]
       AIにApproval Boxを登録し、この端末をアカウントに結び、セットアップ確認まで行う
+      --no-register: AIの設定は書かない（CLI設定を一人で書く管理元が harness-entries を読んで登録する）
   npx approval-box install-runtime  固定の実行入口を入れる（接続・AI登録は変更しない）
+  approval-box harness-entries --json  登録内容（MCP・hook・許可）をJSONで管理元へ渡す。固定の実行入口から呼ぶ
   npx approval-box test       接続テスト（AIに「Approval Boxのsetup_testを実行して」と言って確かめる）
   npx approval-box status     つながり、登録、確認の状態
   npx approval-box doctor     届かない時の原因を調べる
@@ -279,6 +286,12 @@ async function cursorContext() {
 const commands: Record<string, () => Promise<void> | void> = {
   setup, test, status, doctor, uninstall, help,
   "install-runtime": () => { out(installRuntime()); },
+  "harness-entries": () => {
+    if (argv.length !== 2 || argv[1] !== "--json") throw new Error("Usage: approval-box harness-entries --json");
+    // npxのキャッシュや作業tree上のpathは消えるので、登録させない。
+    if (runtimeDir() !== join(home(), "runtime", VERSION)) throw new Error("APPROVAL_BOX_RUNTIME_NOT_INSTALLED: run approval-box install-runtime, then invoke its stable executable");
+    out(JSON.stringify(harnessEntries()));
+  },
   connection: () => {
     if (argv.length !== 3 || argv[1] !== "export" || argv[2] !== "--json") throw new Error("Usage: approval-box connection export --json");
     out(JSON.stringify(exportConnection()));

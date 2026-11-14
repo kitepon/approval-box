@@ -33,6 +33,13 @@ try {
     schema: "approval-box.connection.v1", server: "https://approval-box.kitepon.dev", token: "synthetic-launcher-fixture",
   });
   assert.equal(readFileSync(config, "utf8"), fixture);
+  // BellTeam's single writer reads the registration from the installed runtime, never from a vanishing package path.
+  const entries = JSON.parse(run(launcher, ["harness-entries", "--json"]));
+  assert.equal(entries.schema, "bellteam.harness-entries.v1");
+  assert.equal(entries.version, version);
+  assert.deepEqual(entries.mcpServers["approval-box"].codex.args, [join(profile, "runtime", version, "cli.mjs"), "mcp"]);
+  assert.ok(!JSON.stringify(entries).includes("synthetic-launcher-fixture"));
+  assert.deepEqual(readdirSync(profile).sort(), ["bin", "config.json", "runtime"]);
   // Update an existing executable through the installed CLI, preserving the profile.
   writeFileSync(launcher, "old launcher\n");
   assert.equal(run(join(profile, "runtime", version, "cli.mjs"), ["install-runtime"]), launcher + "\n");
