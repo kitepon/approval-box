@@ -17,12 +17,15 @@ const run = (file, args) => {
 };
 try {
   const version = run(cli, ["version"]).trim();
+  const capabilities = { schema: "approval-box.version.v1", version, capabilities: ["bellteam-requester-wake"] };
+  assert.equal(run(cli, ["version", "--json"]), `${JSON.stringify(capabilities)}\n`);
   const launcher = join(profile, "bin", "approval-box");
   assert.equal(run(cli, ["install-runtime"]), launcher + "\n");
   assert.deepEqual(readdirSync(profile).sort(), ["bin", "runtime"]);
   if (process.platform !== "win32") assert.equal(statSync(launcher).mode & 0o777, 0o755);
   const installed = run(launcher, ["version"]).trim();
   assert.equal(installed, version);
+  assert.equal(run(launcher, ["version", "--json"]), `${JSON.stringify(capabilities)}\n`);
   const config = join(profile, "config.json");
   const fixture = JSON.stringify({ server: "https://approval-box.kitepon.dev/", token: "synthetic-launcher-fixture" });
   writeFileSync(config, fixture, { mode: 0o600 });
