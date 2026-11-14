@@ -86,7 +86,7 @@ export async function sendWake(botId: string, message: string, fetchImpl: typeof
   if (json.error || json.result?.isError) return { outcome: "refused", detail: (json.error?.message ?? text ?? "refused").slice(0, 200) };
   try {
     const body = JSON.parse(text ?? "") as { delivery?: string; delivery_id?: string };
-    if (body.delivery === "running" || body.delivery === "steered" || body.delivery === "delivered") return { outcome: "accepted", detail: `${body.delivery} ${body.delivery_id ?? ""}`.trim() };
+    if (body.delivery === "queued" || body.delivery === "running" || body.delivery === "steered" || body.delivery === "delivered") return { outcome: "accepted", detail: `${body.delivery} ${body.delivery_id ?? ""}`.trim() };
   } catch { /* 読めなければ unknown */ }
   return { outcome: "unknown", detail: (text ?? "").slice(0, 200) };
 }

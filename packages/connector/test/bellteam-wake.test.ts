@@ -66,7 +66,7 @@ test("BellTeamへの送信: 断られたら refused、届く前の接続失敗�
   assert.deepEqual(await sendWake("bot-a1", "m", async () => { throw refused; }), { outcome: "retry", detail: "ECONNREFUSED" });
   assert.equal((await sendWake("bot-a1", "m", async () => { throw Object.assign(new Error("timeout"), { name: "TimeoutError" }); })).outcome, "unknown");
   assert.equal((await sendWake("bot-a1", "m", async () => new Response("", { status: 500 }))).outcome, "unknown");
-  assert.equal((await sendWake("bot-a1", "m", async () => json(reply({ delivery: "queued" })))).outcome, "unknown");
+  assert.deepEqual(await sendWake("bot-a1", "m", async () => json(reply({ delivery: "queued", delivery_id: "q1" }))), { outcome: "accepted", detail: "queued q1" });
 });
 
 test("BellTeamへの送信: SSE形式の返事も読む", async () => {

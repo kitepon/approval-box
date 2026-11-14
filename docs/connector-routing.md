@@ -147,3 +147,7 @@ Timing: when the seat ended with `SessionEnd`, the message is sent right after t
 Not covered: conversations whose MCP process started before 0.1.34 was installed write no record and are not woken (they are replaced when the seat restarts its CLI). Outside BellTeam nothing changes. The local BellTeam MCP address is fixed (`shortcut: BellTeam's local MCP address 127.0.0.1:4181, read it from BellTeam if it ever becomes configurable`).
 
 Scope: the connector MCP and daemon on Linux in BellTeam seats, all channel kinds that the daemon gives up (Claude Code and background). No server, app or Web API change.
+
+## BellTeam acceptance label (0.1.35)
+
+BellTeam public sendmessage returns `queued` for a durably accepted wake of a sleeping seat. `sendWake` classifies this as accepted and retains `queued` in its detail. This changes the daemon log label only; accepted/unknown still terminate the existing wake journal without duplicate send. The earlier a49 live wake/fetch acceptance remains valid and is not repeated.

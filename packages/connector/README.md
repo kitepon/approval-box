@@ -68,3 +68,7 @@ MCPは、[unai](https://github.com/kitepon/unai)の方針に沿って申請文�
 例：「ランタイム更新の実行可否について」より「Approval Boxの実行環境を更新してよいですか？」、背景には「セキュリティ修正を適用します。更新中は数秒使えなくなります。」のように具体的に書きます。
 
 AIへの執筆指示のため、文章の品質を機械的に保証するものではありません。保存済みの申請・回答は書き換えません。ローカル接続ではコネクタ0.1.27へ更新し、MCPを再接続すると新しい指示を取得できます。
+
+## Local connection handoff
+
+`approval-box connection export --json` (since 0.1.35) returns `{ "schema": "approval-box.connection.v1", "server": "<API base URL>", "token": "<connection bearer>" }` for the existing paired local profile. Capture stdout privately: it contains a secret. The command makes no network request or state change. Missing/malformed/unsafe configuration exits 1, emits no stdout, and reports `APPROVAL_BOX_CONNECTION_UNAVAILABLE` on stderr. Storage layout is private; integrations use this command rather than reading config files or importing internal modules. The public profile selector is `APPROVAL_BOX_HOME`. See [the function and data-flow contract](https://github.com/kitepon/approval-box/blob/main/docs/architecture/connection-export.md) for validation and consumer obligations.

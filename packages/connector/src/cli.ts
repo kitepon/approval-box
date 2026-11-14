@@ -7,6 +7,7 @@ import QRCode from "qrcode";
 import { Api, ServerError } from "./api.ts";
 import { OFFICIAL_SERVER, readConfig, requireConfig, writeConfig } from "./config.ts";
 import { daemonStatus, ensureDaemon, runDaemon } from "./daemon.ts";
+import { exportConnection } from "./connection-export.ts";
 import { CLIENT, HARNESSES, LABEL, type Target, detect, filesOf, instructionsFileOf, register, registered, unregister } from "./harness.ts";
 import { INSTRUCTION_TEXT, managedElsewhere } from "./instructions.ts";
 import { runMcp } from "./mcp.ts";
@@ -253,6 +254,7 @@ function help() {
   npx approval-box test       接続テスト（AIに「Approval Boxのsetup_testを実行して」と言って確かめる）
   npx approval-box status     つながり、登録、確認の状態
   npx approval-box doctor     届かない時の原因を調べる
+  npx approval-box connection export --json  接続情報（秘密）をJSONで他のプログラムへ渡す
   npx approval-box uninstall  登録を全部外し、この端末の接続を解除する`);
 }
 
@@ -264,6 +266,10 @@ async function cursorContext() {
 
 const commands: Record<string, () => Promise<void> | void> = {
   setup, test, status, doctor, uninstall, help,
+  connection: () => {
+    if (argv.length !== 3 || argv[1] !== "export" || argv[2] !== "--json") throw new Error("Usage: approval-box connection export --json");
+    out(JSON.stringify(exportConnection()));
+  },
   register: registerTargets,
   "cursor-context": cursorContext,
   mcp: runMcp,
