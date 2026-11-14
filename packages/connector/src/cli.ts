@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createInterface } from "node:readline/promises";
 import QRCode from "qrcode";
 import { Api, ServerError } from "./api.ts";
-import { OFFICIAL_SERVER, readConfig, requireConfig, writeConfig } from "./config.ts";
+import { OFFICIAL_SERVER, readConfig, renameWithRetry, requireConfig, writeConfig } from "./config.ts";
 import { daemonStatus, ensureDaemon, runDaemon } from "./daemon.ts";
+import { exportConnection } from "./connection-export.ts";
 import { CLIENT, HARNESSES, LABEL, type Target, detect, filesOf, instructionsFileOf, register, registered, unregister } from "./harness.ts";
 import { INSTRUCTION_TEXT, managedElsewhere } from "./instructions.ts";
 import { runMcp } from "./mcp.ts";
@@ -46,7 +48,16 @@ function installRuntime(): string {
     mkdirSync(target, { recursive: true });
     cpSync(runtimeDir(), target, { recursive: true });
   }
-  return join(target, "cli.mjs");
+  const bin = join(home(), "bin");
+  mkdirSync(bin, { recursive: true, mode: 0o700 });
+  const launcher = join(bin, "approval-box");
+  const temp = `${launcher}.${process.pid}.tmp`;
+  try {
+    writeFileSync(temp, `#!/usr/bin/env node\nimport ${JSON.stringify(pathToFileURL(join(target, "cli.mjs")).href)};\n`, { mode: 0o755 });
+    chmodSync(temp, 0o755);
+    renameWithRetry(temp, launcher);
+  } finally { rmSync(temp, { force: true }); }
+  return launcher;
 }
 
 function selectedTargets(): Target[] {
@@ -182,6 +193,7 @@ async function uninstall() {
     catch (error) { out(`  サーバー: 接続の解除に失敗しました（アプリの「接続」から外してください）: ${(error as Error).message}`); }
   }
   rmSync(join(home(), "config.json"), { force: true });
+  rmSync(join(home(), "bin", "approval-box"), { force: true });
   out("\nApproval Boxを外しました。npm install -g で入れた場合は、npm uninstall -g approval-box で本体も消せます。");
 }
 
@@ -250,9 +262,11 @@ function help() {
 
   npx approval-box setup [--server URL] [--token TOKEN] [--only claude,codex,cursor,grok] [--no-instructions] [--yes]
       AIにApproval Boxを登録し、この端末をアカウントに結び、セットアップ確認まで行う
+  npx approval-box install-runtime  固定の実行入口を入れる（接続・AI登録は変更しない）
   npx approval-box test       接続テスト（AIに「Approval Boxのsetup_testを実行して」と言って確かめる）
   npx approval-box status     つながり、登録、確認の状態
   npx approval-box doctor     届かない時の原因を調べる
+  npx approval-box connection export --json  接続情報（秘密）をJSONで他のプログラムへ渡す
   npx approval-box uninstall  登録を全部外し、この端末の接続を解除する`);
 }
 
@@ -264,6 +278,11 @@ async function cursorContext() {
 
 const commands: Record<string, () => Promise<void> | void> = {
   setup, test, status, doctor, uninstall, help,
+  "install-runtime": () => { out(installRuntime()); },
+  connection: () => {
+    if (argv.length !== 3 || argv[1] !== "export" || argv[2] !== "--json") throw new Error("Usage: approval-box connection export --json");
+    out(JSON.stringify(exportConnection()));
+  },
   register: registerTargets,
   "cursor-context": cursorContext,
   mcp: runMcp,

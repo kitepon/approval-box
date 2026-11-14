@@ -38,5 +38,6 @@ jobs:
       - run: npm run typecheck -w packages/connector
       - run: npm test -w packages/connector
       - run: npm run build -w packages/connector
+      - run: npm run test:bundle -w packages/connector
       - run: npm publish --access public
         working-directory: packages/connector
