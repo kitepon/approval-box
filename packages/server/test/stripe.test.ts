@@ -67,7 +67,23 @@ test("Stripe: 確認前は買えず、確認後は決済のURLを返し、利用
   assert.equal(form.get("subscription_data[metadata][user_id]"), t.userId);
   assert.equal(form.get("automatic_tax[enabled]"), "true");
   assert.equal(form.get("line_items[0][price]"), "price_1");
+  assert.equal(form.get("subscription_data[trial_period_days]"), "30");
   assert.equal((await t.call("GET", "/v1/me")).json.web_billing, true);
+});
+
+test("Stripe: 無料期間（trialing）は契約中として使え、買い直しには無料期間を付けない", async () => {
+  const t = setup();
+  t.verified();
+  t.subs.set("sub_1", t.sub({ status: "trialing" }));
+  await t.hook(subscriptionEvent("customer.subscription.created"));
+  const me = (await t.call("GET", "/v1/me")).json;
+  assert.equal(me.plan, "active");
+  assert.equal(me.store, "web");
+  t.subs.set("sub_1", t.sub({ status: "canceled" }));
+  await t.hook(subscriptionEvent("customer.subscription.deleted"));
+  assert.equal((await t.call("GET", "/v1/me")).json.plan, "expired");
+  await t.call("POST", "/v1/billing/stripe/checkout");
+  assert.equal(t.sent.at(-1)!.form.get("subscription_data[trial_period_days]"), null);
 });
 
 test("Stripe: 通知でStripeから読み直し、/me は契約中・web・期末になる", async () => {
@@ -204,4 +220,16 @@ test("Stripeが設定されていないサーバーでは、窓口は404でweb_b
   assert.equal(hook.status, 404);
   const me = await (await app.request("/v1/me", { headers: { authorization: `Bearer ${session}` } })).json() as any;
   assert.equal(me.web_billing, undefined);
+});
+
+test("課金の対象外のアカウントは、契約が切れていても契約中として使える。ほかの利用者は変わらない", () => {
+  const t = setup();
+  const other = t.accounts.createUser();
+  for (const id of [t.userId, other]) run(t.db, "update users set plan = 'expired', plan_expires_at = '2020-01-01T00:00:00.000Z', store = 'web' where id = ?", id);
+  const free = new Accounts(t.db, new EventHub(t.db), "store", true, new Set([t.userId]));
+  assert.equal(free.me(t.userId).plan, "active");
+  assert.equal("expires_at" in free.me(t.userId), false);
+  assert.doesNotThrow(() => free.assertCanUse(t.userId));
+  assert.equal(free.me(other).plan, "expired");
+  assert.throws(() => free.assertCanUse(other));
 });

@@ -10,7 +10,7 @@ One account has one plan. `GET /v1/me` is the only thing a reader (apps, BellTea
 | --- | --- | --- | --- | --- |
 | New account, nothing bought | `trial` | absent (no end today) | absent | yes |
 | Apple subscription in its paid period | `active` | period end | `app_store` | yes |
-| Stripe subscription in its paid period | `active` | period end | `web` | yes |
+| Stripe subscription in its paid period (including the 30-day free trial, Stripe status `trialing`) | `active` | period end (the trial end while trialing) | `web` | yes |
 | Stripe cancelled by the user, period not over | `active` | period end | `web` | yes, until `expires_at` |
 | Period over, payment failed, refunded or cancelled at once | `expired` | last period end | store of the last paid period | no |
 | Self-hosted server (`BILLING=off`) | `active` | absent | absent | yes |
@@ -53,6 +53,10 @@ Rules the code keeps:
 - The BellTeam client session (`/v1` allowlist) cannot start checkout or the portal. BellTeam only reads `/me`; it opens `https://approval-box.kitepon.dev/settings` for the user, who signs in and buys there. BellTeam copies no payment state.
 - Apple apps show no Stripe button or link (App Review 3.1.1). A Stripe purchase is honoured in the apps because they read `/me` (3.1.3(b)); the plan is also sold as the existing in-app purchase.
 
+## Independence from BellTeam
+
+Approval Box is its own service; BellTeam is one of its clients. BellTeam (or any client) never holds payment state: it opens `/settings` where the user buys, and reads `/me`. The one free month and the free operator account are Approval Box rules, not BellTeam's.
+
 ## Configuration
 
 All three are required together; if any is missing the server answers 404 for the Stripe routes, `web_billing` is absent and nothing else changes.
@@ -62,6 +66,7 @@ All three are required together; if any is missing the server answers 404 for th
 | `STRIPE_SECRET_KEY(_FILE)` | Stripe **restricted** key | tmpfs file through `start-with-secrets.sh`, like the APNs key |
 | `STRIPE_WEBHOOK_SECRET(_FILE)` | Webhook signing secret `whsec_…` | same |
 | `STRIPE_PRICE_ID` | Price id `price_…` (not a secret) | compose environment |
+| `FREE_ACCOUNT_IDS` | Optional. Comma-separated user ids outside billing (the operator's own account, Owner ruling 2026-11-15). `/me` answers `active` with no `expires_at` or `store`; `assertCanUse` never refuses them. Not a secret | compose environment |
 | `STRIPE_PORTAL_CONFIGURATION` | Optional. Customer portal configuration `bpc_…` made for Approval Box (cancel at period end, no proration). Set it when the Stripe account is shared with another product: without it Stripe uses the account's default portal, which belongs to the other product | compose environment |
 
 The restricted key needs only: Checkout Sessions **write**, Customer portal sessions **write**, Subscriptions **read** and **write** (write is only for cancelling on account deletion), Customers **read**. It cannot refund, create prices or move money.
@@ -69,7 +74,7 @@ The restricted key needs only: Checkout Sessions **write**, Customer portal sess
 ## What the Owner sets up in the Stripe dashboard
 
 1. Account activated; **Stripe Tax** on with the head-office address and the Japan registration (invoice registration number if registered).
-2. Product "Approval Box" and a recurring Price: ¥300, monthly, `tax_behavior = inclusive` (so the buyer pays ¥300 as in the App Store). No trial period. Give me the `price_…` id.
+2. Product "Approval Box" and a recurring Price: ¥300, monthly, `tax_behavior = inclusive` (so the buyer pays ¥300 as in the App Store). The free month is not on the Price: checkout adds `subscription_data[trial_period_days]=30` only for an account with no earlier Stripe or App Store subscription record (Owner ruling 2026-11-15: one free month, Stripe or Apple). The card is collected at checkout; the first charge comes after 30 days. Apple's side is an introductory offer in App Store Connect. Give me the `price_…` id.
 3. Customer portal settings: cancel at the end of the period (not immediately), no proration refunds, card update on.
 4. Webhook endpoint `https://approval-box.kitepon.dev/v1/stripe/webhook` with events `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Its signing secret goes to `request_secret`.
 5. The restricted key above through `request_secret`.
