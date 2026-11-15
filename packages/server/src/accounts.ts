@@ -10,6 +10,10 @@ import { Diagnostics } from "./diagnostics.ts";
 const SESSION_DAYS = 90;
 // 利用者が席を外していても、戻った時にリンクを受け取れるようにする。
 const PAIRING_DAYS = 7;
+// 登録クライアント（BellTeamなど）の接続は、始めた直後に承認される前提なので短い。
+const CLIENT_PAIRING_MINUTES = 15;
+/** 登録クライアント。範囲付きsessionを受け取る。使えるAPIは http.ts の CLIENT_ROUTES。 */
+export const CLIENTS: Record<string, string> = { bellteam: "BellTeam" };
 const LOGIN_LINK_MINUTES = 15;
 
 /** 期限を過ぎた契約は、更新の知らせが来るまで切れたものとして扱う。 */
@@ -19,7 +23,7 @@ function effectivePlan(user: { plan: string; plan_expires_at: string | null }): 
 
 type UserRow = { id: string; created_at: string; setup_verified_at: string | null; retention_days: number; plan: string; plan_expires_at: string | null; store: string | null };
 type ConnectionRow = { id: string; user_id: string; kind: string; label: string; os: string | null; clients: string; created_at: string; last_seen_at: string | null; revoked_at: string | null };
-type PairingRow = { id: string; code: string; poll_secret_hash: string; device_name: string; os: string | null; clients: string; status: string; user_id: string | null; connection_id: string | null; token: string | null; created_at: string; expires_at: string };
+type PairingRow = { id: string; code: string; poll_secret_hash: string; device_name: string; os: string | null; clients: string; status: string; user_id: string | null; connection_id: string | null; token: string | null; created_at: string; expires_at: string; client: string | null };
 type CheckRow = { connection_id: string; client: string; os: string | null; status: string; decision_id: string | null; passed_at: string | null; tested_at: string | null; failed_step: string | null; detail: string | null };
 
 export type BillingMode = "off" | "store";
@@ -43,18 +47,31 @@ export class Accounts {
     return id;
   }
 
-  issueSession(userId: string, label: string): { session: string; expires_at: string } {
+  issueSession(userId: string, label: string, client?: string): { session: string; expires_at: string } {
     const session = secret("kss");
     const expires = new Date(Date.now() + SESSION_DAYS * 86400_000).toISOString();
-    run(this.db, "insert into sessions (token_hash, user_id, label, created_at, expires_at) values (?, ?, ?, ?, ?)", hash(session), userId, label, now(), expires);
+    run(this.db, "insert into sessions (token_hash, user_id, label, created_at, expires_at, id, client) values (?, ?, ?, ?, ?, ?, ?)", hash(session), userId, label, now(), expires, uuid(), client ?? null);
     return { session, expires_at: expires };
   }
 
-  userBySession(session: string | undefined): string {
+  /** `/v1` のBearer。登録クライアントのsessionは使うたびに期限を延ばす（使い続ける限り切れず、90日使わなければ承認からやり直す）。 */
+  authenticate(session: string | undefined): { userId: string; client?: string; sessionId?: string } {
     if (!session) throw new ApiError("unauthorized", "ログインしてください。");
-    const row = get<{ user_id: string; expires_at: string }>(this.db, "select user_id, expires_at from sessions where token_hash = ?", hash(session));
+    const row = get<{ id: string | null; user_id: string; expires_at: string; client: string | null }>(this.db, "select id, user_id, expires_at, client from sessions where token_hash = ?", hash(session));
     if (!row || row.expires_at < now()) throw new ApiError("unauthorized", "ログインの期限が切れました。もう一度ログインしてください。");
-    return row.user_id;
+    if (!row.client) return { userId: row.user_id };
+    const renewed = new Date(Date.now() + SESSION_DAYS * 86400_000).toISOString();
+    // 書き込みは期限が30日以上縮んだ時だけ（毎回は書かない）。
+    if (Date.parse(row.expires_at) < Date.parse(renewed) - 30 * 86400_000) run(this.db, "update sessions set expires_at = ? where token_hash = ?", renewed, hash(session));
+    return { userId: row.user_id, client: row.client, sessionId: row.id! };
+  }
+
+  userBySession(session: string | undefined): string {
+    return this.authenticate(session).userId;
+  }
+
+  clientSessionActive(id: string): boolean {
+    return !!get(this.db, "select 1 from sessions where id = ? and expires_at >= ?", id, now());
   }
 
   // ---- ログインはAppleかGoogleだけ（クオの裁定）。ログイン用のURL・コードは無い ----
@@ -187,10 +204,15 @@ export class Accounts {
   // ---- 接続（端末・リモート）----
 
   connections(userId: string) {
-    return all<ConnectionRow>(this.db, "select * from connections where user_id = ? and revoked_at is null order by created_at", userId).map((c) => ({
+    type Conn = { id: string; kind: string; label: string; os?: string; clients: string[]; created_at: string; last_seen_at?: string };
+    const devices: Conn[] = all<ConnectionRow>(this.db, "select * from connections where user_id = ? and revoked_at is null order by created_at", userId).map((c) => ({
       id: c.id, kind: c.kind === "token" ? "device" : c.kind, label: c.label, ...(c.os ? { os: c.os } : {}), clients: JSON.parse(c.clients) as string[],
       created_at: c.created_at, ...(c.last_seen_at ? { last_seen_at: c.last_seen_at } : {}),
     }));
+    // 承認済みの登録クライアント（BellTeamなど）。外す（DELETE /connections/{id}）と、そのsessionは即座に使えなくなる。
+    const clients = all<{ id: string; label: string | null; created_at: string; client: string }>(this.db, "select id, label, created_at, client from sessions where user_id = ? and client is not null and id is not null and expires_at >= ? order by created_at", userId, now())
+      .map((s): Conn => ({ id: s.id, kind: "client", label: CLIENTS[s.client] ?? s.client, clients: [], created_at: s.created_at }));
+    return [...devices, ...clients] satisfies Conn[];
   }
 
   createConnection(userId: string, label: string, os: string | null, clients: string[], kind: "device" | "token" = "device") {
@@ -242,7 +264,10 @@ export class Accounts {
 
   revokeConnection(userId: string, id: string) {
     const result = run(this.db, "update connections set revoked_at = ?, token_hash = null where id = ? and user_id = ? and revoked_at is null", now(), id, userId);
-    if (!result.changes) throw new ApiError("not_found", "その接続は見つかりません。");
+    if (!result.changes) {
+      if (run(this.db, "delete from sessions where id = ? and user_id = ? and client is not null", id, userId).changes) return;
+      throw new ApiError("not_found", "その接続は見つかりません。");
+    }
     run(this.db, "delete from setup_checks where connection_id = ?", id);
     run(this.db, "delete from request_uploads where connection_id = ?", id);
   }
@@ -267,14 +292,15 @@ export class Accounts {
 
   // ---- ペアリング ----
 
-  startPairing(deviceName: string, os: string | null, clients: string[], publicUrl: string) {
+  startPairing(deviceName: string, os: string | null, clients: string[], publicUrl: string, client?: string) {
+    if (client !== undefined && !CLIENTS[client]) throw new ApiError("validation_failed", "その接続先は登録されていません。");
     const id = uuid();
     const pollSecret = secret("kps");
     let code = pairingCode();
     while (get(this.db, "select 1 from pairings where code = ?", code)) code = pairingCode();
-    const expires = new Date(Date.now() + PAIRING_DAYS * 86400_000).toISOString();
-    run(this.db, "insert into pairings (id, code, poll_secret_hash, device_name, os, clients, status, created_at, expires_at) values (?, ?, ?, ?, ?, ?, 'waiting', ?, ?)",
-      id, code, hash(pollSecret), deviceName, os, JSON.stringify(clients), now(), expires);
+    const expires = new Date(Date.now() + (client ? CLIENT_PAIRING_MINUTES * 60_000 : PAIRING_DAYS * 86400_000)).toISOString();
+    run(this.db, "insert into pairings (id, code, poll_secret_hash, device_name, os, clients, status, created_at, expires_at, client) values (?, ?, ?, ?, ?, ?, 'waiting', ?, ?, ?)",
+      id, code, hash(pollSecret), deviceName, os, JSON.stringify(clients), now(), expires, client ?? null);
     return { pairing_id: id, code, qr_url: `${publicUrl}/pair?c=${code}`, poll_secret: pollSecret, expires_at: expires };
   }
 
@@ -283,13 +309,25 @@ export class Accounts {
     if (!code) throw new ApiError("validation_failed", "コードは英字と数字の8文字です。");
     const row = get<PairingRow>(this.db, "select * from pairings where code = ?", code);
     if (!row || row.status !== "waiting" || row.expires_at < now()) throw new ApiError("not_found", "そのコードは見つからないか、期限が切れています。PCで npx -y approval-box@latest setup をやり直してください。");
-    return { pairing_id: row.id, device_name: row.device_name, ...(row.os ? { os: row.os } : {}), clients: JSON.parse(row.clients) as string[], expires_at: row.expires_at };
+    return {
+      pairing_id: row.id, device_name: row.device_name, ...(row.os ? { os: row.os } : {}), clients: JSON.parse(row.clients) as string[], expires_at: row.expires_at,
+      // 登録クライアントの接続。承認すると、そのクライアントに読み書きの一部を許す（claimに confirm_client が要る）。
+      ...(row.client ? { client: row.client, client_name: CLIENTS[row.client] ?? row.client } : {}),
+    };
   }
 
-  claimPairing(userId: string, id: string) {
+  claimPairing(userId: string, id: string, confirmClient?: string) {
     return tx(this.db, () => {
       const row = get<PairingRow>(this.db, "select * from pairings where id = ?", id);
       if (!row || row.status !== "waiting" || row.expires_at < now()) throw new ApiError("not_found", "このペアリングは期限が切れています。PCで npx -y approval-box@latest setup をやり直してください。");
+      if (row.client) {
+        // 範囲付きsessionを渡す承認。許す相手を画面に出せる版のアプリだけが、confirm_client を付けて承認できる。
+        if (confirmClient !== row.client) throw new ApiError("conflict", "この接続は、許す内容を表示できる新しい版の画面から承認してください。");
+        const issued = this.issueSession(userId, row.client, row.client);
+        run(this.db, "update pairings set status = 'claimed', user_id = ?, token = ? where id = ?", userId, issued.session, id);
+        this.events.publish(userId, "setup.updated", {});
+        return { client: row.client };
+      }
       const conn = this.createConnection(userId, row.device_name, row.os, JSON.parse(row.clients));
       // tokenはPC側が一度取りに来るまでだけ置く。取りに来たら消す。
       run(this.db, "update pairings set status = 'claimed', user_id = ?, connection_id = ?, token = ? where id = ?", userId, conn.id, conn.token, id);
@@ -307,6 +345,10 @@ export class Accounts {
     if (!row || !pollSecret || row.poll_secret_hash !== hash(pollSecret)) throw new ApiError("not_found", "そのペアリングは見つかりません。");
     if (row.status === "claimed" && row.token) {
       run(this.db, "update pairings set token = null, status = 'delivered' where id = ?", id);
+      if (row.client) {
+        const issued = get<{ expires_at: string }>(this.db, "select expires_at from sessions where token_hash = ?", hash(row.token));
+        return { status: "claimed" as const, client: row.client, session: row.token, expires_at: issued?.expires_at ?? null };
+      }
       return { status: "claimed" as const, token: row.token, connection_id: row.connection_id! };
     }
     if (row.status === "rejected") return { status: "rejected" as const };

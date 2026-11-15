@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { Api, ServerError } from "./api.ts";
 import { type AttachmentMeta, saveAttachment } from "./attachments.ts";
-import { rememberRequester } from "./bellteam-wake.ts";
+import { bellteamBotId, rememberRequester } from "./bellteam-wake.ts";
 import { requireConfig, writeJsonFile } from "./config.ts";
 import { ensureDaemon } from "./daemon.ts";
 import { uploadImagePaths } from "./request-images.ts";
@@ -281,6 +281,8 @@ export async function runMcp() {
           // 道具の一覧では両方とも必須。名前を持たないAI（一般の利用者の Claude Code など）は空文字で出すので、その時は送らない。
           // 一覧を古いまま持つ client の申請も受け付けるため、無い時も断らない。
           ...(typeof requester_name === "string" && requester_name.trim() ? { requester: requester_name.trim() } : {}),
+          // BellTeamの席から出た申請だけ、席のBot IDを自己申告として添える（表示用。認証ではない）。
+          ...(bellteamBotId() ? { requester_bot_id: bellteamBotId() } : {}),
           session_label: (args.session_label as string | undefined) || `${basename(process.cwd())} (${CLIENT_OF[harness]})`,
           route: { channel_id: channelId, harness },
         };

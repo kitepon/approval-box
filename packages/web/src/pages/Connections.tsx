@@ -48,7 +48,8 @@ export function Connections() {
   const [testing, setTesting] = useState<string | null>(null);
 
   async function revoke(c: Connection) {
-    if (!confirm(t("「{name}」の接続を外します。この端末のAIはApproval Boxを使えなくなります。", { name: c.label }))) return;
+    const message = c.kind === "client" ? t("「{name}」の許可を外します。{name}はApproval Boxを読めなくなります。", { name: c.label }) : t("「{name}」の接続を外します。この端末のAIはApproval Boxを使えなくなります。", { name: c.label });
+    if (!confirm(message)) return;
     try { await api("DELETE", `/connections/${c.id}`); bump(); } catch (e) { alert((e as Error).message); }
   }
 
@@ -76,7 +77,7 @@ export function Connections() {
             </div>
             <ul class="checks">{checks.map(checkLine)}</ul>
             <div class="row">
-              <button class="ghost" onClick={() => setTesting(c.id)}>{t("接続テスト")}</button>
+              {c.kind !== "client" && <button class="ghost" onClick={() => setTesting(c.id)}>{t("接続テスト")}</button>}
               <button class="ghost danger" onClick={() => revoke(c)}>{t("外す")}</button>
             </div>
             {testing === c.id && (
@@ -95,7 +96,7 @@ export function Connections() {
 }
 
 export function Pair({ code }: { code: string }) {
-  const [info, setInfo] = useState<{ pairing_id: string; device_name: string; os?: string; clients: string[] } | null>(null);
+  const [info, setInfo] = useState<{ pairing_id: string; device_name: string; os?: string; clients: string[]; client?: string; client_name?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
@@ -105,18 +106,33 @@ export function Pair({ code }: { code: string }) {
 
   async function decide(claim: boolean) {
     try {
-      await api("POST", `/pairing/${info!.pairing_id}/${claim ? "claim" : "reject"}`);
-      setDone(claim ? t("追加しました。PCの画面でセットアップが続きます。") : t("断りました。この端末は追加されません。"));
+      // 登録クライアント（BellTeamなど）の承認は、許す相手を画面に出した上で、その名前を添えて送る。
+      await api("POST", `/pairing/${info!.pairing_id}/${claim ? "claim" : "reject"}`, claim ? { confirm_client: info!.client } : undefined);
+      const name = info!.client_name ?? "";
+      setDone(info!.client
+        ? (claim ? t("許可しました。{name}の画面で接続が続きます。", { name }) : t("許可しませんでした。{name}は接続されません。", { name }))
+        : (claim ? t("追加しました。PCの画面でセットアップが続きます。") : t("断りました。この端末は追加されません。")));
       bump();
     } catch (e) { setError((e as Error).message); }
   }
 
   return (
     <section>
-      <h1>{t("端末を追加")}</h1>
+      <h1>{info?.client ? t("アプリの接続を許可") : t("端末を追加")}</h1>
       {error && <p class="error">{systemMessage(error)}</p>}
       {done && <><p class="notice">{systemMessage(done)}</p><button class="ghost" onClick={() => navigate("/connections")}>{t("接続へ")}</button></>}
-      {info && !done && (
+      {info?.client && !done && (
+        <div class="panel">
+          <p>{t("{name}があなたの決裁箱の申請を読み、あなたが押した答えを送ることを許可しますか？", { name: info.client_name ?? "" })}</p>
+          <dl class="pairing"><dt>{t("接続元")}</dt><dd>{info.device_name}</dd></dl>
+          <p class="muted">{t("{name}は、あなたの申請をすべて読めます。自分で{name}の接続を始めた覚えがなければ「許可しない」を押してください。", { name: info.client_name ?? "" })}</p>
+          <div class="row">
+            <button class="primary" onClick={() => decide(true)}>{t("許可する")}</button>
+            <button class="ghost danger" onClick={() => decide(false)}>{t("許可しない")}</button>
+          </div>
+        </div>
+      )}
+      {info && !info.client && !done && (
         <div class="panel">
           <p>{t("次の端末を、あなたのApproval Boxに追加しますか？")}</p>
           <dl class="pairing">
