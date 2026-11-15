@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.37
+# Approval Box API（アプリ・Web版向け） v0.38
+
+2026-11-15 v0.38（追加のみ）: ①登録クライアント（今は `bellteam`）の接続。公開の `POST /connector/v1/pairing` に任意の `client` を足し、利用者がWeb `/pair` で許す相手を見て承認（`claim` に `confirm_client`）すると、相手は待ち受けて範囲付きsessionを一度受け取る。使える経路は一覧・1件・answer・hold/unhold・添付GET・`/events`・`GET /me`だけで、他は403 `forbidden`。接続一覧に `kind:"client"` が出て、外すと即失効。②`source.requester_bot_id`（任意、BellTeamの席から出た申請のBot ID、自己申告）。既存の形・既存クライアントは変わらない。契約は[bellteam-client.md](bellteam-client.md)。
 
 2026-11-13 pairing期限: `POST /connector/v1/pairing` の `expires_at` を10分から7日へ延ばした。応答の形・受取り（ログイン中の本人による claim）・tokenの一回取得は変わらない。呼出元は `expires_at` に従い、固定の待ち時間を持たない。
 
@@ -84,6 +86,7 @@ Decision {
     client: "claude-code" | "codex" | "cursor" | "grok" | "claude.ai" | "chatgpt" | "other",
     session_label: string,       // 誰から・何の仕事の申請か（一行）。一覧に必ず出す。requester がある時は「requester / work_label」（v0.29）
     requester?: string,          // 申請したAIの名前（60字まで）。AIの自己申告。0.1.25までのコネクタの申請には無い（v0.29）
+    requester_bot_id?: string,   // BellTeamの席から出た申請のBot ID（自己申告・表示用。認証ではない）。古いコネクタ・BellTeam以外のAIの申請には無い（v0.38）
     work_label?: string,         // AIが書いた作業名そのまま（200字まで）。v0.29 より前のサーバーは返さない
     connection_label?: string,   // 申請が出た接続（端末）の名前。接続が消えていれば無い（v0.29）
     via: "connector" | "remote"
@@ -260,7 +263,7 @@ setup: {
 | POST | `/pairing` | コネクタ（認証なし） | `{ device_name, os, clients: string[] }` → `{ pairing_id, code: "ABCD-EFGH", qr_url, poll_secret, expires_at }`（7日で失効。利用者が不在でも、戻った時に受けられる長さ） |
 | GET | `/pairing/{pairing_id}` | コネクタ | `X-Poll-Secret` 付き。結ばれるまで待つ（長いポーリング、最大30秒で返る）。結ばれたら `{ status: "claimed", token }` を1回だけ返す |
 | GET | `/pairing/lookup?code=ABCD-EFGH` | アプリ | 確認画面用 `{ pairing_id, device_name, os, clients, expires_at }` |
-| POST | `/pairing/{pairing_id}/claim` | アプリ | 利用者が「この端末を追加」を押した時。自分のアカウントに結ぶ → `{ connection_id }` |
+| POST | `/pairing/{pairing_id}/claim` | アプリ | 利用者が「この端末を追加」を押した時。自分のアカウントに結ぶ → `{ connection_id }`。登録クライアントの接続（lookupに `client` が付く）は `{ confirm_client }` が要り、無ければ409 `conflict`。応答は `{ client }`（v0.38） |
 | POST | `/pairing/{pairing_id}/reject` | アプリ | 「心当たりがない」を押した時 |
 
 - コネクタの接続トークンを省くのは `POST /connector/v1/pairing` と `GET /connector/v1/pairing/{pairing_id}` に一致する要求だけ。後者は `X-Poll-Secret` で確かめる。それ以外は未知の経路や、申請IDに `pairing` を含む要求も接続トークンが必要。
@@ -315,6 +318,7 @@ setup: {
 | 402 | `subscription_expired` | 契約画面へ |
 | 404 | `not_found` | 一覧から消す |
 | 409 | `setup_not_verified` | セットアップ確認の画面へ |
+| 403 | `forbidden` | 登録クライアントのsessionで許可表の外のAPIを呼んだ（v0.38）。再試行しない |
 | 409 | `conflict` | 既に答え済み・取り下げ済み・version違い。`error.decision` で差し替える |
 | 413 | `too_large` | 添付が大きすぎる・多すぎる（v0.23） |
 | 415 | `unsupported_type` | 添付できない形式（v0.23） |
@@ -349,6 +353,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.38 2026-11-15 BellTeam決裁箱拡張（R1）の依頼: 登録クライアント `bellteam`（公開pairingの `client`・`confirm_client`・範囲付きsession・許可表・403 `forbidden`・接続一覧の `kind:"client"`）と任意の `source.requester_bot_id` を追加。既存契約は変えていない。
 - v0.29 2026-10-14 クオの指摘2つ（「誰から何の仕事での決裁申請かわからないことがある」「IDなんて知らん」）: `source.requester`・`source.work_label`・`source.connection_label` を追加。`source.session_label` は「申請者 / 作業名」の一行。通知に `aps.alert.subtitle`。`POST /connector/v1/decisions` に任意の `requester`。AIへ返す文は件名を先に書き、利用者へは件名で伝えるよう添える。
 
 - v0.23 2026-10-03 クオの依頼（ベル経由）: 答えに画像・書類を複数添付できる。`POST/GET/DELETE /decisions/{id}/attachments`、answer の `attachment_ids`、`answer.attachments`、エラー 413 `too_large`・415 `unsupported_type`。添付だけの答えも可。添付は決裁と一緒に消える。

@@ -48,7 +48,9 @@ create table if not exists sessions (
   user_id text not null references users(id) on delete cascade,
   label text,
   created_at text not null,
-  expires_at text not null
+  expires_at text not null,
+  id text,
+  client text
 );
 create table if not exists identities (
   provider text not null,
@@ -100,7 +102,8 @@ create table if not exists pairings (
   connection_id text references connections(id) on delete cascade,
   token text,
   created_at text not null,
-  expires_at text not null
+  expires_at text not null,
+  client text
 );
 create table if not exists decisions (
   id text primary key,
@@ -354,6 +357,15 @@ const MIGRATIONS: ((db: Db) => void)[] = [
       session_id text not null, seq integer, state text not null,
       detail text, closed integer not null default 0
     )`);
+  },
+  // 11: BellTeamなど登録クライアントの接続。ペアリングに client（承認で範囲付きsessionを渡す）、sessionに id と client、申請に申請者のBot ID（自己申告・表示用）。
+  (db) => {
+    const has = (table: string) => all<{ name: string }>(db, `select name from pragma_table_info('${table}')`).map((c) => c.name);
+    if (!has("pairings").includes("client")) db.exec("alter table pairings add column client text");
+    const sessions = has("sessions");
+    if (!sessions.includes("id")) db.exec("alter table sessions add column id text");
+    if (!sessions.includes("client")) db.exec("alter table sessions add column client text");
+    if (!has("decisions").includes("requester_bot_id")) db.exec("alter table decisions add column requester_bot_id text");
   },
 ];
 

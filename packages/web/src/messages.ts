@@ -35,5 +35,14 @@ export const en = {
   "PCで次のコマンドを実行すると出るコードです。QRコードはスマホのカメラで読めます。": "Use the code shown after running this command on your computer. You can scan the QR code with your phone’s camera.",
   "テストしたいAIに次のように伝えてください。": "Ask the AI you want to test:", "Approval Boxのsetup_testを実行して": "Run Approval Box setup_test", "テストの申請に答えると、AIが受け取り、ここが「確認済み」になります。": "Answer the test request in your inbox. When the AI receives it, this page will show Verified.",
   "添付（画像・書類、{count}ファイル・合計50MBまで。任意）": "Attachments (images or documents, up to {count} files and 50 MB total; optional)", "{client}はまだ確認できていません（{status}）": "{client} has not been verified yet ({status})", "{count}日": "{count} days", "期限切れ（{date}）": "Expired ({date})", "期限 {date}": "Due {date}",
+  "アプリの接続を許可": "Allow an app to connect",
+  "{name}があなたの決裁箱の申請を読み、あなたが押した答えを送ることを許可しますか？": "Allow {name} to read your Approval Box requests and send the answers you choose?",
+  "接続元": "Connecting from",
+  "{name}は、あなたの申請をすべて読めます。自分で{name}の接続を始めた覚えがなければ「許可しない」を押してください。": "{name} will be able to read all your requests. If you did not start connecting {name} yourself, choose Don't allow.",
+  "許可する": "Allow",
+  "許可しない": "Don't allow",
+  "許可しました。{name}の画面で接続が続きます。": "Allowed. The connection continues on the {name} screen.",
+  "許可しませんでした。{name}は接続されません。": "Not allowed. {name} will not be connected.",
+  "「{name}」の許可を外します。{name}はApproval Boxを読めなくなります。": "Remove the permission for {name}? {name} will no longer be able to read Approval Box.",
 } as const;
 export type MessageKey = keyof typeof en;

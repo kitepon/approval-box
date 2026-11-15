@@ -20,7 +20,7 @@ export type Answer = { option_id?: string; text?: string; attachments?: Attachme
 type Row = {
   id: string; user_id: string; connection_id: string | null; route: string | null;
   title: string; context: string; options: string; recommendation: string | null;
-  urgency: string; deadline: string | null; client: string; session_label: string; requester: string | null; via: string; test: number;
+  urgency: string; deadline: string | null; client: string; session_label: string; requester: string | null; requester_bot_id: string | null; via: string; test: number;
   status: string; answer: string | null; delivery: string | null; delivery_id: string | null; delivery_detail: string | null; delivery_text: string | null;
   resume_phrase: string; cancel_reason: string | null; distinct_reason: string | null; amend_count: number;
   created_at: string; updated_at: string; version: number;
@@ -44,6 +44,8 @@ export const createSchema = z.object({
   session_label: z.string().trim().min(1).max(200),
   /** 申請するAI自身の名前（自己申告）。0.1.25までのコネクタは送らない。 */
   requester: z.string().trim().min(1).max(60).optional(),
+  /** BellTeamの席から出た申請のBot ID（自己申告・表示用。認証ではない）。 */
+  requester_bot_id: z.string().regex(/^bot-[a-z0-9]+$/).max(64).optional(),
   client: z.string().trim().min(1).max(40),
   route: z.object({ channel_id: z.string().min(1).max(100), harness: z.string().min(1).max(20) }).optional(),
   distinct_reason: z.string().trim().min(1).max(500).optional(),
@@ -121,6 +123,7 @@ export class Decisions {
       source: {
         client: row.client, session_label: displayLabel(row), work_label: row.session_label,
         ...(row.requester ? { requester: row.requester } : {}),
+        ...(row.requester_bot_id ? { requester_bot_id: row.requester_bot_id } : {}),
         ...this.connectionLabel(row),
         via: row.via, ...(row.test ? { test: true } : {}),
       },
@@ -360,11 +363,11 @@ export class Decisions {
       const id = uniqueId(this.db);
       const at = now();
       run(this.db, `insert into decisions (id, user_id, connection_id, route, title, norm_title, context, options, recommendation, urgency, deadline,
-          client, session_label, requester, via, test, status, resume_phrase, distinct_reason, created_at, updated_at, version)
-          values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, 1)`,
+          client, session_label, requester, requester_bot_id, via, test, status, resume_phrase, distinct_reason, created_at, updated_at, version)
+          values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, 1)`,
         id, conn.user_id, conn.id, input.route ? JSON.stringify(input.route) : null, input.title, norm, input.context,
         JSON.stringify(input.options), input.recommendation ?? null, input.urgency, input.deadline ?? null,
-        input.client, input.session_label, input.requester ?? null, options.via ?? "connector", options.test ? 1 : 0, `Approval Box ${id} の答えを確認して続けて`, input.distinct_reason ?? null, at, at);
+        input.client, input.session_label, input.requester ?? null, input.requester_bot_id ?? null, options.via ?? "connector", options.test ? 1 : 0, `Approval Box ${id} の答えを確認して続けて`, input.distinct_reason ?? null, at, at);
       this.bindRequest(conn, id, input.request_attachment_ids ?? []);
       this.history(id, "created", "ai");
       const row = this.row(id)!;

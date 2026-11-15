@@ -18,6 +18,16 @@ import { type RemoteMcpOptions, remoteMcpHandler } from "./remote-mcp.ts";
 
 export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal };
 
+/** 登録クライアント（BellTeamなど）のsessionが通れる `/v1` の経路。ここに無いものは403。 */
+const CLIENT_ROUTES: [string, RegExp][] = [
+  ["GET", /^\/decisions$/],
+  ["GET", /^\/decisions\/[^/]+$/],
+  ["POST", /^\/decisions\/[^/]+\/(answer|hold|unhold)$/],
+  ["GET", /^\/decisions\/[^/]+\/attachments\/[^/]+$/],
+  ["GET", /^\/events$/],
+  ["GET", /^\/me$/],
+];
+
 const STATUSES = ["pending", "held", "answered", "cancelled"] as const;
 /** アプリへ戻すURLのscheme（AndroidのCustom Tabsから戻る先）。 */
 const APP_SCHEME = "approvalbox";
@@ -173,9 +183,15 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(accounts.redeemAppCode(input.code, input.code_verifier));
   });
 
-  const v1 = new Hono<{ Variables: { userId: string } }>();
+  const v1 = new Hono<{ Variables: { userId: string; clientSessionId: string | undefined } }>();
   v1.use("*", async (c, next) => {
-    c.set("userId", accounts.userBySession(bearer(c)));
+    const auth = accounts.authenticate(bearer(c));
+    // 登録クライアントのsessionが通れるのは許可表の経路だけ（docs/bellteam-client.md）。ログインのsessionは制限しない。
+    if (auth.client && !CLIENT_ROUTES.some(([method, path]) => method === c.req.method && path.test(c.req.path.slice("/v1".length)))) {
+      throw new ApiError("forbidden", "この許可では、このAPIは使えません。");
+    }
+    c.set("userId", auth.userId);
+    c.set("clientSessionId", auth.sessionId);
     await next();
   });
 
@@ -220,6 +236,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
 
   v1.get("/events", (c) => {
     const userId = c.get("userId");
+    const clientSessionId = c.get("clientSessionId");
     const last = Number(c.req.header("last-event-id") ?? c.req.query("last_event_id") ?? 0) || 0;
     return streamSSE(c, async (stream) => {
       const queue: UserEvent[] = events.since(userId, last);
@@ -229,7 +246,9 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       const stop = () => wake?.();
       services.shutdown?.addEventListener("abort", stop, { once: true });
       let sent = last;
-      while (!stream.aborted && !services.shutdown?.aborted) {
+      // 外された登録クライアントの流れは、次の心拍（25秒以内）で閉じる。
+      const granted = () => !clientSessionId || accounts.clientSessionActive(clientSessionId);
+      while (!stream.aborted && !services.shutdown?.aborted && granted()) {
         while (queue.length) {
           const event = queue.shift()!;
           if (event.id <= sent) continue;
@@ -275,7 +294,10 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   });
 
   v1.get("/pairing/lookup", (c) => c.json(accounts.lookupPairing(c.req.query("code") ?? "")));
-  v1.post("/pairing/:id/claim", (c) => idempotent(c, services, c.get("userId"), () => accounts.claimPairing(c.get("userId"), c.req.param("id"))));
+  v1.post("/pairing/:id/claim", async (c) => {
+    const input = await body(c, z.object({ confirm_client: z.string().max(40).optional() }));
+    return idempotent(c, services, c.get("userId"), () => accounts.claimPairing(c.get("userId"), c.req.param("id"), input.confirm_client));
+  });
   v1.post("/pairing/:id/reject", (c) => idempotent(c, services, c.get("userId"), () => { accounts.rejectPairing(c.get("userId"), c.req.param("id")); return { ok: true }; }));
 
   v1.get("/me", (c) => c.json(accounts.me(c.get("userId"))));
@@ -314,8 +336,8 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   // 接続トークンを持たない端末に公開するのは、この2経路だけ。
   const pairing = new Hono();
   pairing.post("/pairing", async (c) => {
-    const input = await body(c, z.object({ device_name: z.string().trim().min(1).max(100), os: z.string().max(20).optional(), clients: z.array(z.string().max(40)).max(10).default([]) }));
-    return c.json(accounts.startPairing(input.device_name, input.os ?? null, input.clients, services.publicUrl));
+    const input = await body(c, z.object({ device_name: z.string().trim().min(1).max(100), os: z.string().max(20).optional(), clients: z.array(z.string().max(40)).max(10).default([]), client: z.string().max(40).optional() }));
+    return c.json(accounts.startPairing(input.device_name, input.os ?? null, input.clients, services.publicUrl, input.client));
   });
   pairing.get("/pairing/:id", async (c) => {
     const deadline = Date.now() + 25_000;
