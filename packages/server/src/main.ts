@@ -12,6 +12,7 @@ import { openDb } from "./db.ts";
 import { Decisions } from "./decisions.ts";
 import { EventHub } from "./events.ts";
 import { AppStore, appleRootCertificates } from "./appstore.ts";
+import { Stripe } from "./stripe.ts";
 import { createApp } from "./http.ts";
 import { CallBridgeDeliverer, callBridgeSender, readHeaderFile } from "./callbridge.ts";
 
@@ -23,7 +24,14 @@ const billing: BillingMode = env.BILLING === "store" ? "store" : "off";
 
 const db = openDb(join(dataDir, "approval-box.db"));
 const events = new EventHub(db);
-const accounts = new Accounts(db, events, billing);
+// Stripeでの契約。鍵2つと価格IDが揃った時だけ使う（鍵は *_FILE のファイルか、直接の値）。
+const secretValue = (name: string) => {
+  const file = env[`${name}_FILE`];
+  return (file && existsSync(file) ? readFileSync(file, "utf8") : env[name] ?? "").trim();
+};
+const stripeConfig = { secretKey: secretValue("STRIPE_SECRET_KEY"), webhookSecret: secretValue("STRIPE_WEBHOOK_SECRET"), priceId: (env.STRIPE_PRICE_ID ?? "").trim() };
+const stripeOn = billing === "store" && !!stripeConfig.secretKey && !!stripeConfig.webhookSecret && !!stripeConfig.priceId;
+const accounts = new Accounts(db, events, billing, stripeOn);
 const decisions = new Decisions(db, events);
 const attachments = new Attachments(db, join(dataDir, "attachments"));
 
@@ -87,6 +95,8 @@ const appStore = appStoreProducts.length ? new AppStore(db, accounts, {
   productIds: appStoreProducts,
   rootCertificates: appleRootCertificates(env.APPLE_ROOT_CERTS ?? join(here, "..", "certs")),
 }) : undefined;
+const stripe = stripeOn ? new Stripe(db, accounts, { ...stripeConfig, publicUrl }) : undefined;
+if (stripe) console.log("approval-box-server: Stripeでの契約を受け付けます");
 // 答えを call-bridge の通話で届ける接続（GrokBotなど）。ヘッダーのファイル（Authorization など）が読めなければ使わない。
 const callBridgeIds = (env.CALL_BRIDGE_CONNECTIONS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 let callBridgeConnections: Set<string> | undefined;
@@ -113,7 +123,7 @@ if (callBridgeIds.length) {
 const diagnosticsAdminToken = env.DIAGNOSTICS_ADMIN_KEY_FILE ? readFileSync(env.DIAGNOSTICS_ADMIN_KEY_FILE,"utf8").trim() : env.DIAGNOSTICS_ADMIN_KEY;
 // 停止の合図。開いたままの更新の知らせ（SSE）を正しく閉じてから終える。
 const shutdown = new AbortController();
-const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) } }, { staticHandler });
+const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(stripe ? { stripe } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) } }, { staticHandler });
 
 setInterval(() => {
   new Diagnostics(db).prune();

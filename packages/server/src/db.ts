@@ -174,6 +174,16 @@ create table if not exists appstore_subscriptions (
   revoked integer not null default 0,
   updated_at text not null
 );
+create table if not exists stripe_subscriptions (
+  subscription_id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  customer_id text not null,
+  status text not null,
+  current_period_end text,
+  cancel_at_period_end integer not null default 0,
+  updated_at text not null
+);
+create index if not exists stripe_subscriptions_user on stripe_subscriptions(user_id);
 create table if not exists attachments (
   id text primary key,
   user_id text not null references users(id) on delete cascade,

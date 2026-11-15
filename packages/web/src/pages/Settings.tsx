@@ -1,5 +1,5 @@
 import { t, days } from "../i18n.ts";
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { api, setSession } from "../api";
 import { navigate } from "../router";
 import { bump, loadMe, useResource } from "../store";
@@ -12,6 +12,20 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   const me = useResource(loadMe);
   const settings = useResource(() => api<{ retention_days: number }>("GET", "/me/settings"));
   const [busy, setBusy] = useState(false);
+
+  // Stripeの画面へ移る。戻ってきた時に通知がまだなら、少し待って読み直す。
+  async function goToStripe(path: "checkout" | "portal") {
+    setBusy(true);
+    try { window.location.href = (await api<{ url: string }>("POST", `/billing/stripe/${path}`)).url; }
+    catch (e) { alert((e as Error).message); setBusy(false); }
+  }
+  const returning = new URLSearchParams(window.location.search).get("billing") === "success";
+  const [tries, setTries] = useState(0);
+  useEffect(() => {
+    if (!returning || me.data?.plan === "active" || tries >= 15) return;
+    const timer = setTimeout(() => { setTries(tries + 1); bump(); }, 2000);
+    return () => clearTimeout(timer);
+  }, [returning, me.data?.plan, tries]);
 
   async function setRetention(days: number) {
     try { await api("PATCH", "/me/settings", { retention_days: days }); bump(); } catch (e) { alert((e as Error).message); }
@@ -50,7 +64,11 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
                       <p>{t("契約の前に、セットアップ確認を済ませてください。答えがAIまで届くことを確かめてから契約できます。")}</p>
                       <button class="ghost" onClick={() => navigate("/connections")}>{t("接続とテストへ")}</button>
                     </div>
-                  : m.plan !== "active" && <p class="muted">{t("Webでの契約（Stripe）は準備中です。")}</p>}
+                  : m.plan === "active"
+                    ? m.store === "web" && m.web_billing && <button class="ghost" disabled={busy} onClick={() => goToStripe("portal")}>{t("契約の管理（解約・カード変更・領収書）")}</button>
+                    : m.web_billing
+                      ? returning ? <p class="muted">{t("お支払いの反映を待っています。しばらくすると契約中に変わります。")}</p> : <button disabled={busy} onClick={() => goToStripe("checkout")}>{t("Webで契約する")}</button>
+                      : <p class="muted">{t("Webでの契約（Stripe）は準備中です。")}</p>}
                 {m.setup.checks.some((c) => c.status !== "passed") && m.setup.verified && (
                   <ul class="checks">
                     {m.setup.checks.filter((c) => c.status !== "passed").map((c) => <li key={c.connection_id + c.client}>{t("{client}はまだ確認できていません（{status}）", { client: clientLabel(c.client), status: CHECK_LABEL[c.status] ?? c.status })}</li>)}
