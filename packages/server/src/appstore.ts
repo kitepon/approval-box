@@ -117,7 +117,6 @@ export class AppStore {
     const original = transaction.originalTransactionId;
     if (!original) throw new ApiError("validation_failed", "購入の情報に元の取引IDがありません。");
     const expires = transaction.expiresDate ? new Date(transaction.expiresDate).toISOString() : null;
-    const active = !transaction.revocationDate && !!expires && expires > now();
     tx(this.db, () => {
       const linked = get<{ user_id: string; expires_at: string | null }>(this.db, "select user_id, expires_at from appstore_subscriptions where original_transaction_id = ?", original);
       if (linked && linked.user_id !== userId) throw new ApiError("conflict", "この購入は別のアカウントに結ばれています。");
@@ -128,7 +127,7 @@ export class AppStore {
           on conflict (original_transaction_id) do update set environment = excluded.environment, product_id = excluded.product_id,
             expires_at = excluded.expires_at, revoked = excluded.revoked, updated_at = excluded.updated_at`,
         original, userId, env, transaction.productId ?? "", expires, transaction.revocationDate ? 1 : 0, now());
-      this.accounts.setPlan(userId, active ? "active" : "expired", expires, "app_store");
+      this.accounts.syncPlan(userId);
     });
   }
 }

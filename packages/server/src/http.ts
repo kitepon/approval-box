@@ -8,6 +8,7 @@ import { streamSSE } from "hono/streaming";
 import { z, ZodError } from "zod";
 import type { Accounts } from "./accounts.ts";
 import type { AppStore } from "./appstore.ts";
+import type { Stripe } from "./stripe.ts";
 import { type Attachment, type Attachments, MAX_FILE_BYTES, contentDisposition, mediaType, readLimited } from "./attachments.ts";
 import { type Db, get, run, tx } from "./db.ts";
 import { ApiError } from "./errors.ts";
@@ -16,7 +17,7 @@ import { Decisions, amendSchema, answerSchema, createSchema, routeSchema } from 
 import { now } from "./ids.ts";
 import { type RemoteMcpOptions, remoteMcpHandler } from "./remote-mcp.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; stripe?: Stripe; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal };
 
 /** 登録クライアント（BellTeamなど）のsessionが通れる `/v1` の経路。ここに無いものは403。 */
 const CLIENT_ROUTES: [string, RegExp][] = [
@@ -177,6 +178,12 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(await services.appStore.notification(input.signedPayload));
   });
 
+  // Stripeの通知（Stripeのサーバーから。ログインは無く、署名で確かめる）。署名は本文のバイト列で確かめるので、生のまま読む。
+  app.post("/v1/stripe/webhook", async (c) => {
+    if (!services.stripe) throw new ApiError("not_found", "Stripeの照合は設定されていません。");
+    return c.json(await services.stripe.webhook(await c.req.text(), c.req.header("stripe-signature")));
+  });
+
   // ブラウザで始めたAppleのログインから戻ったアプリが、一度きりのコードを session に替える（code_verifier 必須）。
   app.post("/v1/auth/link", async (c) => {
     const input = await body(c, z.object({ code: z.string().min(10).max(200), code_verifier: z.string().min(43).max(128) }));
@@ -301,8 +308,11 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   v1.post("/pairing/:id/reject", (c) => idempotent(c, services, c.get("userId"), () => { accounts.rejectPairing(c.get("userId"), c.req.param("id")); return { ok: true }; }));
 
   v1.get("/me", (c) => c.json(accounts.me(c.get("userId"))));
-  v1.delete("/me", (c) => {
-    const userId = c.get("userId"), ids = services.attachments?.userFileIds(userId) ?? [];
+  v1.delete("/me", async (c) => {
+    const userId = c.get("userId");
+    // 消えたアカウントへ請求し続けないよう、Stripeの契約を先に止める。止められなければ消さない。
+    await services.stripe?.cancelAll(userId);
+    const ids = services.attachments?.userFileIds(userId) ?? [];
     tx(services.db, () => {
       accounts.deleteUser(userId);
       services.attachments?.eraseFiles(ids);
@@ -322,7 +332,17 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(await services.appStore.verifyPurchase(c.get("userId"), input.jws));
   });
 
-  // Google Play・Stripeの照合はまだ無い。セットアップ確認の関門だけ先に効かせる。
+  v1.post("/billing/stripe/checkout", async (c) => {
+    if (!services.stripe) accounts.assertSetupVerified(c.get("userId")); // Stripeが無くても、確認前の関門は同じ順で効かせる
+    if (!services.stripe) throw new ApiError("not_found", "このサーバーではStripeで契約できません。");
+    return c.json(await services.stripe.checkout(c.get("userId")));
+  });
+  v1.post("/billing/stripe/portal", async (c) => {
+    if (!services.stripe) throw new ApiError("not_found", "このサーバーではStripeで契約できません。");
+    return c.json(await services.stripe.portal(c.get("userId")));
+  });
+
+  // Google Playの照合はまだ無い。セットアップ確認の関門だけ先に効かせる。
   v1.post("/billing/:store/:action", (c) => {
     accounts.assertSetupVerified(c.get("userId"));
     throw new ApiError("internal", "課金の受付はまだ準備中です。");
