@@ -10,6 +10,8 @@ export type StripeConfig = {
   secretKey: string;
   webhookSecret: string;
   priceId: string;
+  /** 解約画面の設定（bpc_…）。同じStripeアカウントの別製品の既定の画面と分けるため、決裁箱専用を指す。無ければ既定。 */
+  portalConfiguration?: string;
   /** 決済・ポータルから戻る先（公式サーバーのURL）。 */
   publicUrl: string;
   fetch?: typeof fetch;
@@ -96,7 +98,7 @@ export class Stripe {
   async portal(userId: string) {
     const customer = get<{ customer_id: string }>(this.db, "select customer_id from stripe_subscriptions where user_id = ? order by updated_at desc", userId)?.customer_id;
     if (!customer) throw new ApiError("not_found", "Stripeでの契約がありません。");
-    const session = await this.call("POST", "/billing_portal/sessions", { customer, return_url: `${this.config.publicUrl}/settings` });
+    const session = await this.call("POST", "/billing_portal/sessions", { customer, return_url: `${this.config.publicUrl}/settings`, ...(this.config.portalConfiguration ? { configuration: this.config.portalConfiguration } : {}) });
     if (typeof session.url !== "string") throw new ApiError("internal", "決済サービス（Stripe）の応答が正しくありません。");
     return { url: session.url };
   }

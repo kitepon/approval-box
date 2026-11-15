@@ -62,6 +62,7 @@ All three are required together; if any is missing the server answers 404 for th
 | `STRIPE_SECRET_KEY(_FILE)` | Stripe **restricted** key | tmpfs file through `start-with-secrets.sh`, like the APNs key |
 | `STRIPE_WEBHOOK_SECRET(_FILE)` | Webhook signing secret `whsec_…` | same |
 | `STRIPE_PRICE_ID` | Price id `price_…` (not a secret) | compose environment |
+| `STRIPE_PORTAL_CONFIGURATION` | Optional. Customer portal configuration `bpc_…` made for Approval Box (cancel at period end, no proration). Set it when the Stripe account is shared with another product: without it Stripe uses the account's default portal, which belongs to the other product | compose environment |
 
 The restricted key needs only: Checkout Sessions **write**, Customer portal sessions **write**, Subscriptions **read** and **write** (write is only for cancelling on account deletion), Customers **read**. It cannot refund, create prices or move money.
 

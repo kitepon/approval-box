@@ -29,7 +29,7 @@ const secretValue = (name: string) => {
   const file = env[`${name}_FILE`];
   return (file && existsSync(file) ? readFileSync(file, "utf8") : env[name] ?? "").trim();
 };
-const stripeConfig = { secretKey: secretValue("STRIPE_SECRET_KEY"), webhookSecret: secretValue("STRIPE_WEBHOOK_SECRET"), priceId: (env.STRIPE_PRICE_ID ?? "").trim() };
+const stripeConfig = { secretKey: secretValue("STRIPE_SECRET_KEY"), webhookSecret: secretValue("STRIPE_WEBHOOK_SECRET"), priceId: (env.STRIPE_PRICE_ID ?? "").trim(), portalConfiguration: (env.STRIPE_PORTAL_CONFIGURATION ?? "").trim() };
 const stripeOn = billing === "store" && !!stripeConfig.secretKey && !!stripeConfig.webhookSecret && !!stripeConfig.priceId;
 const accounts = new Accounts(db, events, billing, stripeOn);
 const decisions = new Decisions(db, events);

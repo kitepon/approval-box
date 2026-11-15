@@ -30,7 +30,7 @@ function setup(options: { stripeDown?: boolean } = {}) {
     if (init.method === "DELETE") { subs.set(id, { ...subs.get(id), status: "canceled" }); return json(subs.get(id)); }
     return subs.has(id) ? json(subs.get(id)) : json({ error: { type: "invalid_request_error" } }, 404);
   }) as unknown as typeof fetch;
-  const stripe = new Stripe(db, accounts, { secretKey: "rk_test", webhookSecret: WHSEC, priceId: "price_1", publicUrl: "https://kb.test", fetch: fake });
+  const stripe = new Stripe(db, accounts, { secretKey: "rk_test", webhookSecret: WHSEC, priceId: "price_1", portalConfiguration: "bpc_1", publicUrl: "https://kb.test", fetch: fake });
   const app = createApp({ db, accounts, decisions, events, publicUrl: "https://kb.test", stripe });
   const userId = accounts.createUser();
   const { session } = accounts.issueSession(userId, "test");
@@ -147,6 +147,7 @@ test("Stripe: 契約中は二重に買わせない。ポータルは契約のあ
   const portal = await t.call("POST", "/v1/billing/stripe/portal");
   assert.equal(portal.json.url, "https://billing.stripe.test/p/1");
   assert.equal(t.sent.at(-1)!.form.get("customer"), "cus_1");
+  assert.equal(t.sent.at(-1)!.form.get("configuration"), "bpc_1");
 });
 
 test("App StoreとStripeが両方ある時は、期末が遅い方が決め、片方が切れても残る", async () => {
