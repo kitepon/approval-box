@@ -35,7 +35,11 @@ export class Accounts {
   /** Stripeで売れるサーバーか。/me の web_billing になる（Web版が買うボタンを出す目印）。 */
   private readonly webBilling: boolean;
 
-  constructor(db: Db, events: EventHub, billing: BillingMode, webBilling = false) {
+  /** 契約なしで使える、課金の対象外のアカウント（運営者のもの）。環境変数 FREE_ACCOUNT_IDS で渡す。 */
+  private readonly freeAccountIds: ReadonlySet<string>;
+
+  constructor(db: Db, events: EventHub, billing: BillingMode, webBilling = false, freeAccountIds: ReadonlySet<string> = new Set()) {
+    this.freeAccountIds = freeAccountIds;
     this.db = db;
     this.events = events;
     this.billing = billing;
@@ -165,15 +169,16 @@ export class Accounts {
       }
     }
     // セルフホスト（課金なし）は全員を契約中として扱う。
-    const plan = this.billing === "off" ? "active" : effectivePlan(user);
+    const free = this.billing === "off" || this.freeAccountIds.has(userId);
+    const plan = free ? "active" : effectivePlan(user);
     const login = get<{ provider: string }>(this.db, "select provider from identities where user_id = ? order by created_at", userId);
     return {
       user_id: user.id,
       login: login?.provider ?? null,
       setup: { verified: !!user.setup_verified_at, ...(user.setup_verified_at ? { verified_at: user.setup_verified_at } : {}), checks },
       plan,
-      ...(user.plan_expires_at && this.billing !== "off" ? { expires_at: user.plan_expires_at } : {}),
-      ...(user.store && this.billing !== "off" ? { store: user.store } : {}),
+      ...(user.plan_expires_at && !free ? { expires_at: user.plan_expires_at } : {}),
+      ...(user.store && !free ? { store: user.store } : {}),
       billing: this.billing,
       ...(this.webBilling ? { web_billing: true } : {}),
     };
@@ -190,7 +195,7 @@ export class Accounts {
   }
 
   assertCanUse(userId: string) {
-    if (this.billing === "off") return;
+    if (this.billing === "off" || this.freeAccountIds.has(userId)) return;
     const user = get<UserRow>(this.db, "select * from users where id = ?", userId)!;
     if (effectivePlan(user) === "expired") throw new ApiError("subscription_expired", "Approval Boxの契約が切れています。アプリかWeb版の契約画面から更新してください。");
   }
@@ -212,7 +217,7 @@ export class Accounts {
       ...all<{ expires_at: string | null; revoked: number }>(this.db, "select expires_at, revoked from appstore_subscriptions where user_id = ?", userId)
         .map((r): Candidate => ({ store: "app_store", end: r.expires_at, paid: !r.revoked && !!r.expires_at && r.expires_at > nowIso })),
       ...all<{ status: string; current_period_end: string | null }>(this.db, "select status, current_period_end from stripe_subscriptions where user_id = ?", userId)
-        .map((r): Candidate => ({ store: "web", end: r.current_period_end, paid: r.status === "active" && !!r.current_period_end && r.current_period_end > nowIso })),
+        .map((r): Candidate => ({ store: "web", end: r.current_period_end, paid: (r.status === "active" || r.status === "trialing") && !!r.current_period_end && r.current_period_end > nowIso })),
     ];
     if (!candidates.length) return;
     const latest = (list: Candidate[]) => list.reduce((a, b) => ((b.end ?? "") > (a.end ?? "") ? b : a));

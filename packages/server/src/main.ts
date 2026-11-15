@@ -31,7 +31,9 @@ const secretValue = (name: string) => {
 };
 const stripeConfig = { secretKey: secretValue("STRIPE_SECRET_KEY"), webhookSecret: secretValue("STRIPE_WEBHOOK_SECRET"), priceId: (env.STRIPE_PRICE_ID ?? "").trim(), portalConfiguration: (env.STRIPE_PORTAL_CONFIGURATION ?? "").trim() };
 const stripeOn = billing === "store" && !!stripeConfig.secretKey && !!stripeConfig.webhookSecret && !!stripeConfig.priceId;
-const accounts = new Accounts(db, events, billing, stripeOn);
+// 課金の対象外にするアカウント（運営者）。利用者IDをカンマで並べる。
+const freeAccountIds = new Set((env.FREE_ACCOUNT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+const accounts = new Accounts(db, events, billing, stripeOn, freeAccountIds);
 const decisions = new Decisions(db, events);
 const attachments = new Attachments(db, join(dataDir, "attachments"));
 
