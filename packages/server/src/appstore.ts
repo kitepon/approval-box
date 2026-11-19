@@ -178,7 +178,11 @@ export class AppStore {
     const userId = this.ownerOf(transaction);
     if (!userId) return { applied: false };
     // 通知の本文は合図。持ち主を決めるのに使い、状態はAppleから読み直す。
-    if (this.config.api && transaction.originalTransactionId) return { applied: await this.reread(userId, env, transaction.originalTransactionId) };
+    if (this.config.api && transaction.originalTransactionId) {
+      // 通知は400で返すとAppleが送り直し続ける。受け付けない商品・購入は、Playと同じく適用しないで200にする。
+      try { return { applied: await this.reread(userId, env, transaction.originalTransactionId) }; }
+      catch (error) { if (error instanceof ApiError && error.code === "validation_failed") return { applied: false }; throw error; }
+    }
     this.apply(userId, env, transaction);
     return { applied: true };
   }
