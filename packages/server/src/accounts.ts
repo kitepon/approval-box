@@ -40,6 +40,9 @@ export class Accounts {
   /** 契約なしで使える、課金の対象外のアカウント（運営者のもの）。環境変数 FREE_ACCOUNT_IDS で渡す。 */
   private readonly freeAccountIds: ReadonlySet<string>;
 
+  /** 期限切れのアカウントを me / assertCanUse が見た時の合図（App Storeが、更新の取りこぼしをAppleから読み直す）。待たない。 */
+  onExpired?: (userId: string) => void;
+
   constructor(db: Db, events: EventHub, billing: BillingMode, webBilling = false, freeAccountIds: ReadonlySet<string> = new Set()) {
     this.freeAccountIds = freeAccountIds;
     this.db = db;
@@ -181,6 +184,7 @@ export class Accounts {
     // セルフホスト（課金なし）は全員を契約中として扱う。
     const free = this.billing === "off" || this.freeAccountIds.has(userId);
     const plan = free ? "active" : effectivePlan(user);
+    if (plan === "expired") this.onExpired?.(userId);
     const login = get<{ provider: string }>(this.db, "select provider from identities where user_id = ? order by created_at", userId);
     return {
       user_id: user.id,
@@ -207,7 +211,10 @@ export class Accounts {
   assertCanUse(userId: string) {
     if (this.billing === "off" || this.freeAccountIds.has(userId)) return;
     const user = get<UserRow>(this.db, "select * from users where id = ?", userId)!;
-    if (effectivePlan(user) !== "active") throw new ApiError("subscription_expired", "Approval Boxの契約がありません。アプリかWeb版の契約画面から契約してください。");
+    if (effectivePlan(user) !== "active") {
+      this.onExpired?.(userId);
+      throw new ApiError("subscription_expired", "Approval Boxの契約がありません。アプリかWeb版の契約画面から契約してください。");
+    }
   }
 
   /** ストアで照合した契約を反映する。 */

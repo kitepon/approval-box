@@ -34,7 +34,8 @@ flowchart LR
   ST -->|signed webhook| W[POST /v1/stripe/webhook]
   W -->|verify signature, then GET /v1/subscriptions/id| ST
   W -->|upsert| T[(stripe_subscriptions)]
-  A[AppStore verify and notifications] -->|upsert| T2[(appstore_subscriptions)]
+  A[AppStore verify and notifications] --> AA[App Store Server API: Get All Subscription Statuses]
+  AA -->|upsert, state read from Apple| T2[(appstore_subscriptions)]
   G[Play verify and Pub/Sub, see billing-play.md] -->|upsert| T3[(play_subscriptions)]
   T --> P[Accounts.syncPlan]
   T2 --> P
@@ -49,11 +50,13 @@ flowchart LR
 | `POST /v1/billing/stripe/checkout` | none (Stripe holds the session) | login session (not a client session) → `{url}`. The session requires the buyer to accept the terms (`consent_collection[terms_of_service]=required`, with `custom_text[terms_of_service_acceptance][message]` linking the kitepon.dev terms and this product's annex `/terms.html`, and stating guardian consent for minors) | 409 `setup_not_verified` before setup check (same gate as Apple); 409 `conflict` while a paid period runs; 404 `not_found` when this server has no Stripe; 500 `internal` when Stripe cannot be reached (no state written; press again) |
 | `POST /v1/billing/stripe/portal` | none | login session → `{url}` of Stripe's customer portal (cancel, card, receipts) | 404 when there is no Stripe customer for the account |
 | `POST /v1/stripe/webhook` | `stripe_subscriptions` (subscription id, user id, customer id, status, period end, cancel flag) | Stripe-Signature + raw body → the subscription is **read again from Stripe** and written | Bad or old signature 400. Stripe unreachable 500, so Stripe retries by itself (up to 3 days). Unknown account (deleted) is acknowledged and ignored |
+| `POST /v1/billing/appstore/verify`, `POST /v1/appstore/notifications` | `appstore_subscriptions` (original transaction id, user id, environment, product, expires_at, revoked) | the JWS or the notification is verified to Apple's root as before, then the state is **read again from Apple** (`GET /inApps/v1/subscriptions/{originalTransactionId}`, ES256 JWT with `APPSTORE_*`): status 1 → paid until the transaction `expiresDate`; 4 (billing grace period) → paid until `renewalInfo.gracePeriodExpiresDate`; 3 (billing retry), 2 (expired) → not paid; 5 or `revocationDate` → revoked. The same re-read runs in the background (once per 10 minutes per original transaction id) when `/me` or `assertCanUse` sees an expired plan while a non-revoked App Store record exists, so a lost renewal notification heals itself | Apple unreachable or key refused → 500 `internal` (a notification is retried by Apple; nothing written). Apple does not know the purchase → verify 400 `validation_failed`, notification ignored. No `APPSTORE_*` key → today's behaviour (state from the signed transaction), one startup log line says so |
 | `Accounts.syncPlan` | `users.plan, plan_expires_at, store` (derived, never edited by hand) | both subscription tables → plan | pure derivation, runs after every write |
 | `DELETE /v1/me` | — | cancels the account's Stripe subscriptions first, then deletes | Stripe cannot cancel → 500, nothing deleted (protects against charging a deleted account); retry, or cancel in the portal |
 
 Rules the code keeps:
 
+- Same for the App Store: a notification or the app's JWS is a nudge. After the signature is checked, the state comes from Apple's App Store Server API, so a lost `DID_RENEW` cannot leave a paying user expired and the billing grace period is honoured.
 - The webhook is a nudge. State is never taken from the event body: the subscription is fetched from Stripe, so events arriving late or twice cannot move the period backwards.
 - A subscription is paid only while Stripe's status is `active` and `current_period_end` is in the future. `past_due`, `unpaid`, `canceled`, `incomplete*` are not paid. A user who cancels in the portal keeps `active` until the period end (`cancel_at_period_end`), as with Apple.
 - The Stripe account is shared with other products, so a subscription the server has not recorded yet is handled only when one of its items has the price `STRIPE_PRICE_ID`. Other products' subscriptions, checkouts, invoices and charges get 200 and change nothing, whatever metadata they carry.
@@ -75,6 +78,7 @@ All three are required together; if any is missing the server answers 404 for th
 | `STRIPE_SECRET_KEY(_FILE)` | Stripe **restricted** key | tmpfs file through `start-with-secrets.sh`, like the APNs key |
 | `STRIPE_WEBHOOK_SECRET(_FILE)` | Webhook signing secret `whsec_…` | same |
 | `STRIPE_PRICE_ID` | Price id `price_…` (not a secret) | compose environment |
+| `APPSTORE_ISSUER_ID`, `APPSTORE_KEY_ID`, `APPSTORE_PRIVATE_KEY(_FILE)` | Optional, all three together. App Store Connect API key (Users and Access > Integrations > In-App Purchase) for the App Store Server API; the key is the `.p8` PEM. Without them the server keeps the old behaviour and logs one line at startup | ids: compose environment; key: tmpfs file through `start-with-secrets.sh` |
 | `FREE_ACCOUNT_IDS` | Optional. Comma-separated user ids outside billing (the operator's own account, Owner ruling 2026-11-15). `/me` answers `active` with no `expires_at` or `store`; `assertCanUse` never refuses them. Not a secret | compose environment |
 | `STRIPE_PORTAL_CONFIGURATION` | Optional. Customer portal configuration `bpc_…` made for Approval Box (cancel at period end, no proration). Set it when the Stripe account is shared with another product: without it Stripe uses the account's default portal, which belongs to the other product | compose environment |
 

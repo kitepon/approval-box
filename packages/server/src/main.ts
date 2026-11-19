@@ -93,7 +93,12 @@ if (apnsKey && env.APNS_KEY_ID && env.APNS_TEAM_ID) {
 }
 // App Storeの購入の照合。商品IDが無ければ受け付けない。本番の購入にはアプリのApple ID（数字）が要る。
 const appStoreProducts = (env.APPSTORE_PRODUCT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+// 契約の状態をAppleのサーバーから読む鍵（App Store Connectの In-App Purchase のキー）。3つ揃わなければ従来どおり、署名付きの取引の値で決める。
+const appStoreApi = { issuerId: (env.APPSTORE_ISSUER_ID ?? "").trim(), keyId: (env.APPSTORE_KEY_ID ?? "").trim(), privateKey: secretValue("APPSTORE_PRIVATE_KEY").replace(/\\n/g, "\n") };
+const appStoreApiOn = !!appStoreApi.issuerId && !!appStoreApi.keyId && !!appStoreApi.privateKey;
+if (appStoreProducts.length) console.log(appStoreApiOn ? `approval-box-server: App Storeの契約の状態をAppleから読みます（key ${appStoreApi.keyId}）` : "approval-box-server: App Store Server APIの鍵（APPSTORE_ISSUER_ID・APPSTORE_KEY_ID・APPSTORE_PRIVATE_KEY）が揃っていません。App Storeの契約は署名付きの取引の値だけで決めます。");
 const appStore = appStoreProducts.length ? new AppStore(db, accounts, {
+  ...(appStoreApiOn ? { api: appStoreApi } : {}),
   bundleId: env.APPSTORE_BUNDLE_ID || "dev.kitepon.approvalbox", // compose は未設定を空文字で渡す
   ...(env.APPSTORE_APP_APPLE_ID ? { appAppleId: Number(env.APPSTORE_APP_APPLE_ID) } : {}),
   productIds: appStoreProducts,

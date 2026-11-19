@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { createSign, randomUUID } from "node:crypto";
+import { createSign, generateKeyPairSync, randomUUID, verify } from "node:crypto";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Accounts } from "../src/accounts.ts";
 import { AppStore } from "../src/appstore.ts";
-import { openDb } from "../src/db.ts";
+import { openDb, run } from "../src/db.ts";
 import { Decisions } from "../src/decisions.ts";
 import { EventHub } from "../src/events.ts";
 import { createApp } from "../src/http.ts";
@@ -41,13 +41,29 @@ function appleLikeChain() {
 const PRODUCT = "dev.kitepon.approvalbox.monthly";
 const BUNDLE = "dev.kitepon.approvalbox";
 
-function setup() {
+/** App Store Server API の代役。answer を書き換えると、次の問い合わせからその状態を返す。 */
+function fakeAppleApi(sign: (payload: Record<string, unknown>) => string) {
+  const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const calls: { url: string; authorization: string }[] = [];
+  const answer: { http: number; status: number; transaction: Record<string, unknown>; renewal?: Record<string, unknown> } = { http: 200, status: 1, transaction: {} };
+  const fetch = (async (url: string, init: { headers: { authorization: string } }) => {
+    calls.push({ url, authorization: init.headers.authorization });
+    if (answer.http !== 200) return new Response("{}", { status: answer.http });
+    const item = { status: answer.status, originalTransactionId: "1000000001", signedTransactionInfo: sign(answer.transaction),
+      ...(answer.renewal ? { signedRenewalInfo: sign({ environment: "Sandbox", signedDate: Date.now(), ...answer.renewal }) } : {}) };
+    return Response.json({ environment: "Sandbox", bundleId: BUNDLE, appAppleId: 6818175213, data: [{ subscriptionGroupIdentifier: "g1", lastTransactions: [item] }] });
+  }) as unknown as typeof globalThis.fetch;
+  return { calls, answer, publicKey, api: { issuerId: "issuer-1", keyId: "KEY1", privateKey: privateKey.export({ type: "pkcs8", format: "pem" }).toString(), fetch } };
+}
+
+function setup(withApi = false) {
   const chain = appleLikeChain();
   const db = openDb(":memory:");
   const events = new EventHub(db);
   const accounts = new Accounts(db, events, "store");
   const decisions = new Decisions(db, events);
-  const appStore = new AppStore(db, accounts, { bundleId: BUNDLE, appAppleId: 6818175213, productIds: [PRODUCT], rootCertificates: [chain.root], onlineChecks: false });
+  const apple = fakeAppleApi(chain.sign);
+  const appStore = new AppStore(db, accounts, { bundleId: BUNDLE, appAppleId: 6818175213, productIds: [PRODUCT], rootCertificates: [chain.root], onlineChecks: false, ...(withApi ? { api: apple.api } : {}) });
   const app = createApp({ db, accounts, decisions, events, publicUrl: "https://kb.test", appStore });
   const userId = accounts.createUser();
   const { session } = accounts.issueSession(userId, "test");
@@ -59,7 +75,7 @@ function setup() {
     transactionId: randomUUID(), originalTransactionId: "1000000001", bundleId: BUNDLE, productId: PRODUCT, type: "Auto-Renewable Subscription",
     purchaseDate: Date.now(), expiresDate: Date.now() + 30 * 86400_000, appAccountToken: userId, environment: "Sandbox", signedDate: Date.now(), ...fields,
   });
-  return { ...chain, accounts, userId, call, transaction };
+  return { ...chain, db, accounts, userId, call, transaction, apple };
 }
 
 test("App Store: Sandboxの購入は確認前でも受け付け、署名を確かめて契約中にする", async () => {
@@ -117,4 +133,95 @@ test("App Store: Appleのルートにつながらない鎖で署名した取引�
   const stranger = appleLikeChain();
   const res = await t.call("POST", "/v1/billing/appstore/verify", { jws: stranger.sign(t.transaction()) });
   assert.equal(res.json.error.code, "validation_failed");
+});
+
+const DAY = 86400_000;
+const until = async (check: () => Promise<boolean>) => { for (let i = 0; i < 100; i++) { if (await check()) return; await new Promise((r) => setTimeout(r, 10)); } assert.fail("条件が満たされませんでした"); };
+
+test("App Store Server API: verifyと通知は、本文でなくAppleの答えで決める。JWTの形も確かめる", async () => {
+  const t = setup(true);
+  t.apple.answer.transaction = t.transaction({ expiresDate: Date.now() + 30 * DAY });
+  const appleEnds = new Date(t.apple.answer.transaction.expiresDate as number).toISOString();
+  const verified = await t.call("POST", "/v1/billing/appstore/verify", { jws: t.sign(t.transaction({ expiresDate: Date.now() + 900 * DAY })) });
+  assert.equal(verified.json.expires_at, appleEnds); // アプリの申告ではなくAppleの値
+
+  const [call] = t.apple.calls;
+  assert.equal(call.url, "https://api.storekit-sandbox.itunes.apple.com/inApps/v1/subscriptions/1000000001");
+  const [head, claims, sig] = call.authorization.replace("Bearer ", "").split(".");
+  const json = (part: string) => JSON.parse(Buffer.from(part, "base64url").toString());
+  assert.deepEqual(json(head), { alg: "ES256", kid: "KEY1", typ: "JWT" });
+  assert.deepEqual({ ...json(claims), iat: 0, exp: json(claims).exp - json(claims).iat }, { iss: "issuer-1", iat: 0, exp: 300, aud: "appstoreconnect-v1", bid: BUNDLE });
+  assert.ok(verify("sha256", Buffer.from(`${head}.${claims}`), { key: t.apple.publicKey, dsaEncoding: "ieee-p1363" }, Buffer.from(sig, "base64url")));
+
+  t.apple.answer.transaction = t.transaction({ expiresDate: Date.now() + 60 * DAY });
+  const renewedEnds = new Date(t.apple.answer.transaction.expiresDate as number).toISOString();
+  const notify = (body: Record<string, unknown>) => t.call("POST", "/v1/appstore/notifications", {
+    signedPayload: t.sign({ notificationType: "DID_RENEW", notificationUUID: randomUUID(), version: "2.0", signedDate: Date.now(),
+      data: { environment: "Sandbox", bundleId: BUNDLE, appAppleId: 6818175213, signedTransactionInfo: t.sign(body) } }),
+  }, null);
+  assert.equal((await notify(t.transaction({ expiresDate: Date.now() + 3000 * DAY }))).json.applied, true);
+  assert.equal((await t.call("GET", "/v1/me")).json.expires_at, renewedEnds);
+
+  t.apple.answer.http = 500; // Appleに届かない時は、黙って本文を使わず500で返す（Appleが再送する）
+  assert.equal((await notify(t.transaction())).status, 500);
+  assert.equal((await t.call("GET", "/v1/me")).json.expires_at, renewedEnds);
+  t.apple.answer.http = 404;
+  assert.equal((await t.call("POST", "/v1/billing/appstore/verify", { jws: t.sign(t.transaction()) })).json.error.code, "validation_failed");
+});
+
+test("App Store Server API: 課金の猶予期間は猶予の期限まで払い済み。再試行・期限切れは未払い。取り消しは切れる", async () => {
+  const t = setup(true);
+  const verify = () => t.call("POST", "/v1/billing/appstore/verify", { jws: t.sign(t.transaction()) });
+  const graceEnds = Date.now() + 2 * DAY;
+  t.apple.answer.status = 4;
+  t.apple.answer.transaction = t.transaction({ expiresDate: Date.now() - DAY });
+  t.apple.answer.renewal = { gracePeriodExpiresDate: graceEnds };
+  const grace = await verify();
+  assert.equal(grace.json.plan, "active");
+  assert.equal(grace.json.expires_at, new Date(graceEnds).toISOString());
+
+  t.apple.answer.status = 3; // 猶予も終わり、課金の再試行
+  assert.equal((await verify()).json.plan, "expired");
+  t.apple.answer.status = 1;
+  t.apple.answer.transaction = t.transaction({ expiresDate: Date.now() + DAY });
+  assert.equal((await verify()).json.plan, "active");
+  t.apple.answer.status = 5;
+  assert.equal((await verify()).json.plan, "expired");
+  t.apple.answer.status = 1;
+  t.apple.answer.transaction = t.transaction({ expiresDate: Date.now() + DAY, revocationDate: Date.now() });
+  assert.equal((await verify()).json.plan, "expired");
+});
+
+test("App Store Server API: 更新の通知を取りこぼしても、期限切れを見た時にAppleから読み直して戻る。同じ購入は10分に1回まで", async () => {
+  const t = setup(true);
+  // 通知が来ないまま期限が過ぎた記録（Appleには更新済み）。
+  run(t.db, "insert into appstore_subscriptions (original_transaction_id, user_id, environment, product_id, expires_at, revoked, updated_at) values (?, ?, 'Sandbox', ?, ?, 0, ?)",
+    "1000000001", t.userId, PRODUCT, new Date(Date.now() - DAY).toISOString(), new Date().toISOString());
+  t.accounts.setPlan(t.userId, "active", new Date(Date.now() - DAY).toISOString(), "app_store");
+  t.apple.answer.transaction = t.transaction({ expiresDate: Date.now() + 30 * DAY });
+
+  assert.throws(() => t.accounts.assertCanUse(t.userId), { code: "subscription_expired" }); // この呼び出しは待たない
+  await until(async () => (await t.call("GET", "/v1/me")).json.plan === "active");
+  t.accounts.assertCanUse(t.userId);
+  assert.equal(t.apple.calls.length, 1);
+
+  t.accounts.setPlan(t.userId, "expired", new Date(Date.now() - DAY).toISOString(), "app_store");
+  await t.call("GET", "/v1/me");
+  assert.throws(() => t.accounts.assertCanUse(t.userId), { code: "subscription_expired" });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(t.apple.calls.length, 1); // 10分以内なのでAppleへ聞かない
+});
+
+test("App Store Server API: 鍵が無ければ従来どおり、署名付きの取引の値で決めてAppleへ聞かない", async () => {
+  const t = setup();
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () => { throw new Error("Appleへ問い合わせてはいけない"); }) as typeof fetch;
+  try {
+    const ends = Date.now() + 90 * DAY;
+    const res = await t.call("POST", "/v1/billing/appstore/verify", { jws: t.sign(t.transaction({ expiresDate: ends })) });
+    assert.equal(res.json.expires_at, new Date(ends).toISOString());
+    t.accounts.setPlan(t.userId, "active", new Date(Date.now() - 1000).toISOString(), "app_store");
+    assert.throws(() => t.accounts.assertCanUse(t.userId), { code: "subscription_expired" });
+    await new Promise((r) => setTimeout(r, 20));
+  } finally { globalThis.fetch = original; }
 });

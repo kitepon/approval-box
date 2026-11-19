@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.43
+# Approval Box API（アプリ・Web版向け） v0.44
+
+2026-11-20 v0.44（意味の変更・形は変わらない）: App Storeの契約の状態を、Appleのサーバー（App Store Server API）から読み直すようにした。通知（V2）と `POST /billing/appstore/verify` は、署名を確かめたあと、アプリが送った署名付きの取引や通知の本文ではなく、Appleが返す最新の状態で `plan`・`expires_at` を決める。更新の通知を取りこぼしても、期限が過ぎた契約を `/me` やAIの申請が見つけた時に、サーバーが10分に1回までAppleへ読みに行く。課金の猶予期間（Billing Grace Period）の間は `active` のままになる。Appleの鍵が無いサーバーは今までどおり（署名付きの取引だけで決める）。アプリのリクエスト・レスポンスは変わらない。契約は[billing-stripe.md](billing-stripe.md)。
 
 2026-11-20 v0.43（追加のみ）: Web版の契約の前に出す確認画面のため、`GET /billing/stripe/offer` を足した（`{ amount, currency, interval: "month", trial_days, first_charge_at }`。ログインのsessionだけ。BellTeamのclient sessionは使えない）。`POST /billing/stripe/checkout` のStripe画面で、利用規約への同意を必須にした（レスポンスの形は変わらない）。契約は[billing-stripe.md](billing-stripe.md)。
 
@@ -317,7 +319,7 @@ setup: {
 - 製品は無料期間の状態を持たない（クオの裁定 2026-11-20）。無料の1か月は各ストアの無料期間（Appleの導入オファー・Playの無料体験・Stripeの30日）で、その間ストアは払い済みの状態を返すので `plan=active` になる。どのストアの契約も無いアカウントは `plan=expired` で `store` が無い（契約したことが無い）。ログイン・設定・購入はできるが、AIの申請（`POST /decisions`・画像の送信）は402 `subscription_expired`。`trial` はもう返さない（知らない値は使えないものとして扱う）。
 - `/billing/appstore/verify`（v0.21 実装）: 署名をAppleのルート証明書まで確かめ、商品（`dev.kitepon.approvalbox.monthly`）・Bundle ID・本番はアプリのApple IDを照らす。期限内で返金されていなければ `plan=active`・`expires_at`・`store=app_store`。断る時: 署名・商品・環境が違う → 400 `validation_failed`、`appAccountToken` が自分の `user_id` でない・同じ購入が別のアカウントに結ばれている → 409 `conflict`、本番の購入で確認前 → 409 `setup_not_verified`。
   - 受け付ける環境は `Sandbox`（審査・TestFlight）と `Production` だけ。Xcodeの StoreKit 設定ファイルでの購入（`Xcode`）はAppleの署名でないので、サーバーは 400 で断る。Xcodeでの試しは画面までにする。
-  - 通知V2の受け口は `POST /v1/appstore/notifications`（ASCの本番・Sandboxの両方に登録）。更新・返金をここで反映する。期限を過ぎて更新の知らせが無ければ `/me` は `expired` を返す。
+  - 通知V2の受け口は `POST /v1/appstore/notifications`（ASCの本番・Sandboxの両方に登録）。更新・返金の知らせを受けたら、署名を確かめたうえで、Appleの App Store Server API（Get All Subscription Statuses）から契約の状態を読み直して反映する（通知の本文は合図で、状態には使わない。v0.44）。状態 1（有効）は取引の期限まで、4（課金の猶予期間）は猶予の期限まで払い済み。3（課金の再試行）・2（期限切れ）は未払い、5（返金・取り消し）は取り消し。Appleの鍵（`APPSTORE_ISSUER_ID`・`APPSTORE_KEY_ID`・`APPSTORE_PRIVATE_KEY`）が無いサーバーは、署名付きの取引の値だけで決める（従来どおり）。更新の知らせが届かず期限を過ぎた契約は、`/me` かAIの申請がそれを見た時にAppleから読み直す（10分に1回まで。読めなければ `expired` のまま）。
 
 ## エラー
 
@@ -367,6 +369,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.44 2026-11-20 クオの規則（ストアの契約の状態はストアのサーバーから読み、通知は合図にとどめる）: App Storeも通知・verifyのあとAppleから読み直す。猶予期間は払い済み、課金の再試行・期限切れは未払い。期限切れを見た時は10分に1回までバックグラウンドで読み直す。アプリの形は変えていない。
 - v0.43 2026-11-20 Web版の契約前の確認画面（旦那の承認した文言）: `GET /billing/stripe/offer` を追加し、Checkoutに利用規約への同意（`consent_collection[terms_of_service]=required`）を付けた。
 - v0.42 2026-11-20 クオの裁定（製品は無料期間の状態を持たず、ストアの契約だけで決める）: `plan=trial` を廃止し、契約の無いアカウントは `expired`。Stripeの無料30日の判定はStripeの記録だけ。
 - v0.41 2026-11-19 Linuxデスクトップ版の依頼（RFC 8252 §7.3）: `POST /auth/google/web/start`・`POST /auth/google/callback` を追加し、`/auth/apple/web/start` と合わせて任意の `redirect_uri`（`http://127.0.0.1:<ポート>/…` か `http://[::1]:<ポート>/…` だけ）を受ける。戻り先は開始時の保存値だけ。省略時は `approvalbox://auth/<provider>` で従来どおり。`/auth/link` は変えていない。
