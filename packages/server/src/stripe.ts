@@ -22,6 +22,8 @@ const API = "https://api.stripe.com/v1";
 /** 初めて契約する利用者への無料期間（日）。クオ裁定 2026-11-15（StripeでもAppleでも）。 */
 const TRIAL_DAYS = 30;
 const TOLERANCE_SECONDS = 300;
+/** Stripeの支払い画面の同意の文。リンクはMarkdown。 */
+const TERMS_MESSAGE = "[利用規約](https://kitepon.dev/terms/)と[Approval Boxの付属規約](https://approval-box.kitepon.dev/terms.html)に同意します。未成年の場合は、保護者の同意を得ています。";
 const HANDLED = new Set(["checkout.session.completed", "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"]);
 
 type StripeSubscription = {
@@ -37,6 +39,8 @@ export class Stripe {
   private readonly db: Db;
   private readonly accounts: Accounts;
   private readonly config: StripeConfig;
+  /** 価格は変わらないので、一度読んだらプロセスの間は使い回す（確認画面のたびにStripeへ問わない）。 */
+  private price?: { amount: number; currency: string };
 
   constructor(db: Db, accounts: Accounts, config: StripeConfig) {
     this.db = db;
@@ -76,14 +80,29 @@ export class Stripe {
     return me.plan === "active" && !!me.store;
   }
 
+  /** 無料期間はStripeでの初めての契約だけ。解約して買い直しても、もう一度は付けない（契約の記録は残る）。
+   * 窓口ごとに無料が付く（クオの裁定 2026-11-20）ので、App Store・Google Playの記録は見ない。 */
+  private firstTime(userId: string) {
+    return !get(this.db, "select 1 from stripe_subscriptions where user_id = ?", userId);
+  }
+
+  /** GET /v1/billing/stripe/offer。契約前の確認画面に出す、料金と、この利用者の無料期間・初回の請求日。 */
+  async offer(userId: string) {
+    if (!this.price) {
+      const price = (await this.call("GET", `/prices/${encodeURIComponent(this.config.priceId)}`)) as { unit_amount?: unknown; currency?: unknown };
+      if (typeof price.unit_amount !== "number" || typeof price.currency !== "string") throw new ApiError("internal", "決済サービス（Stripe）の応答が正しくありません。");
+      this.price = { amount: price.unit_amount, currency: price.currency };
+    }
+    const trialDays = this.firstTime(userId) ? TRIAL_DAYS : 0;
+    return { ...this.price, interval: "month" as const, trial_days: trialDays, first_charge_at: new Date(Date.now() + trialDays * 86_400_000).toISOString() };
+  }
+
   /** POST /v1/billing/stripe/checkout。Stripeの支払い画面のURLを返す。 */
   async checkout(userId: string) {
     this.accounts.assertSetupVerified(userId);
     if (this.hasPaidPeriod(userId)) throw new ApiError("conflict", "すでに契約中です。契約の変更・解約は、契約している窓口で行ってください。");
     const customer = get<{ customer_id: string }>(this.db, "select customer_id from stripe_subscriptions where user_id = ? order by updated_at desc", userId)?.customer_id;
-    // 無料期間はStripeでの初めての契約だけ。解約して買い直しても、もう一度は付けない（契約の記録は残る）。
-    // 窓口ごとに無料が付く（クオの裁定 2026-11-20）ので、App Store・Google Playの記録は見ない。
-    const firstTime = !get(this.db, "select 1 from stripe_subscriptions where user_id = ?", userId);
+    const firstTime = this.firstTime(userId);
     const session = await this.call("POST", "/checkout/sessions", {
       mode: "subscription",
       ...(firstTime ? { "subscription_data[trial_period_days]": String(TRIAL_DAYS) } : {}),
@@ -92,6 +111,9 @@ export class Stripe {
       client_reference_id: userId,
       "subscription_data[metadata][user_id]": userId,
       "automatic_tax[enabled]": "true",
+      // 契約の前に、共通の利用規約とこの製品の付属規約への同意をStripeの画面で取る。
+      "consent_collection[terms_of_service]": "required",
+      "custom_text[terms_of_service_acceptance][message]": TERMS_MESSAGE,
       ...(customer ? { customer, "customer_update[address]": "auto" } : { billing_address_collection: "auto" }),
       success_url: `${this.config.publicUrl}/settings?billing=success`,
       cancel_url: `${this.config.publicUrl}/settings`,

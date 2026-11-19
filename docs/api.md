@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.42
+# Approval Box API（アプリ・Web版向け） v0.43
+
+2026-11-20 v0.43（追加のみ）: Web版の契約の前に出す確認画面のため、`GET /billing/stripe/offer` を足した（`{ amount, currency, interval: "month", trial_days, first_charge_at }`。ログインのsessionだけ。BellTeamのclient sessionは使えない）。`POST /billing/stripe/checkout` のStripe画面で、利用規約への同意を必須にした（レスポンスの形は変わらない）。契約は[billing-stripe.md](billing-stripe.md)。
 
 2026-11-20 v0.42（意味の変更）: 製品の「お試し」を無くした（クオの裁定）。`/me` の `plan` は `active` か `expired` だけになり、どのストアの契約も無いアカウントは `expired`（`store` 無し）で、AIの申請を402 `subscription_expired` で断る。無料の1か月は各ストアの無料期間だけで決まる。Stripeの無料30日は、そのアカウントにStripeの契約記録が無い時に付く（App Store・Google Playの記録は見ない）。形は変わらない。
 
@@ -304,7 +306,8 @@ setup: {
 
 | POST | `/billing/appstore/verify` | iOS: 購入直後に `{ jws }` を送る。jws は StoreKit 2 の `jwsRepresentation`（署名付きtransaction）そのまま → 更新後の `/me` |
 | POST | `/billing/play/verify` | Android: 購入直後に `{ product_id, purchase_token }` を送る → 更新後の `/me`。承認（acknowledge）はサーバーが行う |
-| POST | `/billing/stripe/checkout` | Web: → `{ url }`（Stripe Checkoutへ移る） |
+| GET | `/billing/stripe/offer` | Web: → `{ amount, currency, interval: "month", trial_days, first_charge_at }`。amount・currencyはStripeの価格から（最小単位。円なら300）。`trial_days` は、このアカウントにStripeの契約の記録が無ければ30、あれば0。`first_charge_at` は今から `trial_days` 日後（ISO）。Stripeが無いサーバーは404 `not_found` |
+| POST | `/billing/stripe/checkout` | Web: → `{ url }`（Stripe Checkoutへ移る。利用規約への同意が必須） |
 | POST | `/billing/stripe/portal` | Web: → `{ url }`（解約・カード変更） |
 | POST | `/appstore/notifications`・`/play/notifications`・`/stripe/webhook` | サーバー間。アプリは呼ばない |
 
@@ -364,6 +367,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.43 2026-11-20 Web版の契約前の確認画面（旦那の承認した文言）: `GET /billing/stripe/offer` を追加し、Checkoutに利用規約への同意（`consent_collection[terms_of_service]=required`）を付けた。
 - v0.42 2026-11-20 クオの裁定（製品は無料期間の状態を持たず、ストアの契約だけで決める）: `plan=trial` を廃止し、契約の無いアカウントは `expired`。Stripeの無料30日の判定はStripeの記録だけ。
 - v0.41 2026-11-19 Linuxデスクトップ版の依頼（RFC 8252 §7.3）: `POST /auth/google/web/start`・`POST /auth/google/callback` を追加し、`/auth/apple/web/start` と合わせて任意の `redirect_uri`（`http://127.0.0.1:<ポート>/…` か `http://[::1]:<ポート>/…` だけ）を受ける。戻り先は開始時の保存値だけ。省略時は `approvalbox://auth/<provider>` で従来どおり。`/auth/link` は変えていない。
 - v0.40 2026-11-19 ユーザー規範（PC版のある製品の課金は Apple・Stripe・Google Play）とAndroid担当（インディビリア）の引き継ぎ: `/billing/play/verify` と `/play/notifications` の実装。商品IDは `PLAY_PRODUCT_IDS`、設定が無ければ404。
