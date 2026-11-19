@@ -25,7 +25,7 @@ function setup(billing: "off" | "store" = "store") {
     const text = await res.text();
     return { status: res.status, json: text ? JSON.parse(text) : null };
   };
-  return { db, app, accounts, call, session, userId };
+  return { db, app, accounts, call, session, userId, entitled };
 }
 
 async function paired(ctx: ReturnType<typeof setup>) {
@@ -223,14 +223,16 @@ test("他の接続の申請は見えない", async () => {
   assert.equal(other.status, 404);
 });
 
-test("セットアップ確認が済むまで課金させない", async () => {
+test("セットアップ確認が済むまで課金させない（契約の無いアカウントでも確認できる）", async () => {
   const ctx = setup();
+  ctx.entitled.delete(ctx.userId);
   const token = await paired(ctx);
   const blocked = await ctx.call("POST", "/v1/billing/stripe/checkout", { token: ctx.session });
   assert.equal(blocked.json.error.code, "setup_not_verified");
   const me0 = await ctx.call("GET", "/v1/me", { token: ctx.session });
   assert.equal(me0.json.setup.verified, false);
   assert.equal(me0.json.setup.checks.length, 2);
+  assert.equal(me0.json.plan, "expired"); // 契約の無いアカウントでも、セットアップ確認から購入まで進める
 
   const started = await ctx.call("POST", "/connector/v1/setup-test", { token, body: { client: "claude-code", os: "linux", session_label: "test", route: { channel_id: "ch-9", harness: "claude" } } });
   const id = started.json.decision_id;
