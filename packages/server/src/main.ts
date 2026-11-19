@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Diagnostics } from "./diagnostics.ts";
-import { Apns, Notifier } from "./push.ts";
+import { Apns, Fcm, Notifier } from "./push.ts";
 import { serve } from "@hono/node-server";
 import { existsSync, readFileSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
@@ -85,10 +85,11 @@ if (webLogin.apple_services_id && !appleAudiences.includes(webLogin.apple_servic
 // 鍵は APNS_KEY_FILE（.p8 のファイル。読み取り専用で渡す）か APNS_KEY（PEMの中身。改行は \n）で渡す。
 const apnsKey = env.APNS_KEY_FILE ? (existsSync(env.APNS_KEY_FILE) ? readFileSync(env.APNS_KEY_FILE, "utf8") : "") : (env.APNS_KEY ?? "").replace(/\\n/g, "\n");
 if (env.APNS_KEY_FILE && !apnsKey) console.error(`approval-box-server: APNS_KEY_FILE（${env.APNS_KEY_FILE}）が読めません。iPhoneへの通知は送りません。`);
+let apnsSend: Apns["send"] | undefined;
 if (apnsKey && env.APNS_KEY_ID && env.APNS_TEAM_ID) {
   const apns = new Apns({ keyPem: apnsKey, keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, topic: env.APNS_TOPIC ?? "dev.kitepon.approvalbox" });
   console.log(`approval-box-server: iPhoneへの通知を送ります（key ${env.APNS_KEY_ID}）`);
-  new Notifier(db, events, apns.send);
+  apnsSend = apns.send;
 }
 // App Storeの購入の照合。商品IDが無ければ受け付けない。本番の購入にはアプリのApple ID（数字）が要る。
 const appStoreProducts = (env.APPSTORE_PRODUCT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -112,6 +113,11 @@ const play = billing === "store" && playProducts.length && playServiceAccount &&
   ? new Play(db, accounts, { packageName: env.PLAY_PACKAGE_NAME?.trim() || "dev.kitepon.approvalbox", productIds: playProducts, serviceAccount: playServiceAccount, pushAudience: playPushAudience, pushServiceAccount: playPushServiceAccount })
   : undefined;
 if (play) console.log("approval-box-server: Google Playでの契約を受け付けます");
+// Androidへの通知（FCM）。Firebaseのプロジェクトと、Google Playと同じサービスアカウントの鍵が揃った時だけ送る。
+const fcmProject = (env.FCM_PROJECT_ID ?? "").trim();
+const fcm = fcmProject && playServiceAccount ? new Fcm({ projectId: fcmProject, serviceAccount: playServiceAccount }) : undefined;
+if (fcm) console.log(`approval-box-server: Androidへの通知を送ります（project ${fcmProject}）`);
+if (apnsSend || fcm) new Notifier(db, events, { ...(apnsSend ? { apns: apnsSend } : {}), ...(fcm ? { fcm: fcm.send } : {}) });
 // 答えを call-bridge の通話で届ける接続（GrokBotなど）。ヘッダーのファイル（Authorization など）が読めなければ使わない。
 const callBridgeIds = (env.CALL_BRIDGE_CONNECTIONS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 let callBridgeConnections: Set<string> | undefined;

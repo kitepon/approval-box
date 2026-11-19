@@ -51,7 +51,7 @@ test("five device locales receive localized fixed push text while request conten
     accounts.registerDevice(userId, { platform:"ios",apns_token:"e" });
     assert.equal(get<{locale:string}>(db,"select locale from devices where id=?",ja.id)?.locale,"ja");
     const sent: {token:string;payload:any}[]=[];
-    const notifier = new Notifier(db, events, async (_env,token,_headers,payload) => { sent.push({token,payload});return {status:200}; });
+    const notifier = new Notifier(db, events, { apns: async (_env,token,_headers,payload) => { sent.push({token,payload});return {status:200}; } });
     // Seed via a normal request, then invoke the notifier directly to avoid polling or real APNs.
     const conn = accounts.createConnection(userId,"fixture","linux",["codex"]);
     const decisions = new Decisions(db,new EventHub(db));
