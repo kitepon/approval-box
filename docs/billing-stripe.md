@@ -52,6 +52,7 @@ Rules the code keeps:
 
 - The webhook is a nudge. State is never taken from the event body: the subscription is fetched from Stripe, so events arriving late or twice cannot move the period backwards.
 - A subscription is paid only while Stripe's status is `active` and `current_period_end` is in the future. `past_due`, `unpaid`, `canceled`, `incomplete*` are not paid. A user who cancels in the portal keeps `active` until the period end (`cancel_at_period_end`), as with Apple.
+- The Stripe account is shared with other products, so a subscription the server has not recorded yet is handled only when one of its items has the price `STRIPE_PRICE_ID`. Other products' subscriptions, checkouts, invoices and charges get 200 and change nothing, whatever metadata they carry.
 - The account is bound by `client_reference_id` and by `subscription.metadata.user_id`, both set by this server at checkout. One Stripe subscription belongs to one account; a later event naming another account is ignored.
 - The BellTeam client session (`/v1` allowlist) cannot start checkout or the portal. BellTeam only reads `/me`; it opens `https://approval-box.kitepon.dev/settings` for the user, who signs in and buys there. BellTeam copies no payment state.
 - Apple apps show no Stripe button or link (App Review 3.1.1). A Stripe purchase is honoured in the apps because they read `/me` (3.1.3(b)); the plan is also sold as the existing in-app purchase.

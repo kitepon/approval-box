@@ -26,7 +26,7 @@ const HANDLED = new Set(["checkout.session.completed", "customer.subscription.cr
 
 type StripeSubscription = {
   id: string; customer: string; status: string; cancel_at_period_end?: boolean;
-  current_period_end?: number; items?: { data?: { current_period_end?: number }[] };
+  current_period_end?: number; items?: { data?: { current_period_end?: number; price?: { id?: string } }[] };
   metadata?: Record<string, string>;
 };
 
@@ -150,6 +150,8 @@ export class Stripe {
     const subscription = await this.read(subscriptionId);
     const claimed = event.type === "checkout.session.completed" ? object.client_reference_id : subscription.metadata?.user_id;
     const known = get<{ user_id: string }>(this.db, "select user_id from stripe_subscriptions where subscription_id = ?", subscriptionId)?.user_id;
+    // 同じStripeアカウントを他の製品と共有するので、記録に無い契約は自分の価格のものだけを扱う（他製品のmetadataは信じない）。
+    if (!known && !subscription.items?.data?.some((item) => item.price?.id === this.config.priceId)) return { applied: false };
     const userId = known ?? (typeof claimed === "string" ? claimed : subscription.metadata?.user_id);
     // 自分が決済へ送った利用者の印と、Stripeの契約に付けた印が食い違うものは、どちらも信じない。
     if (!userId || (subscription.metadata?.user_id && subscription.metadata.user_id !== userId)) return { applied: false };
