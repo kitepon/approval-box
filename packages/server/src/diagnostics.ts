@@ -101,34 +101,18 @@ function severity(input: Diagnostic) {
   if (input.code === "cancelled") return input.diagnostic_log.user_visible || input.diagnostic_log.cancellation === "unexpected" ? "warn" : "info";
   return "high";
 }
+/** 診断は利用者IDを保存しない（クオの方針 2026-11-19）。受付はsession認証で、利用者ごとの上限だけをメモリで数える。 */
 export class Diagnostics {
   readonly db: Db;
+  // shortcut: per-user limit lives in process memory, so a restart resets it; move it to a shared store if the server runs as several processes.
+  private perUser = { bucket: "", counts: new Map<string, number>() };
   constructor(db: Db) { this.db = db; }
-  /** 共通groupから当人の寄与と本文を取り除く。状態は利用者横断の裁定なので保持する。 */
-  removeUser(userId: string) {
-    for (const own of all<{ fingerprint: string; occurrence_count: number }>(this.db, "select fingerprint,occurrence_count from diagnostic_group_sources where user_id=?", userId)) {
-      const others = all<{ occurrence_count: number; first_seen: string; last_seen: string; payload: string }>(this.db, "select occurrence_count,first_seen,last_seen,payload from diagnostic_group_sources where fingerprint=? and user_id<>? order by last_seen desc,user_id", own.fingerprint, userId);
-      if (!others.length) {
-        run(this.db, "delete from diagnostic_groups where fingerprint=?", own.fingerprint);
-      } else {
-        run(this.db, "update diagnostic_groups set occurrence_count=max(?,occurrence_count-?),first_seen=?,last_seen=?,payload=?,resolution_note=null where fingerprint=?",
-          others.reduce((n, r) => n + r.occurrence_count, 0), own.occurrence_count, others.map(r => r.first_seen).sort()[0]!, others[0]!.last_seen, others[0]!.payload, own.fingerprint);
-        // 自由記述から当人由来の文だけを切り分けられないため、共有注記は残さない。
-        run(this.db, "delete from diagnostic_investigations where fingerprint=?", own.fingerprint);
-      }
-    }
-    run(this.db, "delete from diagnostic_rate where scope=?", userId);
-  }
   prune() {
     const cutoff = new Date(Date.now()-30*86400_000).toISOString();
     run(this.db,"delete from diagnostics where received_at < ?",cutoff);
     run(this.db,"delete from diagnostics where id not in (select id from diagnostics order by id desc limit 10000)");
     const aggregateCutoff = new Date(Date.now()-120*86400_000).toISOString();
     run(this.db,"delete from diagnostic_groups where last_seen < ?",aggregateCutoff);
-    // 共通groupが他の利用者によって更新され続けても、古い寄与元の本文は保持上限を延ばさない。
-    run(this.db,"delete from diagnostic_investigations where fingerprint in (select fingerprint from diagnostic_group_sources where last_seen < ?)",aggregateCutoff);
-    run(this.db,"update diagnostic_groups set resolution_note=null where fingerprint in (select fingerprint from diagnostic_group_sources where last_seen < ?)",aggregateCutoff);
-    run(this.db,"delete from diagnostic_group_sources where last_seen < ?",aggregateCutoff);
     // Receipts outlive the bounded log so retries cannot recreate evicted events.
     run(this.db,"delete from diagnostic_rate where bucket < ?", new Date(Date.now()-2*3600_000).toISOString().slice(0,13));
   }
@@ -137,17 +121,17 @@ export class Diagnostics {
     if (Date.parse(input.occurred_at) > Date.now()+86400_000) throw new ApiError("validation_failed","occurred_at が未来すぎます。");
     const payload = canonical(input), digest = hash(payload);
     return tx(this.db,()=>{
-      const prior = get<{payload_hash:string}>(this.db,"select payload_hash from diagnostic_receipts where user_id=? and event_id=?",userId,input.event_id);
+      const prior = get<{payload_hash:string}>(this.db,"select payload_hash from diagnostic_receipts where event_id=?",input.event_id);
       if (prior) {
         if (prior.payload_hash !== digest) throw new ApiError("conflict","同じ event_id の内容が変わっています。");
         return {event_id:input.event_id,accepted:true,duplicate:true};
       }
       const at = new Date().toISOString(), bucket = at.slice(0,13);
-      for (const [scope,limit] of [[userId,60],["global",1000]] as const) {
-        const count = get<{count:number}>(this.db,"select count from diagnostic_rate where bucket=? and scope=?",bucket,scope)?.count ?? 0;
-        if (count >= limit) throw new ApiError("rate_limited","診断の送信上限です。時間を置いてください。",{},3600);
-      }
-      for (const scope of [userId,"global"]) run(this.db,"insert into diagnostic_rate values (?,?,1) on conflict(bucket,scope) do update set count=count+1",bucket,scope);
+      if (this.perUser.bucket !== bucket) this.perUser = { bucket, counts: new Map() };
+      const mine = this.perUser.counts.get(userId) ?? 0;
+      const global = get<{count:number}>(this.db,"select count from diagnostic_rate where bucket=? and scope='global'",bucket)?.count ?? 0;
+      if (mine >= 60 || global >= 1000) throw new ApiError("rate_limited","診断の送信上限です。時間を置いてください。",{},3600);
+      run(this.db,"insert into diagnostic_rate values (?,'global',1) on conflict(bucket,scope) do update set count=count+1",bucket);
       this.prune();
       const fingerprint = diagnosticFingerprint(input);
       const group = get<{fingerprint:string}>(this.db,"select fingerprint from diagnostic_groups where fingerprint=?",fingerprint);
@@ -158,11 +142,10 @@ export class Diagnostics {
       } else if (!reference) {
       run(this.db,"insert into diagnostic_groups (fingerprint,severity,message_template,occurrence_count,first_seen,last_seen,status,payload) values (?,?,?,1,?,?,'open',?) on conflict(fingerprint) do update set severity=excluded.severity,occurrence_count=occurrence_count+1,last_seen=excluded.last_seen,status='open',payload=excluded.payload,resolved_at=null,resolution_note=null",fingerprint,severity(input),`${input.module}.${input.code}: ${input.diagnostic_log.operation} (${input.device_type})`,at,at,payload);
       }
-      if (!reference || group) run(this.db, `insert into diagnostic_group_sources values (?,?,1,?,?,?)
-        on conflict(fingerprint,user_id) do update set occurrence_count=occurrence_count+1,last_seen=excluded.last_seen,payload=excluded.payload`, fingerprint, userId, at, at, payload);
-      run(this.db,"insert into diagnostic_receipts values (?,?,?,?)",userId,input.event_id,digest,at);
-      run(this.db,"insert into diagnostics (user_id,event_id,received_at,payload,payload_hash,fingerprint,severity) values (?,?,?,?,?,?,?)",userId,input.event_id,at,payload,digest,diagnosticFingerprint(input),severity(input));
+      run(this.db,"insert into diagnostic_receipts values (?,?,?)",input.event_id,digest,at);
+      run(this.db,"insert into diagnostics (event_id,received_at,payload,payload_hash,fingerprint,severity) values (?,?,?,?,?,?)",input.event_id,at,payload,digest,diagnosticFingerprint(input),severity(input));
       this.prune();
+      this.perUser.counts.set(userId, mine + 1);
       return {event_id:input.event_id,accepted:true,duplicate:false};
     });
   }

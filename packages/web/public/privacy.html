@@ -17,12 +17,12 @@
 
 <h2>集める情報</h2>
 <ul>
-<li><strong>アカウント</strong>: Sign in with Apple または Sign in with Google から受け取る利用者の識別子と、提供された場合のメールアドレス（Appleの「メールを非公開」を選んだ場合は中継用のアドレス）。</li>
+<li><strong>アカウント</strong>: Sign in with Apple または Sign in with Google から受け取る利用者の識別子。メールアドレスは保存しません。</li>
 <li><strong>申請と答え</strong>: AIが送る件名・背景・選択肢・AIの推奨・急ぎ度・期限・作業名・AIの種類、利用者の答え（選んだ選択肢と書いた文）、修正・取り下げなどの履歴。背景には、AIが扱っているコードや業務の内容が含まれることがあります。AIが申請に添える画像も保存し、申請を読む利用者に表示します。画像はファイルの中身・名前・形式・大きさ・SHA-256を保存し、申請と同じ期間で削除します。未確定の画像は24時間で削除します。</li>
 <li><strong>答えへの添付</strong>: 利用者が答えに付けた画像と書類（写真・スクリーンショット・PDF・文書など）のファイルの中身、ファイル名、形式、大きさ、改ざんを確かめるための値（SHA-256）。ファイルは受け取ったままの形で保存します。写真に撮影場所などの情報（Exif）が含まれる場合、それも消さずに残るので、気になる時は付ける前に取り除いてください。</li>
 <li><strong>接続した端末</strong>: 端末名、OS、使うAIの種類、接続テストの結果。端末の接続トークンは、元に戻せない形（ハッシュ）でだけ保存します。</li>
 <li><strong>通知</strong>: 通知を送るための端末の識別子（iPhone・Mac は Apple Push Notification service、Android は Firebase Cloud Messaging のトークン）。</li>
-<li><strong>アプリの障害診断</strong>: 発生時刻、端末の種類（iPhone・iPad・Mac）、OSとアプリの版、固定の処理名、エラーの数値・種類、応答の形式、デコードで問題が起きた既知の項目名、クラッシュやハングの数値情報とバイナリの識別子・位置。ログイン後に送信し、同じイベントの再送を数えないための識別子を保存します。認証トークン、申請や応答の本文、生のURL、添付の中身は診断として送信しません。</li>
+<li><strong>アプリの障害診断</strong>: 発生時刻、端末の種類（iPhone・iPad・Mac）、OSとアプリの版、固定の処理名、エラーの数値・種類、応答の形式、デコードで問題が起きた既知の項目名、クラッシュやハングの数値情報とバイナリの識別子・位置。ログイン後に送信し、同じイベントの再送を数えないための識別子を保存します。診断はアカウントの識別子と結び付けずに保存します。認証トークン、申請や応答の本文、生のURL、添付の中身は診断として送信しません。</li>
 <li><strong>購入履歴</strong>: App Store では元の取引ID、商品ID、契約の期限、返金・取り消しの有無、購入の環境（本番か試験か）。Google Play では購入トークン、商品ID、契約の状態と期限、試験の購入かどうか。Web版（Stripe）では Stripe の顧客IDと契約ID、契約の状態、今の期間の終わり、期間の終わりに解約する予定かどうか。価格や国などは保存しません。支払い方法やカードの情報は、運営者には届きません。</li>
 </ul>
 <p>広告、トラッキング、行動の解析のための情報は集めません。そのための外部のSDKも使っていません。</p>
@@ -57,7 +57,7 @@
 <li>答えへの添付は、その申請と一緒に、同じ期間で削除します。上げたけれど答えに使わなかった添付は、24時間で削除します。</li>
 <li>接続したパソコンのコネクタは、AIへ届ける前に添付をそのパソコンの <code>~/.approval-box/attachments/</code> に保存し、30日後に削除します。このファイルは利用者のパソコンの中にあり、運営者は扱いません。</li>
 <li>購入履歴は、契約の状態を保つため、アカウントを削除するまで残ります。</li>
-<li>診断イベントは30日間、または全体の最新10,000件まで保存します。アカウントを削除すると、そのイベントと重複を防ぐための受領記録も削除します。BugHubへ渡す集約診断にはアカウントの識別子を含めず、最後に受け取ってから120日間保存します。アカウント削除時に集約からも対象の本文を除くため、サーバー内では利用者ごとの寄与と最新の診断要約の対応を、その利用者から最後に受け取ってから最大120日間保持します。削除時にはこの対応と本人の要約も消し、他の利用者と共有する集約は他の利用者の要約へ置き換えます。本人由来の文を分離できない調査注記も削除します。</li>
+<li>診断イベントは30日間、または全体の最新10,000件まで保存します。集約診断は最後に受け取ってから120日間保存します。どちらもアカウントの識別子を含まず、誰から届いたかをサーバーは記録しません。そのためアカウントを削除しても診断は変わりません。</li>
 </ul>
 
 <h2>削除</h2>
@@ -77,10 +77,10 @@
 <h1>Privacy Policy</h1>
 <p class="muted">Approval Box (iPhone and Android apps, web app, and official server) — Effective October 2, 2026; updated November 19, 2026 (Google Play and Stripe purchases, Android notifications)</p>
 <p>Approval Box collects requests from AI agents (such as Claude Code, Codex, Cursor and Grok) that need your decision, approval or action, and lets you answer them. It is operated by kitepon.dev. This policy covers the official server (approval-box.kitepon.dev). The operator does not handle data on servers you host yourself.</p>
-<p>Diagnostics are used to investigate and fix application failures and are sent to the operator’s BugHub without account identifiers. Raw events are retained for 30 days or the latest 10,000 events. Account deletion removes associated events and deduplication receipts. Aggregates are retained for 120 days after the latest receipt. To remove your content from an aggregate on account deletion, the server retains a mapping of each account’s contributions and latest diagnostic summary for up to 120 days after that account’s last contribution. Deletion removes your mapping and summary, replaces a shared aggregate with another account’s summary, and removes investigation notes where your content cannot be separated.</p>
+<p>Diagnostics are used to investigate and fix application failures and are sent to the operator’s BugHub without account identifiers. Raw events are retained for 30 days or the latest 10,000 events. Aggregates are retained for 120 days after the latest receipt. Neither contains an account identifier, and the server does not record which account sent a diagnostic, so account deletion does not change diagnostics.</p>
 <h2>Information we collect</h2>
 <ul>
-<li><strong>Account</strong>: the user identifier from Sign in with Apple or Sign in with Google, and your email address if provided (a relay address if you choose Hide My Email).</li>
+<li><strong>Account</strong>: the user identifier from Sign in with Apple or Sign in with Google. Email addresses are not stored.</li>
 <li><strong>Requests and answers</strong>: the title, context, options, recommendation, urgency, deadline, session label and AI type sent by your AI, your answers (the option you chose and any text), and the history of changes and cancellations. The context may include code or work content your AI is handling. Images attached by the AI are stored and shown to you, including their contents, name, type, size and SHA-256 checksum. They are deleted with the request. Unsubmitted images are deleted after 24 hours.</li>
 <li><strong>Answer attachments</strong>: images and documents you attach to an answer (such as photos, screenshots, PDFs and text files), including the file contents, file name, type, size and a SHA-256 checksum. Files are stored as received. If a photo contains metadata such as its location (Exif), it is kept, so remove it before attaching if you prefer.</li>
 <li><strong>Connected computers</strong>: device name, OS, the AI tools in use, and connection test results. Connection tokens are stored only as one-way hashes.</li>

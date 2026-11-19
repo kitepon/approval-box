@@ -150,7 +150,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     const token = input.identity_token ?? input.id_token;
     if (!token) throw new ApiError("validation_failed", provider === "apple" ? "identity_token が要ります。" : "id_token が要ります。");
     const id = await verifyIdToken(provider, token, { audiences, ...(input.nonce ? { nonce: input.nonce } : {}), ...(services.idKeys ? { keys: services.idKeys } : {}) });
-    return c.json(accounts.signInWithIdentity(provider, id.sub, id.email));
+    return c.json(accounts.signInWithIdentity(provider, id.sub));
   };
   // Web版のログインボタンに要る公開の値（秘密ではない）。設定が無ければ空で、Web版はボタンを出さない。
   app.get("/v1/auth/config", (c) => c.json(services.webLogin ?? {}));
@@ -188,7 +188,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
         const flow = accounts.takeAuthFlow(state, provider);
         if (typeof form.id_token !== "string") return back({ error: `${provider}_error` });
         const id = await verifyIdToken(provider, form.id_token, { audiences: [audience], nonce: flow.nonce, ...(services.idKeys ? { keys: services.idKeys } : {}) });
-        const signed = accounts.signInWithIdentity(provider, id.sub, id.email);
+        const signed = accounts.signInWithIdentity(provider, id.sub);
         accounts.bindAuthFlow(state, signed.user.id);
         accounts.revokeSession(signed.session); // ここで作ったsessionは使わない。アプリには一度きりのコードを渡す
         return back({ code: accounts.createAppCode(signed.user.id, flow.code_challenge) });

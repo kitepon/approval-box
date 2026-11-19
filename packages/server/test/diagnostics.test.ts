@@ -58,7 +58,7 @@ test("admin report context preserves legacy acceptance, raw data, grouping and l
  const event={...x.event(),code:"api_failed",module:"api",diagnostic_log:{operation:"decisions.list",user_visible:false}};
  assert.equal((await x.send(event)).status,202);
  const fingerprint=diagnosticFingerprint(diagnosticSchema.parse(event));
- const snapshot=()=>({raw:all(x.db,"select * from diagnostics"),groups:all(x.db,"select * from diagnostic_groups"),receipts:all(x.db,"select * from diagnostic_receipts"),sources:all(x.db,"select * from diagnostic_group_sources"),notes:all(x.db,"select * from diagnostic_investigations")});
+ const snapshot=()=>({raw:all(x.db,"select * from diagnostics"),groups:all(x.db,"select * from diagnostic_groups"),receipts:all(x.db,"select * from diagnostic_receipts"),notes:all(x.db,"select * from diagnostic_investigations")});
  const before=snapshot();
  const row=(await (await x.admin("/logs")).json())[0];
  assert.equal(row.fingerprint,fingerprint);assert.equal(row.severity,"high");assert.equal(row.status,"open");assert.equal(row.occurrence_count,1);
@@ -115,7 +115,6 @@ test("Apple authorization domain and code survive HTTP acceptance without rewrit
  const snapshot=()=>({
   raw:all(x.db,"select * from diagnostics where fingerprint=?",fingerprint),
   group:all(x.db,"select * from diagnostic_groups where fingerprint=?",fingerprint),
-  sources:all(x.db,"select * from diagnostic_group_sources where fingerprint=?",fingerprint),
   receipt:all(x.db,"select * from diagnostic_receipts where event_id=?",original.event_id),
  });
  const before=snapshot();
@@ -192,11 +191,14 @@ test("fingerprint excludes versions/index, includes device and crash exception/f
  assert.notEqual(diagnosticFingerprint(crash),diagnosticFingerprint({...crash,diagnostic_log:{...crash.diagnostic_log,stack_frames:[{...crash.diagnostic_log.stack_frames[0]!,offset:200}]}}));
  await x.send(d);run(x.db,"update diagnostics set received_at=?",new Date(Date.now()-31*86400_000).toISOString());new Diagnostics(x.db).prune();assert.equal(all(x.db,"select * from diagnostics").length,0);assert.equal((await (await x.send(d)).json()).duplicate,true);
 });
-test("persistent rate limit counts new events, retry does not consume allowance",async()=>{
- const x=setup(), event=x.event();await x.send(event);
- run(x.db,"update diagnostic_rate set count=60 where scope=?",x.user);
+test("per-user rate limit counts new events in memory only, retry does not consume allowance",async()=>{
+ const x=setup(), event=x.event();
+ for(let i=0;i<60;i++) assert.equal((await x.send(i ? x.event() : event)).status,202);
  assert.equal((await x.send(event)).status,202);
  const r=await x.send(x.event());assert.equal(r.status,429);assert.equal(r.headers.get("retry-after"),"3600");
+ assert.deepEqual(all<{scope:string}>(x.db,"select scope from diagnostic_rate").map(row=>row.scope),["global"]);
+ const other=x.accounts.issueSession(x.accounts.createUser(),"test").session;
+ assert.equal((await x.send(x.event(),other)).status,202);
 });
 
 test("receipts, severity and aggregate survive database reopen",()=>{
@@ -208,7 +210,7 @@ test("receipts, severity and aggregate survive database reopen",()=>{
   assert.equal(new Diagnostics(db).accept(user,event,event.event_id).duplicate,true);
   assert.equal(get<{severity:string;occurrence_count:number}>(db,"select severity,occurrence_count from diagnostic_groups")?.severity,"fatal");
   assert.equal(get<{n:number}>(db,"select occurrence_count n from diagnostic_groups")?.n,1);
-  run(db,"delete from users where id=?",user);assert.equal(all(db,"select * from diagnostic_receipts").length,0);assert.equal(all(db,"select * from diagnostics").length,0);db.close();
+  run(db,"delete from users where id=?",user);assert.equal(all(db,"select * from diagnostic_receipts").length,1);assert.equal(all(db,"select * from diagnostics").length,1);db.close();
  } finally {rmSync(directory,{recursive:true,force:true});}
 });
 
@@ -285,7 +287,7 @@ test("v3 database migration preserves diagnosis and persists independent investi
   const event=diagnosticSchema.parse({event_id:randomUUID(),occurred_at:new Date().toISOString(),code:"api_failed",module:"api",app_version:"0.1.0(18)",device_type:"Mac",os_version:"26.0.0",diagnostic_log:{operation:"events",error_domain:"NSURLErrorDomain",error_code:-1005,user_visible:true}});
   new Diagnostics(db).accept(user,event);const original={groups:all(db,"select * from diagnostic_groups"),raw:all(db,"select * from diagnostics")};
   db.exec("drop table diagnostic_investigations; pragma user_version=3");db.close();db=openDb(file);
-  assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version, 12);assert.deepEqual({groups:all(db,"select * from diagnostic_groups"),raw:all(db,"select * from diagnostics")},original);
+  assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version, 13);assert.deepEqual({groups:all(db,"select * from diagnostic_groups"),raw:all(db,"select * from diagnostics")},original);
   const fingerprint=diagnosticFingerprint(event);run(db,"insert into diagnostic_investigations values (?,?,?,?)",fingerprint,"未確定",JSON.stringify(["原文参照"]),"2026-10-07T03:00:00Z");db.close();db=openDb(file);
   assert.equal(get<{summary:string}>(db,"select summary from diagnostic_investigations where fingerprint=?",fingerprint)?.summary,"未確定");assert.deepEqual(all(db,"select * from diagnostics"),original.raw);
   run(db,"delete from diagnostic_groups where fingerprint=?",fingerprint);assert.equal(all(db,"select * from diagnostic_investigations").length,0);db.close();
