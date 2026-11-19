@@ -33,7 +33,7 @@ foxの標準setupで、通常fileの.claude.jsonへのrenameがEPERMとなり、
 | server main cleanup/停止 | DB event/pairing/診断/決裁/添付、Web/API | hourly prune、SIGTERM/INTでabort→HTTP close→DB close | WAL/DBを容量理由で除去しない。利用者のpending/heldは保持 |
 | 通常配備normal_entry | expectedrun/manifest/prepared-source.tar、complete/bundle/outbox、監査/復旧reader | commit＋policy＋変換recipe＋hashに結んだ耐久原本 | resultだけでoutbox終端としない。unknown/唯一archiveを保持し自動再配備しない |
 | SSH payload/remote-change | /tmpの専有payload、src/src.old、製品image | EXIT trap回収。現用＋直前2imageを通常受入後に保持 | shell終了とremote実終端を区別。未確認payloadは使用者確認後のみ回収 |
-| up.sh backup | 整合local staging→正規NAS.partial→確定directory、復旧reader | SHA/属性/SQLite確認・rename後local重複回収 | NAS不達/未完はstaging保持・次配備拒否。旧DBへ自動復元しない |
+| up.sh backup | 整合local staging→正規NAS.partial→確定directory、復旧reader | SHA/属性/SQLite確認・rename後local重複回収。利用者の情報を含むので、確定後にそれより前の世代と残った.partialを消し、NASには最新の1世代だけ残す（オーナー決裁 privacy/d04、2026-11-20） | NAS不達/未完はstaging保持・次配備拒否で、前の世代は消さない。旧DBへ自動復元しない。live volumeに手作業の控えを置かない（次の控えに写り込む） |
 | 専有検証scratch | 署名archive/source/lock→展開tree・依存/cache→結果原本 | worker終端・未参照・必要証拠確定後、生成物だけ回収 | active/未完/ignored固有物/refを守る。旧実験は再開せず次入口で同じ終了条件を適用 |
 
 当席専用の配備・保持helperの正本は `/srv/bellteam/bots/bot-4366a50b/docs/approval-box/storage-lifecycle-20261106.md` とそこから辿る既配備手順。製品repoへ別コピーを作らない。
