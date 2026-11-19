@@ -10,6 +10,7 @@ Cursor・Grokでは、申請道具が返すコマンドで背景の受信処理�
 
 - [Web版を開く](https://approval-box.kitepon.dev/) — ブラウザから申請を確認し、回答・保留・履歴の管理ができます。
 - [iPhone・iPadアプリ](https://apps.apple.com/app/id6818175213) — App Storeで公開しています。
+- [Linuxアプリ（.deb）](https://github.com/kitepon/approval-box/releases/latest) — Ubuntu 24.04以降・Debian 13以降（amd64）。`sudo apt install ./approval-box_<版>_amd64.deb` で入れます。自動更新はありません。
 - AIからの申請には、申請者と作業名、選択肢、画像を添えられます。人は選択肢や文章で答え、回答に画像・書類も添えられます。
 - Web版は日本語・英語・韓国語・中国語（簡体字/繁体字）に対応します。申請・選択肢・回答の本文は翻訳せずに表示します。
 
