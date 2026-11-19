@@ -33,6 +33,20 @@ const CLIENT_ROUTES: [string, RegExp][] = [
 const STATUSES = ["pending", "held", "answered", "cancelled"] as const;
 /** アプリへ戻すURLのscheme（AndroidのCustom Tabsから戻る先）。 */
 const APP_SCHEME = "approvalbox";
+/**
+ * デスクトップ版の戻り先（RFC 8252 §7.3 のループバック）。http の 127.0.0.1 か [::1]、1024〜65535のポート、パスあり、
+ * ユーザー情報・クエリ・フラグメントなし。満たさなければ400。返すのは正規化したURL（これをflowに保存して戻り先にする）。
+ */
+function loopbackRedirect(raw: string): string {
+  const invalid = new ApiError("validation_failed", "redirect_uri は http://127.0.0.1:ポート番号/ か http://[::1]:ポート番号/ の形にしてください。ポートは1024から65535で、ユーザー名・クエリ・フラグメントは付けられません。");
+  let url: URL;
+  try { url = new URL(raw); } catch { throw invalid; }
+  const port = Number(url.port);
+  // 空のクエリ（"?"）と空のフラグメント（"#"）はURLの上では空になるので、元の文字列でも断る。
+  if (url.protocol !== "http:" || (url.hostname !== "127.0.0.1" && url.hostname !== "[::1]") || !url.port || !(port >= 1024 && port <= 65535)
+    || url.username || url.password || url.search || url.hash || /[?#]/.test(raw)) throw invalid;
+  return url.href;
+}
 const HEARTBEAT_MS = 25_000;
 /** 次の知らせ・切断・停止の合図か、ping の時刻まで待つ。起こされたら時計を片付ける。 */
 function untilWake(shutdown: AbortSignal | undefined, arm: (resume: () => void) => void) {
@@ -142,34 +156,47 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   app.get("/v1/auth/config", (c) => c.json(services.webLogin ?? {}));
   app.post("/v1/auth/apple", signIn("apple", services.appleAudiences ?? []));
 
-  // ブラウザで始めるAppleのログイン（AndroidのCustom Tabs）。
-  // Appleは結果を /auth/apple/callback へ form_post する。サーバーは確かめてから、一度きりのコードを付けてアプリへ戻す。
+  // ブラウザで始めるAppleとGoogleのログイン（AndroidのCustom Tabs・Linuxデスクトップ版のシステムのブラウザ）。
+  // 提供元は結果を /auth/<provider>/callback へ form_post する。サーバーは確かめてから、一度きりのコードを付けてアプリへ戻す。
   // アプリは /v1/auth/link に code と code_verifier を送って session に替える。BearerやsessionはURLに載せない。
-  app.post("/v1/auth/apple/web/start", async (c) => {
-    const servicesId = services.webLogin?.apple_services_id;
-    if (!servicesId) throw new ApiError("validation_failed", "このサーバーではAppleのログインを使えません。");
-    const input = await body(c, z.object({ code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/), code_challenge_method: z.literal("S256") }));
-    const flow = accounts.startAuthFlow("apple", input.code_challenge);
-    const params = new URLSearchParams({ client_id: servicesId, redirect_uri: `${services.publicUrl}/auth/apple/callback`, response_type: "code id_token", response_mode: "form_post", state: flow.state, nonce: flow.nonce });
-    return c.json({ authorization_url: `https://appleid.apple.com/auth/authorize?${params}`, state: flow.state, expires_at: flow.expires_at });
-  });
-  app.post("/auth/apple/callback", async (c) => {
-    const form = await c.req.parseBody();
-    const state = typeof form.state === "string" ? form.state : "";
-    const back = (query: Record<string, string>) => c.redirect(`${APP_SCHEME}://auth/apple?${new URLSearchParams({ ...query, state })}`, 303);
-    try {
-      if (typeof form.error === "string") return back({ error: form.error === "user_cancelled_authorize" ? "cancelled" : "apple_error" });
-      const flow = accounts.takeAuthFlow(state);
-      if (typeof form.id_token !== "string") return back({ error: "apple_error" });
-      const id = await verifyIdToken("apple", form.id_token, { audiences: [services.webLogin!.apple_services_id!], nonce: flow.nonce, ...(services.idKeys ? { keys: services.idKeys } : {}) });
-      const signed = accounts.signInWithIdentity("apple", id.sub, id.email);
-      accounts.bindAuthFlow(state, signed.user.id);
-      accounts.revokeSession(signed.session); // ここで作ったsessionは使わない。アプリには一度きりのコードを渡す
-      return back({ code: accounts.createAppCode(signed.user.id, flow.code_challenge) });
-    } catch (error) {
-      return back({ error: error instanceof ApiError ? error.code : "apple_error" });
-    }
-  });
+  // 戻り先は、開始時に state へ結んで保存した値だけで決める（無ければ approvalbox://auth/<provider>）。callbackのリクエストからは決めない。
+  const webLogin = {
+    apple: { label: "Apple", clientId: () => services.webLogin?.apple_services_id, authorize: "https://appleid.apple.com/auth/authorize", cancelled: "user_cancelled_authorize",
+      params: { response_type: "code id_token", response_mode: "form_post" } },
+    google: { label: "Google", clientId: () => services.webLogin?.google_client_id, authorize: "https://accounts.google.com/o/oauth2/v2/auth", cancelled: "access_denied",
+      params: { response_type: "id_token", response_mode: "form_post", scope: "openid email", prompt: "select_account" } },
+  } as const;
+  for (const provider of ["apple", "google"] as const) {
+    const login = webLogin[provider];
+    app.post(`/v1/auth/${provider}/web/start`, async (c) => {
+      const clientId = login.clientId();
+      if (!clientId) throw new ApiError("validation_failed", `このサーバーでは${login.label}のログインを使えません。`);
+      const input = await body(c, z.object({ code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/), code_challenge_method: z.literal("S256"), redirect_uri: z.string().max(300).optional() }));
+      const flow = accounts.startAuthFlow(provider, input.code_challenge, input.redirect_uri === undefined ? undefined : loopbackRedirect(input.redirect_uri));
+      const params = new URLSearchParams({ client_id: clientId, redirect_uri: `${services.publicUrl}/auth/${provider}/callback`, ...login.params, state: flow.state, nonce: flow.nonce });
+      return c.json({ authorization_url: `${login.authorize}?${params}`, state: flow.state, expires_at: flow.expires_at });
+    });
+    app.post(`/auth/${provider}/callback`, async (c) => {
+      const form = await c.req.parseBody();
+      const state = typeof form.state === "string" ? form.state : "";
+      const target = accounts.authFlowRedirect(state, provider) ?? `${APP_SCHEME}://auth/${provider}`;
+      const back = (query: Record<string, string>) => c.redirect(`${target}?${new URLSearchParams({ ...query, state })}`, 303);
+      try {
+        if (typeof form.error === "string") return back({ error: form.error === login.cancelled ? "cancelled" : `${provider}_error` });
+        const audience = login.clientId();
+        if (!audience) return back({ error: `${provider}_error` });
+        const flow = accounts.takeAuthFlow(state, provider);
+        if (typeof form.id_token !== "string") return back({ error: `${provider}_error` });
+        const id = await verifyIdToken(provider, form.id_token, { audiences: [audience], nonce: flow.nonce, ...(services.idKeys ? { keys: services.idKeys } : {}) });
+        const signed = accounts.signInWithIdentity(provider, id.sub, id.email);
+        accounts.bindAuthFlow(state, signed.user.id);
+        accounts.revokeSession(signed.session); // ここで作ったsessionは使わない。アプリには一度きりのコードを渡す
+        return back({ code: accounts.createAppCode(signed.user.id, flow.code_challenge) });
+      } catch (error) {
+        return back({ error: error instanceof ApiError ? error.code : `${provider}_error` });
+      }
+    });
+  }
   app.post("/v1/auth/google", signIn("google", services.googleAudiences ?? []));
 
   // App Store Server Notifications V2（Appleのサーバーから。ログインは無く、署名で確かめる）。
