@@ -56,7 +56,8 @@ All of the following are required together, and `BILLING=store`; if anything is 
 | --- | --- | --- |
 | `PLAY_PRODUCT_IDS` | Comma-separated subscription product ids that we sell (not a secret) | compose environment |
 | `PLAY_PACKAGE_NAME` | Android package name; default `dev.kitepon.approvalbox` | compose environment |
-| `PLAY_SERVICE_ACCOUNT(_FILE)` | Service account JSON key (`client_email`, `private_key`) with Play Console access | tmpfs file through `start-with-secrets.sh`, like the APNs key |
+| `PLAY_CLIENT_EMAIL` | Service account e-mail (`client_email` field of the vault item; not a secret) | deploy env (`op://` ref) |
+| `PLAY_PRIVATE_KEY(_FILE)` | Service account PEM private key (`private_key` field; literal `\n` accepted) with Play Console access | tmpfs file through `start-with-secrets.sh`, like the APNs key |
 | `PLAY_PUSH_AUDIENCE` | Audience set on the Pub/Sub push subscription's OIDC token, normally `https://approval-box.kitepon.dev/v1/play/notifications` (not a secret) | compose environment |
 | `PLAY_PUSH_SERVICE_ACCOUNT` | Email of the service account that Pub/Sub signs the push with (not a secret) | compose environment |
 

@@ -102,15 +102,10 @@ const stripe = stripeOn ? new Stripe(db, accounts, { ...stripeConfig, publicUrl 
 if (stripe) console.log("approval-box-server: Stripeでの契約を受け付けます");
 // Google Playの購入の照合。商品・サービスアカウントの鍵・Pub/Subのpush設定が揃った時だけ使う。
 const playProducts = (env.PLAY_PRODUCT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-const playKey = secretValue("PLAY_SERVICE_ACCOUNT");
-let playServiceAccount: { client_email: string; private_key: string } | undefined;
-if (playKey) {
-  try {
-    const parsed = JSON.parse(playKey) as { client_email?: unknown; private_key?: unknown };
-    if (typeof parsed.client_email === "string" && typeof parsed.private_key === "string") playServiceAccount = { client_email: parsed.client_email, private_key: parsed.private_key };
-  } catch { /* 下で使わない旨を出す */ }
-  if (!playServiceAccount) console.error("approval-box-server: PLAY_SERVICE_ACCOUNT が読めません（client_email と private_key のJSON）。Google Playの契約は受け付けません。");
-}
+// 鍵は保管庫の項目の2つの欄（client_email・private_key）から別々に受ける。PEMの改行が \n の文字で届いても読めるようにする。
+const playClientEmail = (env.PLAY_CLIENT_EMAIL ?? "").trim();
+const playPrivateKey = secretValue("PLAY_PRIVATE_KEY").replace(/\\n/g, "\n");
+const playServiceAccount = playClientEmail && playPrivateKey ? { client_email: playClientEmail, private_key: playPrivateKey } : undefined;
 const playPushAudience = (env.PLAY_PUSH_AUDIENCE ?? "").trim();
 const playPushServiceAccount = (env.PLAY_PUSH_SERVICE_ACCOUNT ?? "").trim();
 const play = billing === "store" && playProducts.length && playServiceAccount && playPushAudience && playPushServiceAccount
