@@ -10,7 +10,7 @@
 <body>
 <main>
 <h1>プライバシーポリシー</h1>
-<p class="muted">Approval Box（iPhone・Androidアプリ、Web版、公式サーバー）／制定 2026年10月2日・改定 2026年10月8日（AIの申請画像）</p>
+<p class="muted">Approval Box（iPhone・Androidアプリ、Web版、公式サーバー）／制定 2026年10月2日・改定 2026年11月19日（Google Play と Stripe の購入、Android の通知）</p>
 <nav class="lang"><a href="#en">English</a> · <a href="/support">サポート</a></nav>
 
 <p>Approval Box は、AI（Claude Code・Codex・Cursor・Grok など）が利用者の判断・承認・操作を求める時に、その申請を集めて利用者が答えるためのサービスです。運営者は kitepon.dev です。このポリシーは、公式サーバー（approval-box.kitepon.dev）を使う場合の情報の扱いを定めます。利用者が自分で立てたサーバーの情報は、運営者は扱いません。</p>
@@ -21,9 +21,9 @@
 <li><strong>申請と答え</strong>: AIが送る件名・背景・選択肢・AIの推奨・急ぎ度・期限・作業名・AIの種類、利用者の答え（選んだ選択肢と書いた文）、修正・取り下げなどの履歴。背景には、AIが扱っているコードや業務の内容が含まれることがあります。AIが申請に添える画像も保存し、申請を読む利用者に表示します。画像はファイルの中身・名前・形式・大きさ・SHA-256を保存し、申請と同じ期間で削除します。未確定の画像は24時間で削除します。</li>
 <li><strong>答えへの添付</strong>: 利用者が答えに付けた画像と書類（写真・スクリーンショット・PDF・文書など）のファイルの中身、ファイル名、形式、大きさ、改ざんを確かめるための値（SHA-256）。ファイルは受け取ったままの形で保存します。写真に撮影場所などの情報（Exif）が含まれる場合、それも消さずに残るので、気になる時は付ける前に取り除いてください。</li>
 <li><strong>接続した端末</strong>: 端末名、OS、使うAIの種類、接続テストの結果。端末の接続トークンは、元に戻せない形（ハッシュ）でだけ保存します。</li>
-<li><strong>通知</strong>: 通知を送るための端末の識別子（Apple Push Notification service のトークン）。</li>
+<li><strong>通知</strong>: 通知を送るための端末の識別子（iPhone・Mac は Apple Push Notification service、Android は Firebase Cloud Messaging のトークン）。</li>
 <li><strong>アプリの障害診断</strong>: 発生時刻、端末の種類（iPhone・iPad・Mac）、OSとアプリの版、固定の処理名、エラーの数値・種類、応答の形式、デコードで問題が起きた既知の項目名、クラッシュやハングの数値情報とバイナリの識別子・位置。ログイン後に送信し、同じイベントの再送を数えないための識別子を保存します。認証トークン、申請や応答の本文、生のURL、添付の中身は診断として送信しません。</li>
-<li><strong>購入履歴</strong>: App Store で契約した時の元の取引ID、商品ID、契約の期限、返金・取り消しの有無、購入の環境（本番か試験か）。価格や国などは保存しません。支払い方法やカードの情報は、運営者には届きません。</li>
+<li><strong>購入履歴</strong>: App Store では元の取引ID、商品ID、契約の期限、返金・取り消しの有無、購入の環境（本番か試験か）。Google Play では購入トークン、商品ID、契約の状態と期限、試験の購入かどうか。Web版（Stripe）では Stripe の顧客IDと契約ID、契約の状態、今の期間の終わり、期間の終わりに解約する予定かどうか。価格や国などは保存しません。支払い方法やカードの情報は、運営者には届きません。</li>
 </ul>
 <p>広告、トラッキング、行動の解析のための情報は集めません。そのための外部のSDKも使っていません。</p>
 
@@ -42,7 +42,8 @@
 <p>法令に基づく場合を除き、集めた情報を第三者へ提供しません。サービスを動かすために、次の事業者の仕組みを使います。</p>
 <ul>
 <li>Apple（Sign in with Apple、通知の配信、App Store の購入）</li>
-<li>Google（Sign in with Google）</li>
+<li>Google（Sign in with Google、Android への通知の配信、Google Play の購入）</li>
+<li>Stripe（Web版の購入と支払い）</li>
 <li>Cloudflare（公式サーバーへの通信の中継）</li>
 </ul>
 <p>通知の本文には申請の件名だけを入れ、背景は入れません。</p>
@@ -67,14 +68,14 @@
 </ul>
 
 <h2>お問い合わせ</h2>
-<p>このポリシーと情報の扱いについてのお問い合わせは、GitHubのIssues（<a href="https://github.com/kitepon/approval-box/issues">https://github.com/kitepon/approval-box/issues</a>）へお寄せください。Issuesは公開されるので、個人の情報は書かないでください。アカウントとデータの削除は、アプリの「設定」から行えます。</p>
+<p>このポリシーと情報の扱いについてのお問い合わせは、GitHubのIssues（<a href="https://github.com/kitepon/approval-box/issues">https://github.com/kitepon/approval-box/issues</a>）へお寄せください。Issuesは公開されるので、個人の情報は書かないでください。アカウントとデータの削除は、アプリまたはWeb版の「設定」から行えます（<a href="/support#delete-account">手順</a>）。</p>
 
 <h2>変更</h2>
 <p>このポリシーを変える時は、このページで知らせます。</p>
 
 <section lang="en" id="en">
 <h1>Privacy Policy</h1>
-<p class="muted">Approval Box (iPhone and Android apps, web app, and official server) — Effective October 2, 2026; updated October 8, 2026 (AI request images)</p>
+<p class="muted">Approval Box (iPhone and Android apps, web app, and official server) — Effective October 2, 2026; updated November 19, 2026 (Google Play and Stripe purchases, Android notifications)</p>
 <p>Approval Box collects requests from AI agents (such as Claude Code, Codex, Cursor and Grok) that need your decision, approval or action, and lets you answer them. It is operated by kitepon.dev. This policy covers the official server (approval-box.kitepon.dev). The operator does not handle data on servers you host yourself.</p>
 <p>Diagnostics are used to investigate and fix application failures and are sent to the operator’s BugHub without account identifiers. Raw events are retained for 30 days or the latest 10,000 events. Account deletion removes associated events and deduplication receipts. Aggregates are retained for 120 days after the latest receipt. To remove your content from an aggregate on account deletion, the server retains a mapping of each account’s contributions and latest diagnostic summary for up to 120 days after that account’s last contribution. Deletion removes your mapping and summary, replaces a shared aggregate with another account’s summary, and removes investigation notes where your content cannot be separated.</p>
 <h2>Information we collect</h2>
@@ -83,21 +84,21 @@
 <li><strong>Requests and answers</strong>: the title, context, options, recommendation, urgency, deadline, session label and AI type sent by your AI, your answers (the option you chose and any text), and the history of changes and cancellations. The context may include code or work content your AI is handling. Images attached by the AI are stored and shown to you, including their contents, name, type, size and SHA-256 checksum. They are deleted with the request. Unsubmitted images are deleted after 24 hours.</li>
 <li><strong>Answer attachments</strong>: images and documents you attach to an answer (such as photos, screenshots, PDFs and text files), including the file contents, file name, type, size and a SHA-256 checksum. Files are stored as received. If a photo contains metadata such as its location (Exif), it is kept, so remove it before attaching if you prefer.</li>
 <li><strong>Connected computers</strong>: device name, OS, the AI tools in use, and connection test results. Connection tokens are stored only as one-way hashes.</li>
-<li><strong>Notifications</strong>: your device's Apple Push Notification service token.</li>
-<li><strong>Purchase history</strong>: for App Store subscriptions, the original transaction ID, product ID, expiration date, whether it was refunded or revoked, and the environment (production or test). We do not store prices or storefronts, and payment methods and card details never reach us.</li>
+<li><strong>Notifications</strong>: your device's push token (Apple Push Notification service on iPhone and Mac, Firebase Cloud Messaging on Android).</li>
+<li><strong>Purchase history</strong>: for App Store, the original transaction ID, product ID, expiration date, whether it was refunded or revoked, and the environment (production or test); for Google Play, the purchase token, product ID, subscription state and expiry, and whether it is a test purchase; for the web app (Stripe), the Stripe customer and subscription IDs, subscription status, the end of the current period, and whether it is set to cancel at the period end. We do not store prices or storefronts, and payment methods and card details never reach us.</li>
 <li><strong>Application diagnostics</strong>: occurrence time, device type, OS/app versions, allowlisted operation names, numeric errors and crash/hang information, response format, known decoding keys, and binary UUID/offsets. Diagnostics are uploaded after login. Authentication tokens, raw URLs, request/response bodies and attachment contents are excluded.</li>
 </ul>
 <p>We do not collect information for advertising, tracking or analytics, and we do not include third-party SDKs for those purposes.</p>
 <h2>How we use it</h2>
 <p>To deliver requests to you and your answers (including attachments) back to the AI that asked, to send notifications, to check your subscription status, to sign you in and verify connected computers, and to prevent abuse. We never use your data to train AI models, and we do not sell it or use it for advertising.</p>
 <h2>Sharing</h2>
-<p>We do not share your data with third parties except as required by law. We rely on Apple (Sign in with Apple, push notifications, App Store purchases), Google (Sign in with Google) and Cloudflare (network delivery to the official server). Notifications contain only the request title, never its context. Answers and attachments are delivered to the AI that asked; when the AI reads them, they are passed to that AI service (which you chose to use) and handled under its terms.</p>
+<p>We do not share your data with third parties except as required by law. We rely on Apple (Sign in with Apple, push notifications, App Store purchases), Google (Sign in with Google, Android push notifications, Google Play purchases), Stripe (web purchases and payments) and Cloudflare (network delivery to the official server). Notifications contain only the request title, never its context. Answers and attachments are delivered to the AI that asked; when the AI reads them, they are passed to that AI service (which you chose to use) and handled under its terms.</p>
 <h2>Storage and retention</h2>
 <p>Data is stored on a server managed by the operator in Japan and transmitted over HTTPS. Answered and cancelled requests are deleted automatically after 30 days by default; you can choose 7, 30, 90 or 365 days in Settings. Pending and held requests remain until you answer them or the AI cancels them. Attachments are deleted together with their request, on the same schedule; uploaded files that are not used in an answer are deleted after 24 hours. The connector on your computer saves attachments to <code>~/.approval-box/attachments/</code> before handing them to the AI and deletes them after 30 days; those files stay on your computer and are not handled by the operator. Purchase history is kept until you delete your account, to maintain your subscription status.</p>
 <h2>Deletion</h2>
 <p>In Settings, you can delete answered and cancelled requests (including their attachments) immediately, or delete your account, which removes all associated data, including requests, answers, attachments, connected computers and notification registrations. You can disconnect a computer from the Connections screen or by running <code>npx approval-box uninstall</code> on it.</p>
 <h2>Contact</h2>
-<p>For questions about this policy, open an issue on GitHub (<a href="https://github.com/kitepon/approval-box/issues">https://github.com/kitepon/approval-box/issues</a>). Issues are public, so do not include personal information. You can delete your account and data in Settings in the app.</p>
+<p>For questions about this policy, open an issue on GitHub (<a href="https://github.com/kitepon/approval-box/issues">https://github.com/kitepon/approval-box/issues</a>). Issues are public, so do not include personal information. You can delete your account and data in Settings in the app or the web app (<a href="/support#delete-account-en">steps</a>).</p>
 <h2>Changes</h2>
 <p>We will post any changes to this policy on this page.</p>
 </section>
