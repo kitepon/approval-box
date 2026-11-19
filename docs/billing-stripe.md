@@ -1,4 +1,4 @@
-# Approval Box billing: Apple and Stripe (API v0.40)
+# Approval Box billing: Apple and Stripe (API v0.43)
 
 Owner: Nayuta (bot-4366a50b). Canonical for the Stripe purchase path and for how the two stores share one account plan. Requested by Bready (BellTeam billing) after the Owner's decision of 2026-11-15: the ¥300/month plan must also be purchasable without Apple, so Web, Windows and Linux users can buy it. Apple stays as it is (`docs/api.md`, `/billing/appstore/verify`). Google Play is the third store and has its own page: [billing-play.md](billing-play.md).
 
@@ -24,8 +24,11 @@ If two or more stores (Apple, Stripe, Google Play) ever hold a paid period for t
 
 ```mermaid
 flowchart LR
-  U[User: Web settings] -->|POST /v1/billing/stripe/checkout| S[Approval Box server stripe.ts]
-  S -->|create Checkout Session client_reference_id=user_id| ST[Stripe]
+  U[User: Web settings] -->|GET /v1/billing/stripe/offer| S[Approval Box server stripe.ts]
+  S -->|price, trial_days, first_charge_at| U
+  U -->|confirmation panel, then POST /v1/billing/stripe/checkout| S
+  S -->|GET /v1/prices/id, once per process| ST
+  S -->|create Checkout Session client_reference_id=user_id, terms consent| ST
   S -->|url| U
   U -->|pays| ST
   ST -->|signed webhook| W[POST /v1/stripe/webhook]
@@ -42,7 +45,8 @@ flowchart LR
 
 | Function | Owner of state | Input → output | Failure / exit |
 | --- | --- | --- | --- |
-| `POST /v1/billing/stripe/checkout` | none (Stripe holds the session) | login session (not a client session) → `{url}` | 409 `setup_not_verified` before setup check (same gate as Apple); 409 `conflict` while a paid period runs; 404 `not_found` when this server has no Stripe; 500 `internal` when Stripe cannot be reached (no state written; press again) |
+| `GET /v1/billing/stripe/offer` | none (the Price is read from Stripe once and kept in memory for the process lifetime) | login session (not a client session) → `{amount, currency, interval: "month", trial_days, first_charge_at}`. `trial_days` is 30 when this account has no earlier Stripe subscription record, else 0 (the same `firstTime` check as checkout, one private method); `first_charge_at` = now + `trial_days` days (ISO). The Web confirmation panel shows it before checkout | 404 `not_found` when this server has no Stripe; 500 `internal` when Stripe cannot be reached (nothing written) |
+| `POST /v1/billing/stripe/checkout` | none (Stripe holds the session) | login session (not a client session) → `{url}`. The session requires the buyer to accept the terms (`consent_collection[terms_of_service]=required`, with `custom_text[terms_of_service_acceptance][message]` linking the kitepon.dev terms and this product's annex `/terms.html`, and stating guardian consent for minors) | 409 `setup_not_verified` before setup check (same gate as Apple); 409 `conflict` while a paid period runs; 404 `not_found` when this server has no Stripe; 500 `internal` when Stripe cannot be reached (no state written; press again) |
 | `POST /v1/billing/stripe/portal` | none | login session → `{url}` of Stripe's customer portal (cancel, card, receipts) | 404 when there is no Stripe customer for the account |
 | `POST /v1/stripe/webhook` | `stripe_subscriptions` (subscription id, user id, customer id, status, period end, cancel flag) | Stripe-Signature + raw body → the subscription is **read again from Stripe** and written | Bad or old signature 400. Stripe unreachable 500, so Stripe retries by itself (up to 3 days). Unknown account (deleted) is acknowledged and ignored |
 | `Accounts.syncPlan` | `users.plan, plan_expires_at, store` (derived, never edited by hand) | both subscription tables → plan | pure derivation, runs after every write |
@@ -54,7 +58,8 @@ Rules the code keeps:
 - A subscription is paid only while Stripe's status is `active` and `current_period_end` is in the future. `past_due`, `unpaid`, `canceled`, `incomplete*` are not paid. A user who cancels in the portal keeps `active` until the period end (`cancel_at_period_end`), as with Apple.
 - The Stripe account is shared with other products, so a subscription the server has not recorded yet is handled only when one of its items has the price `STRIPE_PRICE_ID`. Other products' subscriptions, checkouts, invoices and charges get 200 and change nothing, whatever metadata they carry.
 - The account is bound by `client_reference_id` and by `subscription.metadata.user_id`, both set by this server at checkout. One Stripe subscription belongs to one account; a later event naming another account is ignored.
-- The BellTeam client session (`/v1` allowlist) cannot start checkout or the portal. BellTeam only reads `/me`; it opens `https://approval-box.kitepon.dev/settings` for the user, who signs in and buys there. BellTeam copies no payment state.
+- Before checkout the Web Settings screen opens a confirmation panel (plan and period, auto-renewal, price, payment methods, first charge date and amount from `/billing/stripe/offer`, when service starts, how to cancel, the no-refund line, links to the common terms, this product's annex terms and the 特定商取引法に基づく表記). Only its primary button calls checkout. Stripe then collects the terms consent.
+- The BellTeam client session (`/v1` allowlist) cannot start checkout, the offer or the portal. BellTeam only reads `/me`; it opens `https://approval-box.kitepon.dev/settings` for the user, who signs in and buys there. BellTeam copies no payment state.
 - Apple apps show no Stripe button or link (App Review 3.1.1). A Stripe purchase is honoured in the apps because they read `/me` (3.1.3(b)); the plan is also sold as the existing in-app purchase.
 
 ## Independence from BellTeam

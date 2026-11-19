@@ -366,6 +366,10 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(await services.appStore.verifyPurchase(c.get("userId"), input.jws));
   });
 
+  v1.get("/billing/stripe/offer", async (c) => {
+    if (!services.stripe) throw new ApiError("not_found", "このサーバーではStripeで契約できません。");
+    return c.json(await services.stripe.offer(c.get("userId")));
+  });
   v1.post("/billing/stripe/checkout", async (c) => {
     if (!services.stripe) accounts.assertSetupVerified(c.get("userId")); // Stripeが無くても、確認前の関門は同じ順で効かせる
     if (!services.stripe) throw new ApiError("not_found", "このサーバーではStripeで契約できません。");

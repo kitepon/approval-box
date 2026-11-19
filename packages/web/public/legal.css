@@ -12,6 +12,7 @@ p, li { overflow-wrap: anywhere; }
 ul { padding-left: 1.3em; }
 a { color: var(--accent); }
 .muted { color: var(--muted); font-size: .9rem; }
+.annex { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: .9rem; margin: 0 0 20px; }
 nav.lang { margin: 8px 0 24px; font-size: .9rem; }
 section[lang="en"] { margin-top: 48px; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }

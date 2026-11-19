@@ -28,6 +28,7 @@ function setup(options: { stripeDown?: boolean } = {}) {
     sent.push({ method: String(init.method), path, form: new URLSearchParams(String(init.body ?? "")) });
     const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
     if (path === "/checkout/sessions") return json({ id: "cs_1", url: "https://checkout.stripe.test/c/cs_1" });
+    if (path === "/prices/price_1") return json({ id: "price_1", unit_amount: 300, currency: "jpy", recurring: { interval: "month" } });
     if (path === "/billing_portal/sessions") return json({ url: "https://billing.stripe.test/p/1" });
     const id = path.split("/")[2]!;
     if (init.method === "DELETE") { subs.set(id, { ...subs.get(id), status: "canceled" }); return json(subs.get(id)); }
@@ -71,7 +72,22 @@ test("Stripe: 確認前は買えず、確認後は決済のURLを返し、利用
   assert.equal(form.get("automatic_tax[enabled]"), "true");
   assert.equal(form.get("line_items[0][price]"), "price_1");
   assert.equal(form.get("subscription_data[trial_period_days]"), "30");
+  assert.equal(form.get("consent_collection[terms_of_service]"), "required");
+  assert.equal(form.get("custom_text[terms_of_service_acceptance][message]"), "[利用規約](https://kitepon.dev/terms/)と[Approval Boxの付属規約](https://approval-box.kitepon.dev/terms.html)に同意します。未成年の場合は、保護者の同意を得ています。");
   assert.equal((await t.call("GET", "/v1/me")).json.web_billing, true);
+});
+
+test("Stripe: 確認画面の料金は、初めてなら無料30日つき、買い直しなら無料なし。価格は一度だけ読む", async () => {
+  const t = setup();
+  const first = (await t.call("GET", "/v1/billing/stripe/offer")).json;
+  assert.deepEqual({ ...first, first_charge_at: undefined }, { amount: 300, currency: "jpy", interval: "month", trial_days: 30, first_charge_at: undefined });
+  assert.ok(Math.abs(Date.parse(first.first_charge_at) - (Date.now() + 30 * DAY * 1000)) < 5000);
+  t.subs.set("sub_1", t.sub({ status: "canceled" }));
+  await t.hook(subscriptionEvent("customer.subscription.deleted"));
+  const again = (await t.call("GET", "/v1/billing/stripe/offer")).json;
+  assert.equal(again.trial_days, 0);
+  assert.ok(Math.abs(Date.parse(again.first_charge_at) - Date.now()) < 5000);
+  assert.equal(t.sent.filter((s) => s.path === "/prices/price_1").length, 1);
 });
 
 test("Stripe: 無料期間（trialing）は契約中として使え、買い直しには無料期間を付けない", async () => {
@@ -191,6 +207,7 @@ test("Stripe: BellTeamの許可（client session）は決済を始められな�
   const { session } = t.accounts.issueSession(t.userId, "BellTeam", "bellteam");
   assert.equal((await t.call("POST", "/v1/billing/stripe/checkout", undefined, session)).status, 403);
   assert.equal((await t.call("POST", "/v1/billing/stripe/portal", undefined, session)).status, 403);
+  assert.equal((await t.call("GET", "/v1/billing/stripe/offer", undefined, session)).status, 403);
   assert.equal((await t.call("GET", "/v1/me", undefined, session)).status, 200);
 });
 
@@ -219,6 +236,7 @@ test("Stripeが設定されていないサーバーでは、窓口は404でweb_b
   run(db, "update users set setup_verified_at = ? where id = ?", new Date().toISOString(), userId);
   const res = await app.request("/v1/billing/stripe/checkout", { method: "POST", headers: { authorization: `Bearer ${session}` } });
   assert.equal(res.status, 404);
+  assert.equal((await app.request("/v1/billing/stripe/offer", { headers: { authorization: `Bearer ${session}` } })).status, 404);
   const hook = await app.request("/v1/stripe/webhook", { method: "POST", body: "{}" });
   assert.equal(hook.status, 404);
   const me = await (await app.request("/v1/me", { headers: { authorization: `Bearer ${session}` } })).json() as any;
