@@ -9,9 +9,11 @@ import { createApp } from "../src/http.ts";
 function setup() {
   const db = openDb(":memory:");
   const events = new EventHub(db);
-  const accounts = new Accounts(db, events, "store");
+  const entitled = new Set<string>(); // 申請を出す試験の利用者は契約済み（課金の対象外）として扱う。契約の有無の試験は stripe/appstore/play/api の課金の試験で行う。
+  const accounts = new Accounts(db, events, "store", false, entitled);
   const app = createApp({ db, accounts, decisions: new Decisions(db, events), events, publicUrl: "https://kb.test" });
   const userId = accounts.createUser();
+  entitled.add(userId);
   const { session } = accounts.issueSession(userId, "test");
   const call = async (method: string, path: string, opts: { token?: string; body?: unknown; headers?: Record<string, string> } = {}) => {
     const res = await app.request(path, {
@@ -24,6 +26,7 @@ function setup() {
   };
   /** 接続を作って申請する（1回目の確認の札を付けて出し直す）。 */
   const file = async (userId_: string, title: string, extra: Record<string, unknown> = {}) => {
+    entitled.add(userId_);
     const { token } = accounts.createConnection(userId_, `conn-${title}`, null, []);
     const body = { title, context: "x", options: [{ id: "a", label: "はい" }, { id: "b", label: "いいえ" }], session_label: "w", client: "claude-code", ...extra };
     const first = await call("POST", "/connector/v1/decisions", { token, body });
@@ -94,7 +97,7 @@ test("範囲付きsessionは許可表の外を403で断り、接続token（kbt_�
   const d = await ctx.file(ctx.userId, "A");
   const { session } = await connectBellTeam(ctx);
   const me = await ctx.call("GET", "/v1/me", { token: session });
-  assert.equal(me.json.plan, "trial");
+  assert.equal(me.json.plan, "active");
   const denied: [string, string][] = [
     ["GET", "/v1/connections"], ["DELETE", "/v1/connections/x"], ["POST", "/v1/tokens"], ["POST", "/v1/pairing/x/claim"], ["GET", "/v1/pairing/lookup?code=ABCDEFGH"],
     ["DELETE", "/v1/decisions?status=answered,cancelled"], ["DELETE", "/v1/me"], ["PATCH", "/v1/me/settings"], ["GET", "/v1/me/settings"], ["POST", "/v1/devices"],

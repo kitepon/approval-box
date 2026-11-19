@@ -11,7 +11,7 @@ Owner: Nayuta (bot-4366a50b). Canonical for the Google Play purchase path. The p
 | `ACTIVE`, `IN_GRACE_PERIOD`, or `CANCELED` (cancelled, period not over), with expiry in the future | `active` | line item `expiryTime` | `google_play` |
 | `ON_HOLD`, `PAUSED`, `EXPIRED`, `PENDING`, or expiry passed | not paid: `expired` if nothing else is paid | last period end | store of the last paid period |
 
-If another store also holds a paid period, the later period end decides (`Accounts.syncPlan`). The one free month is given once across Stripe, App Store and Google Play: Stripe checkout adds the trial only when the account has no record in any of the three tables. Play's own free-trial offers are not used.
+If another store also holds a paid period, the later period end decides (`Accounts.syncPlan`). The free month on Google Play is Play's own free-trial offer on the `monthly` base plan (all selling countries, set 2026-11-19); Google decides eligibility. Each store gives its own free month and the product keeps no trial state (Owner ruling 2026-11-20). While the Play trial runs, the state is `ACTIVE`, so the account reads `active`.
 
 ## Functions and data
 

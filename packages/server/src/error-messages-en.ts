@@ -4,7 +4,7 @@ export const errorMessagesEn: Record<string, string> = {
   "ログインの期限が切れました。もう一度ログインしてください。": "Your session has expired. Please sign in again.",
   "ログインの手続きの期限が切れました。最初からやり直してください。": "The sign-in process has expired. Please start again.",
   "アカウントが見つかりません。": "Account not found.",
-  "Approval Boxの契約が切れています。アプリかWeb版の契約画面から更新してください。": "Your Approval Box subscription has expired. Renew it from the subscription screen in the app or web app.",
+  "Approval Boxの契約がありません。アプリかWeb版の契約画面から契約してください。": "You have no active Approval Box subscription. Subscribe from the subscription screen in the app or web app.",
   "セットアップ確認がまだです。AIに「Approval Boxのsetup_testを実行して」と言って、答えがAIまで届くことを確かめてから契約してください。": "Setup has not been verified. Ask your AI to run Approval Box setup_test, and check that your answer reaches it before subscribing.",
   "その端末は見つかりません。": "Device not found.", "そのトークンは見つかりません。": "Token not found.", "その接続は見つかりません。": "Connection not found.",
   "接続トークンがありません。npx -y approval-box@latest setup をやり直してください。": "The connection token is missing. Run npx -y approval-box@latest setup again.",

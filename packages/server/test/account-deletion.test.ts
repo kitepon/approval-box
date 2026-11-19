@@ -108,7 +108,7 @@ test("schema6 migration removes orphan replies and preserves diagnostic groups o
   run(db, "insert into idempotency values ('gone','orphan','POST /v1/answer',200,'personal','2000-01-01')");
   db.exec("pragma user_version=6"); db.close();
   db = openDb(file);
-  assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 13);
+  assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 14);
   assert.equal(get(db, "select * from idempotency where user_id='gone'"), undefined);
   assert.deepEqual(all(db, "select * from diagnostic_groups"), before);
   db.close(); db = openDb(file);
@@ -163,7 +163,7 @@ test("schema13 migration erases stored emails and user IDs in diagnostics, keepi
   db.exec("pragma user_version=12"); db.close();
   db = openDb(file);
   const cols = (name: string) => all<{ name: string }>(db, `select name from pragma_table_info('${name}')`).map(c => c.name);
-  assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 13);
+  assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 14);
   assert.equal(cols("identities").includes("email"), false);
   assert.equal(cols("diagnostics").includes("user_id"), false);
   assert.equal(cols("diagnostic_receipts").includes("user_id"), false);

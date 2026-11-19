@@ -134,7 +134,7 @@ test("Play: 扱わない商品・商品と合わない購入・Googleが知ら�
   assert.equal((await t.verifyCall("tok_2")).json.error.code, "validation_failed");
   assert.equal((await t.verifyCall("tok_missing")).status, 400);
   assert.equal((await t.call("POST", "/v1/billing/play/verify", { product_id: PRODUCT })).status, 400);
-  assert.equal((await t.me()).plan, "trial");
+  assert.equal((await t.me()).plan, "expired");
 });
 
 test("Play: 別のアカウントの印が付いた購入・別のアカウントに結ばれた購入は409", async () => {
@@ -143,7 +143,7 @@ test("Play: 別のアカウントの印が付いた購入・別のアカウン�
   const other = t.accounts.createUser();
   t.subs.set("tok_1", t.sub({}, other));
   assert.equal((await t.verifyCall()).json.error.code, "conflict");
-  assert.equal((await t.me()).plan, "trial");
+  assert.equal((await t.me()).plan, "expired");
   // 印は自分でも、すでに別の利用者へ結ばれたトークンは受け付けない
   t.subs.set("tok_2", t.sub());
   run(t.db, "insert into play_subscriptions (purchase_token, user_id, product_id, state, expires_at, test, updated_at) values ('tok_2', ?, ?, 'ACTIVE', ?, 0, ?)", other, PRODUCT, new Date(Date.now() + DAY).toISOString(), new Date().toISOString());
@@ -228,7 +228,7 @@ test("Play通知: 送り手を確かめられない通知は401で、何も書�
     t.pushToken({}, other.privateKey),
   ];
   for (const token of bad) assert.equal((await t.notify(t.event(), { token })).status, 401, String(token));
-  assert.equal((await t.me()).plan, "trial");
+  assert.equal((await t.me()).plan, "expired");
   assert.equal(t.state.tokenCalls, 0);
 });
 
@@ -253,7 +253,7 @@ test("Play通知: 対象外・読めない・持ち主が合わない通知は�
   t.subs.set("tok_4", t.sub({}, other));
   run(t.db, "insert into play_subscriptions (purchase_token, user_id, product_id, state, expires_at, test, updated_at) values ('tok_4', ?, ?, 'EXPIRED', null, 0, ?)", t.userId, PRODUCT, new Date().toISOString());
   assert.equal((await t.notify(t.event("tok_4"))).json.applied, false);
-  assert.equal((await t.me()).plan, "trial");
+  assert.equal((await t.me()).plan, "expired");
 });
 
 test("Play通知: Googleから読めない（接続・障害）時は500で、再送を求める", async () => {
@@ -271,7 +271,7 @@ test("Play: サービスアカウントの鍵が使えない時は購入を受�
   t.subs.set("tok_1", t.sub());
   const broken = new Play(t.db, t.accounts, { packageName: PACKAGE, productIds: [PRODUCT], serviceAccount: { client_email: SA_EMAIL, private_key: "not a key" }, pushAudience: AUDIENCE, pushServiceAccount: PUSH_EMAIL, fetch: (async () => { throw new Error("unreachable"); }) as unknown as typeof fetch });
   await assert.rejects(() => broken.verifyPurchase(t.userId, PRODUCT, "tok_1"), (e: any) => e.code === "internal");
-  assert.equal((await t.me()).plan, "trial");
+  assert.equal((await t.me()).plan, "expired");
 });
 
 test("Play: 設定が無いサーバーでは、購入の窓口も通知も404（購入は確認前の関門が先）", async () => {
@@ -309,7 +309,7 @@ test("App StoreとPlayが両方ある時は、期末が遅い方が決める", a
   assert.equal(me.store, "app_store");
 });
 
-test("Playの契約の記録があれば、Stripeの無料期間は付けない", async () => {
+test("Stripeの無料期間はStripeの記録だけで決め、Playの契約の記録があっても付ける（窓口ごとに無料）", async () => {
   const t = setup();
   t.verified();
   const sent: URLSearchParams[] = [];
@@ -320,11 +320,11 @@ test("Playの契約の記録があれば、Stripeの無料期間は付けない"
   const stripe = new Stripe(t.db, t.accounts, { secretKey: "rk_test", webhookSecret: "whsec_test", priceId: "price_1", publicUrl: "https://kb.test", fetch: stripeFetch });
   await stripe.checkout(t.userId);
   assert.equal(sent[0]!.get("subscription_data[trial_period_days]"), "30");
-  // 期限切れのPlay契約でも、記録があれば無料期間は一度きり
+  // 期限切れのPlay契約の記録があっても、Stripeで初めてなら無料期間を付ける（クオの裁定 2026-11-20）
   t.subs.set("tok_1", t.sub({ subscriptionState: "SUBSCRIPTION_STATE_EXPIRED", lineItems: [{ productId: PRODUCT, expiryTime: new Date(Date.now() - DAY).toISOString() }] }));
   await t.verifyCall();
   await stripe.checkout(t.userId);
-  assert.equal(sent[1]!.get("subscription_data[trial_period_days]"), null);
+  assert.equal(sent[1]!.get("subscription_data[trial_period_days]"), "30");
 });
 
 test("Play: アカウントを削除すると記録も消える", async () => {
