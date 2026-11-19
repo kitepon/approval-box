@@ -106,25 +106,36 @@ export class Accounts {
     });
   }
 
-  // ---- ブラウザで始めるAppleのログイン（AndroidのCustom Tabs）。state と nonce と、アプリの code_challenge を覚えておく ----
+  // ---- ブラウザで始めるAppleとGoogleのログイン（AndroidのCustom Tabs・デスクトップのシステムのブラウザ）。state と nonce と、アプリの code_challenge と戻り先を覚えておく ----
 
-  startAuthFlow(provider: "apple", codeChallenge: string) {
+  /** redirectUri は検証済みのループバックURL（無ければアプリのscheme）。戻り先はここに保存した値だけで決める。 */
+  startAuthFlow(provider: "apple" | "google", codeChallenge: string, redirectUri?: string) {
     const state = secret("kst");
     const nonce = secret("kno");
     const expires = new Date(Date.now() + LOGIN_LINK_MINUTES * 60_000).toISOString();
-    run(this.db, "insert into auth_flows (state, provider, nonce, code_challenge, created_at, expires_at) values (?, ?, ?, ?, ?, ?)",
-      state, provider, nonce, codeChallenge, now(), expires);
+    run(this.db, "insert into auth_flows (state, provider, nonce, code_challenge, created_at, expires_at, redirect_uri) values (?, ?, ?, ?, ?, ?, ?)",
+      state, provider, nonce, codeChallenge, now(), expires, redirectUri ?? null);
     run(this.db, "delete from auth_flows where expires_at < ?", new Date(Date.now() - 86400_000).toISOString());
     return { state, nonce, expires_at: expires };
   }
 
-  takeAuthFlow(state: string) {
+  /** flowを使い切りにして返す。別の提供元のflowは、使い切りにせず断る（他の提供元のcallbackで消せない）。 */
+  takeAuthFlow(state: string, provider: "apple" | "google") {
     return tx(this.db, () => {
       const row = get<{ provider: string; nonce: string; code_challenge: string; expires_at: string; used_at: string | null }>(this.db, "select * from auth_flows where state = ?", state);
-      if (!row || row.used_at || row.expires_at < now()) throw new ApiError("unauthorized", "ログインの手続きの期限が切れました。最初からやり直してください。");
+      if (!row || row.used_at || row.expires_at < now() || row.provider !== provider) throw new ApiError("unauthorized", "ログインの手続きの期限が切れました。最初からやり直してください。");
       run(this.db, "update auth_flows set used_at = ? where state = ?", now(), state);
       return row;
     });
+  }
+
+  /**
+   * 戻り先のループバックURLを、flowを消費せずに引く。期限内の、同じ提供元のflowだけ。
+   * 使い切り後も引ける（取り消しや失敗を、同じ戻り先へ返すため）。無ければ null（アプリのschemeへ戻す）。
+   */
+  authFlowRedirect(state: string, provider: "apple" | "google"): string | null {
+    const row = get<{ provider: string; expires_at: string; redirect_uri: string | null }>(this.db, "select provider, expires_at, redirect_uri from auth_flows where state = ?", state);
+    return row && row.provider === provider && row.expires_at >= now() ? row.redirect_uri : null;
   }
 
   bindAuthFlow(state: string, userId: string) {

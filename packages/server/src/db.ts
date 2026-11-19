@@ -68,7 +68,8 @@ create table if not exists auth_flows (
   code_challenge text not null,
   created_at text not null,
   expires_at text not null,
-  used_at text
+  used_at text,
+  redirect_uri text
 );
 create table if not exists login_links (
   code_hash text primary key,
@@ -330,7 +331,9 @@ const MIGRATIONS: ((db: Db) => void)[] = [
       const sequence = get<{ seq: number }>(db, "select seq from sqlite_sequence where name=?", name)?.seq;
       db.exec(`alter table ${name} rename to deletion_legacy_${name}`);
       db.exec(definition);
-      db.exec(`insert into ${name} select * from deletion_legacy_${name} where ${predicate}`);
+      // 旧い表には、その後に足した列（auth_flows.redirect_uri など）が無い。旧い表にある列だけを名前で移す。
+      const kept = all<{ name: string }>(db, `select name from pragma_table_info('deletion_legacy_${name}')`).map((c) => c.name).join(",");
+      db.exec(`insert into ${name} (${kept}) select ${kept} from deletion_legacy_${name} where ${predicate}`);
       db.exec(`drop table deletion_legacy_${name}`);
       if (sequence !== undefined) {
         const updated = run(db, "update sqlite_sequence set seq=max(seq,?) where name=?", sequence, name);
@@ -386,6 +389,11 @@ const MIGRATIONS: ((db: Db) => void)[] = [
     if (!sessions.includes("id")) db.exec("alter table sessions add column id text");
     if (!sessions.includes("client")) db.exec("alter table sessions add column client text");
     if (!has("decisions").includes("requester_bot_id")) db.exec("alter table decisions add column requester_bot_id text");
+  },
+  // 12: ブラウザで始めるログインの戻り先。デスクトップ版のループバックURLを開始時に flow へ保存する（無ければアプリのscheme）。
+  (db) => {
+    const columns = all<{ name: string }>(db, "select name from pragma_table_info('auth_flows')").map((c) => c.name);
+    if (!columns.includes("redirect_uri")) db.exec("alter table auth_flows add column redirect_uri text");
   },
 ];
 

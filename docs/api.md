@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.40
+# Approval Box API（アプリ・Web版向け） v0.41
+
+2026-11-19 v0.41（追加のみ）: ブラウザで始めるログインを、AppleだけでなくGoogleにも広げ、戻り先に任意の `redirect_uri`（RFC 8252 §7.3 のループバック）を足した。Linuxデスクトップ版が、システムのブラウザでAppleかGoogleにログインし、アプリが待ち受ける `http://127.0.0.1:<ポート>/…` か `http://[::1]:<ポート>/…` へ戻る。`POST /auth/google/web/start` と `POST /auth/google/callback` を追加し、`POST /auth/apple/web/start` に任意の `redirect_uri` を足した。`redirect_uri` を送らなければ、今までと同じく `approvalbox://auth/<provider>` へ戻る（Androidは変わらない）。戻り先はサーバーが開始時に保存した値だけで、callbackのリクエストからは決めない。`POST /auth/link` は変わらない。既存の形・既存クライアントは変わらない。
 
 2026-11-19 v0.40（追加のみ）: Google Playでの契約。`POST /billing/play/verify` を実装し（これまでは呼ぶと500）、サーバー間の `POST /v1/play/notifications`（Pub/Sub push、OIDCで確かめる）を足した（契約は[billing-play.md](billing-play.md)）。照合はGoogleのAPIから読み直し、`obfuscatedExternalAccountId` が自分の `user_id` でなければ409 `conflict`、知らない商品・Googleが知らない購入トークンは400 `validation_failed`、本物の購入で確認前は409 `setup_not_verified`（試験用購入 `testPurchase` は関門を通す）。承認（acknowledge）はサーバーが行う。`/me` の `store` に `google_play` が出る。Playの設定が無いサーバーは404 `not_found`（確認前の関門が先）。契約は1アカウントに1つで、App Store・Stripe・Google Playの記録から期末の遅い方が決める。既存の形・既存クライアントは変わらない。
 
@@ -64,13 +66,16 @@ v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ�
   - `GET /auth/config`（Bearer不要）→ `{ google_client_id?, apple_services_id? }`。Web版のボタン用。無いものはボタンを出さない。
   - `/me` の `login` は `"apple" | "google" | null`（null は廃止した入口で作った古いアカウント）。
   - サーバーが受け先を設定していなければ 400 `validation_failed`（自分で立てたサーバー）。
-  - **ブラウザで始めるAppleのログイン（AndroidのCustom Tabs）**。BearerもsessionもURLに載せない。
+  - **ブラウザで始めるAppleとGoogleのログイン（AndroidのCustom Tabs・Linuxデスクトップ版のシステムのブラウザ）**。BearerもsessionもURLに載せない。`<provider>` は `apple` か `google`。
     1. アプリが `code_verifier`（43〜128文字のランダムなbase64url）を作り、`code_challenge = base64url(SHA-256(code_verifier))` を求める。
-    2. `POST /auth/apple/web/start` `{ code_challenge, code_challenge_method: "S256" }` → `{ authorization_url, state, expires_at }`（10分）。
-    3. アプリは `authorization_url` をCustom Tabsで開き、`state` を覚えておく。
-    4. Appleは結果を `https://<host>/auth/apple/callback` へform_postする。サーバーはid_token（aud はServices ID、nonce はサーバーが入れた値）を確かめ、`approvalbox://auth/apple?code=kll_…&state=…` へ303で戻す。失敗は `approvalbox://auth/apple?error=<code>&state=…`。`<code>` は `cancelled`（利用者が取り消した）・`apple_error`・`unauthorized`（期限切れ・照合失敗）。
+    2. `POST /auth/<provider>/web/start` `{ code_challenge, code_challenge_method: "S256", redirect_uri? }` → `{ authorization_url, state, expires_at }`（10分）。Googleは `webLogin.google_client_id`、Appleは `apple_services_id` が設定されたサーバーだけで使える（無ければ400 `validation_failed`）。`redirect_uri` は後述。
+    3. アプリは `authorization_url` をCustom Tabs（デスクトップはシステムのブラウザ）で開き、`state` を覚えておく。
+    4. 提供元は結果を `https://<host>/auth/<provider>/callback` へform_postする。サーバーはid_token（aud はAppleならServices ID・Googleなら `google_client_id`、nonce はサーバーが入れた値）を確かめ、戻り先へ303で戻す。戻り先は、成功なら `?code=kll_…&state=…`、失敗なら `?error=<code>&state=…` を付けたもの。`<code>` は `cancelled`（利用者が取り消した）・`apple_error` または `google_error`（提供元の失敗）・`unauthorized`（期限切れ・照合失敗・開始した提供元と違うcallback）。
     5. アプリは戻った `state` が覚えたものと同じか確かめる。そのうえで `POST /auth/link` `{ code, code_verifier }`（両方必須）で session に替える。この code は、始めたアプリの `code_verifier` と合う時だけ、一度だけ使える（15分）。利用者が手で入れるものではない。
-    - Androidの戻り先 `approvalbox://auth/apple` は、アプリのintent filterで受ける。
+    - 戻り先は、開始時の `redirect_uri` で決まる。送らなければ `approvalbox://auth/<provider>`、つまり `approvalbox://auth/apple` か `approvalbox://auth/google`（Androidのintent filterで受ける。今までと同じ）。
+    - `redirect_uri`（任意）を送ると、戻り先はそのループバックのURLになる。条件は全部満たす必要がある。`http:` で、ホスト名がちょうど `127.0.0.1` か `[::1]`（`localhost`・他のホスト・`https:`・他のscheme（`javascript:` など）は不可）、1024〜65535のポートを明示、ユーザー名・パスワードなし、クエリなし、フラグメントなし、パスあり（省略した `/` は可）。満たさなければ、開始の時点で400 `validation_failed`。デスクトップ版はこの形で、使っていないポートを選んで待ち受けてから開始する。
+    - 戻り先は、サーバーが開始時に `state` へ結んで保存した値だけで決める。callbackのリクエスト（フォームやヘッダ）の値は使わない。`state` が未知・期限切れ・別の提供元のものなら、ループバックへは戻さず `approvalbox://auth/<provider>?error=unauthorized&state=…` になる。取り消し・提供元のエラーの戻りも、保存した戻り先へ行く（flowは消費しない）。
+    - 一つの `state` は、始めた提供元のcallbackでだけ使える。AppleのflowをGoogleのcallbackへ（またはその逆に）送っても、flowは消費されず、`unauthorized` で戻る。
 - 運用確認用の `admin session <既存user_id>` は、通常の新規登録・ログインの代わりに使わない。`admin create-user` は廃止済み。
 - 401 `unauthorized` を受けたらsessionを捨ててログインへ戻す。
 - `POST /auth/logout`（Bearer必須）→ `{ ok: true }`。そのsessionを失効させる。端末の通知を止めるなら、先に `DELETE /devices/{id}`。
@@ -357,6 +362,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.41 2026-11-19 Linuxデスクトップ版の依頼（RFC 8252 §7.3）: `POST /auth/google/web/start`・`POST /auth/google/callback` を追加し、`/auth/apple/web/start` と合わせて任意の `redirect_uri`（`http://127.0.0.1:<ポート>/…` か `http://[::1]:<ポート>/…` だけ）を受ける。戻り先は開始時の保存値だけ。省略時は `approvalbox://auth/<provider>` で従来どおり。`/auth/link` は変えていない。
 - v0.40 2026-11-19 ユーザー規範（PC版のある製品の課金は Apple・Stripe・Google Play）とAndroid担当（インディビリア）の引き継ぎ: `/billing/play/verify` と `/play/notifications` の実装。商品IDは `PLAY_PRODUCT_IDS`、設定が無ければ404。
 - v0.39 2026-11-15 ブレッディ経由のクオの裁定（決裁箱の月額もStripeで買える）: Stripe Checkout・ポータル・通知、`/me.web_billing`（任意）。税はStripe Tax、当期の返金なし、解約は期末まで使える。
 - v0.38 2026-11-15 BellTeam決裁箱拡張（R1）の依頼: 登録クライアント `bellteam`（公開pairingの `client`・`confirm_client`・範囲付きsession・許可表・403 `forbidden`・接続一覧の `kind:"client"`）と任意の `source.requester_bot_id` を追加。既存契約は変えていない。

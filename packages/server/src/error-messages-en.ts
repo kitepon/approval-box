@@ -52,6 +52,8 @@ export const errorMessagesEn: Record<string, string> = {
   "このサーバーでは添付を使えません。": "Attachments are not enabled on this server.",
   "サーバーで問題が起きました。時間を置いて試してください。": "A server error occurred. Please try again later.",
   "このサーバーではAppleのログインを使えません。": "Sign in with Apple is not configured on this server.", "App Storeの照合は設定されていません。": "App Store verification is not configured.",
+  "このサーバーではGoogleのログインを使えません。": "Sign in with Google is not configured on this server.",
+  "redirect_uri は http://127.0.0.1:ポート番号/ か http://[::1]:ポート番号/ の形にしてください。ポートは1024から65535で、ユーザー名・クエリ・フラグメントは付けられません。": "redirect_uri must be http://127.0.0.1:PORT/ or http://[::1]:PORT/. The port must be 1024 to 65535, and credentials, a query, or a fragment are not allowed.",
   "消せるのは既決だけです（status=answered,cancelled）。": "Only completed requests can be deleted (status=answered,cancelled).", "Idempotency-Key が要ります。": "Idempotency-Key is required.",
   "課金の受付はまだ準備中です。": "Billing is not available yet.", "そのAPIはありません。": "API endpoint not found.", "画像のbase64が正しくありません。": "The image base64 data is invalid.",
 };

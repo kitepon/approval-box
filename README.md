@@ -45,7 +45,7 @@ npx -y approval-box@latest setup
 ログインは、AppleかGoogleのどちらかが要ります（ログイン用のURLやパスワードはありません）。
 
 - Apple: Apple Developerで Services ID を作り、ドメインと Return URL（`https://<あなたのURL>/auth/apple/callback`）を登録します。`APPLE_WEB_SERVICES_ID` にそのIDを入れます。
-- Google: Google Cloudで「ウェブ アプリケーション」のOAuthクライアントを作り、承認済みのJavaScript生成元にあなたのURLを入れます。`GOOGLE_WEB_CLIENT_ID` にそのIDを入れます。
+- Google: Google Cloudで「ウェブ アプリケーション」のOAuthクライアントを作り、承認済みのJavaScript生成元にあなたのURLを入れます。`GOOGLE_WEB_CLIENT_ID` にそのIDを入れます。デスクトップ版のように、システムのブラウザで始めるGoogleのログインを使う場合は、承認済みのリダイレクトURIに `https://<あなたのURL>/auth/google/callback` も入れます。
 
 ```sh
 git clone https://github.com/kitepon/approval-box && cd approval-box
