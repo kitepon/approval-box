@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.41
+# Approval Box API（アプリ・Web版向け） v0.42
+
+2026-11-20 v0.42（意味の変更）: 製品の「お試し」を無くした（クオの裁定）。`/me` の `plan` は `active` か `expired` だけになり、どのストアの契約も無いアカウントは `expired`（`store` 無し）で、AIの申請を402 `subscription_expired` で断る。無料の1か月は各ストアの無料期間だけで決まる。Stripeの無料30日は、そのアカウントにStripeの契約記録が無い時に付く（App Store・Google Playの記録は見ない）。形は変わらない。
 
 2026-11-19 v0.41（追加のみ）: ブラウザで始めるログインを、AppleだけでなくGoogleにも広げ、戻り先に任意の `redirect_uri`（RFC 8252 §7.3 のループバック）を足した。Linuxデスクトップ版が、システムのブラウザでAppleかGoogleにログインし、アプリが待ち受ける `http://127.0.0.1:<ポート>/…` か `http://[::1]:<ポート>/…` へ戻る。`POST /auth/google/web/start` と `POST /auth/google/callback` を追加し、`POST /auth/apple/web/start` に任意の `redirect_uri` を足した。`redirect_uri` を送らなければ、今までと同じく `approvalbox://auth/<provider>` へ戻る（Androidは変わらない）。戻り先はサーバーが開始時に保存した値だけで、callbackのリクエストからは決めない。`POST /auth/link` は変わらない。既存の形・既存クライアントは変わらない。
 
@@ -292,7 +294,7 @@ setup: {
 
 | メソッド | パス | 内容 |
 |---|---|---|
-| GET | `/me` | `{ user_id (UUID、小文字), login: "apple" \| "google" \| null, setup, plan: "trial" \| "active" \| "expired", expires_at?, store?: "app_store" \| "google_play" \| "web" }` |
+| GET | `/me` | `{ user_id (UUID、小文字), login: "apple" \| "google" \| null, setup, plan: "active" \| "expired", expires_at?, store?: "app_store" \| "google_play" \| "web" }` |
 | DELETE | `/me` | アカウントと全データの削除（App Store・Google Playの審査で必須） |
 | DELETE | `/decisions?status=answered,cancelled` | 設定の「データ削除」。既決（answered・cancelled）だけを消す → `{ deleted: int }`。pending・heldは消さない（AIが答えを待っているため）。アカウント・接続・端末は残る |
 | GET | `/me/settings` | `{ retention_days: 7 \| 30 \| 90 \| 365 }`（既定30。既決をこの日数で自動削除） |
@@ -308,8 +310,8 @@ setup: {
 
 - 契約はアカウントに1つ。`/me` の `store` が契約した窓口を表す。`plan=active` で別の窓口の購入画面は出さない（「App Storeで契約中」のように出す）。
 - 購入に使う `appAccountToken`（iOS）・`obfuscatedAccountId`（Android）には `/me` の `user_id` を入れる。
-- 決済の検証はサーバーが行う。App Storeは `/billing/appstore/verify` と通知V2で、Stripeは通知（署名を確かめ、契約をStripeから読み直す）で実装済み（v0.39）。Stripeの鍵が無いサーバーは404 `not_found`。Google Playは `/billing/play/verify` と通知（Pub/Sub push）で実装済み（v0.40）で、設定が無いサーバーは404 `not_found`。読む側（BellTeamなど）は、`plan` が `trial` か `active` なら使えるものとして扱う。
-- `trial` には今は期限が無い（`expires_at` を返さない）。無料体験の長さ・数え方はクオの裁定待ちで、決まったら `/me` に `trial_ends_at` を足す（フィールド追加なので、今のアプリは壊れない）。
+- 決済の検証はサーバーが行う。App Storeは `/billing/appstore/verify` と通知V2で、Stripeは通知（署名を確かめ、契約をStripeから読み直す）で実装済み（v0.39）。Stripeの鍵が無いサーバーは404 `not_found`。Google Playは `/billing/play/verify` と通知（Pub/Sub push）で実装済み（v0.40）で、設定が無いサーバーは404 `not_found`。読む側（BellTeamなど）は、`plan` が `active` の時だけ使えるものとして扱う。
+- 製品は無料期間の状態を持たない（クオの裁定 2026-11-20）。無料の1か月は各ストアの無料期間（Appleの導入オファー・Playの無料体験・Stripeの30日）で、その間ストアは払い済みの状態を返すので `plan=active` になる。どのストアの契約も無いアカウントは `plan=expired` で `store` が無い（契約したことが無い）。ログイン・設定・購入はできるが、AIの申請（`POST /decisions`・画像の送信）は402 `subscription_expired`。`trial` はもう返さない（知らない値は使えないものとして扱う）。
 - `/billing/appstore/verify`（v0.21 実装）: 署名をAppleのルート証明書まで確かめ、商品（`dev.kitepon.approvalbox.monthly`）・Bundle ID・本番はアプリのApple IDを照らす。期限内で返金されていなければ `plan=active`・`expires_at`・`store=app_store`。断る時: 署名・商品・環境が違う → 400 `validation_failed`、`appAccountToken` が自分の `user_id` でない・同じ購入が別のアカウントに結ばれている → 409 `conflict`、本番の購入で確認前 → 409 `setup_not_verified`。
   - 受け付ける環境は `Sandbox`（審査・TestFlight）と `Production` だけ。Xcodeの StoreKit 設定ファイルでの購入（`Xcode`）はAppleの署名でないので、サーバーは 400 で断る。Xcodeでの試しは画面までにする。
   - 通知V2の受け口は `POST /v1/appstore/notifications`（ASCの本番・Sandboxの両方に登録）。更新・返金をここで反映する。期限を過ぎて更新の知らせが無ければ `/me` は `expired` を返す。
@@ -362,6 +364,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.42 2026-11-20 クオの裁定（製品は無料期間の状態を持たず、ストアの契約だけで決める）: `plan=trial` を廃止し、契約の無いアカウントは `expired`。Stripeの無料30日の判定はStripeの記録だけ。
 - v0.41 2026-11-19 Linuxデスクトップ版の依頼（RFC 8252 §7.3）: `POST /auth/google/web/start`・`POST /auth/google/callback` を追加し、`/auth/apple/web/start` と合わせて任意の `redirect_uri`（`http://127.0.0.1:<ポート>/…` か `http://[::1]:<ポート>/…` だけ）を受ける。戻り先は開始時の保存値だけ。省略時は `approvalbox://auth/<provider>` で従来どおり。`/auth/link` は変えていない。
 - v0.40 2026-11-19 ユーザー規範（PC版のある製品の課金は Apple・Stripe・Google Play）とAndroid担当（インディビリア）の引き継ぎ: `/billing/play/verify` と `/play/notifications` の実装。商品IDは `PLAY_PRODUCT_IDS`、設定が無ければ404。
 - v0.39 2026-11-15 ブレッディ経由のクオの裁定（決裁箱の月額もStripeで買える）: Stripe Checkout・ポータル・通知、`/me.web_billing`（任意）。税はStripe Tax、当期の返金なし、解約は期末まで使える。

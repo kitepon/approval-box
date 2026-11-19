@@ -86,7 +86,7 @@ test("App Store: 本番の購入はセットアップ確認の後だけ。署名
   assert.equal(product.json.error.code, "validation_failed");
   const xcode = await t.call("POST", "/v1/billing/appstore/verify", { jws: t.sign(t.transaction({ environment: "Xcode" })) });
   assert.equal(xcode.json.error.code, "validation_failed");
-  assert.equal((await t.call("GET", "/v1/me")).json.plan, "trial");
+  assert.equal((await t.call("GET", "/v1/me")).json.plan, "expired");
 });
 
 test("App Store: 通知で更新・返金を反映し、古い通知で期限を巻き戻さない。期限を過ぎれば切れる", async () => {

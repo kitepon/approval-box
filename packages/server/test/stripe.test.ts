@@ -2,7 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { Accounts } from "../src/accounts.ts";
-import { openDb, run } from "../src/db.ts";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { get, openDb, run } from "../src/db.ts";
 import { Decisions } from "../src/decisions.ts";
 import { EventHub } from "../src/events.ts";
 import { createApp } from "../src/http.ts";
@@ -90,7 +93,7 @@ test("Stripe: 通知でStripeから読み直し、/me は契約中・web・期�
   const t = setup();
   const sub = t.sub();
   t.subs.set("sub_1", sub);
-  assert.equal((await t.call("GET", "/v1/me")).json.plan, "trial");
+  assert.equal((await t.call("GET", "/v1/me")).json.plan, "expired");
   const res = await t.hook(subscriptionEvent("customer.subscription.created"));
   assert.equal(res.json.applied, true);
   const me = (await t.call("GET", "/v1/me")).json;
@@ -137,7 +140,7 @@ test("Stripe: 署名が違う・古い通知は断り、何も書かない", asy
   assert.equal((await t.hook(subscriptionEvent("customer.subscription.created"), { at: Math.floor(Date.now() / 1000) - 3600 })).status, 400);
   const bare = await t.app.request("/v1/stripe/webhook", { method: "POST", body: "{}" });
   assert.equal(bare.status, 400);
-  assert.equal((await t.call("GET", "/v1/me")).json.plan, "trial");
+  assert.equal((await t.call("GET", "/v1/me")).json.plan, "expired");
 });
 
 test("Stripe: 別の利用者の印が付いた契約や、消えたアカウントの通知は結ばない", async () => {
@@ -247,4 +250,33 @@ test("Stripe: 共有アカウントの他製品の契約・決済は、同じ印
   for (const type of ["invoice.paid", "charge.succeeded"]) assert.equal((await t.hook({ type, data: { object: { id: "x" } } })).status, 200);
   assert.equal((await t.call("GET", "/v1/me")).json.plan === "active", false);
   assert.equal(t.db.prepare("select count(*) as n from stripe_subscriptions").get()!.n, 0);
+});
+
+test("契約の無いアカウントはAIの申請を402で断り、Stripeの無料期間（trialing）に入ると受ける（製品は無料期間を持たない）", async () => {
+  const t = setup();
+  const me0 = (await t.call("GET", "/v1/me")).json;
+  assert.equal(me0.plan, "expired");
+  assert.equal(me0.store, undefined);
+  const { token } = t.accounts.createConnection(t.userId, "conn", null, []);
+  const body = { title: "x", context: "x", options: [{ id: "a", label: "はい" }, { id: "b", label: "いいえ" }], session_label: "w", client: "claude-code" };
+  const refused = await t.call("POST", "/connector/v1/decisions", body, token);
+  assert.equal(refused.status, 402);
+  assert.equal(refused.json.error.code, "subscription_expired");
+  t.subs.set("sub_1", t.sub({ status: "trialing" }));
+  await t.hook(subscriptionEvent("customer.subscription.created"));
+  const first = await t.call("POST", "/connector/v1/decisions", body, token);
+  assert.equal((await t.call("POST", "/connector/v1/decisions", { ...body, check_token: first.json.error.check_token }, token)).status, 200);
+});
+
+test("版14の移行: 旧い「お試し」（plan=trial）のアカウントは契約なし（expired）になる", () => {
+  const dir = mkdtempSync(join(tmpdir(), "abx-trial-"));
+  const path = join(dir, "t.db");
+  let db = openDb(path);
+  run(db, "insert into users (id, created_at, plan) values ('u1', '2026-10-01T00:00:00.000Z', 'trial')");
+  db.exec("pragma user_version = 13");
+  db.close();
+  db = openDb(path);
+  assert.equal(get<{ plan: string }>(db, "select plan from users where id = 'u1'")!.plan, "expired");
+  db.close();
+  rmSync(dir, { recursive: true, force: true });
 });

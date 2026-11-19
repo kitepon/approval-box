@@ -9,10 +9,12 @@ import { createApp } from "../src/http.ts";
 function setup(billing: "off" | "store" = "store") {
   const db = openDb(":memory:");
   const events = new EventHub(db);
-  const accounts = new Accounts(db, events, billing);
+  const entitled = new Set<string>(); // 申請を出す試験の利用者は契約済み（課金の対象外）として扱う。契約の有無の試験は stripe/appstore/play/api の課金の試験で行う。
+  const accounts = new Accounts(db, events, billing, false, entitled);
   const decisions = new Decisions(db, events);
   const app = createApp({ db, accounts, decisions, events, publicUrl: "https://kb.test" });
   const userId = accounts.createUser();
+  entitled.add(userId);
   const { session } = accounts.issueSession(userId, "test");
   const call = async (method: string, path: string, opts: { token?: string; body?: unknown; headers?: Record<string, string> } = {}) => {
     const res = await app.request(path, {

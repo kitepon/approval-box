@@ -7,7 +7,7 @@ import { CHECK_LABEL, clientLabel } from "../format";
 
 
 export function Settings({ onLogout }: { onLogout: () => void }) {
-  const PLAN_LABEL: Record<string, string> = { trial: t("無料体験"), active: t("契約中"), expired: t("期限切れ") };
+  const PLAN_LABEL: Record<string, string> = { active: t("契約中"), expired: t("期限切れ") };
   const STORE_LABEL: Record<string, string> = { app_store: t("App Storeで契約中"), google_play: t("Google Playで契約中"), web: t("Webで契約中") };
   const me = useResource(loadMe);
   const settings = useResource(() => api<{ retention_days: number }>("GET", "/me/settings"));
@@ -58,7 +58,7 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
           {m.billing === "off"
             ? <p class="muted">{t("このサーバーは自分で立てたもので、料金はかかりません。")}</p>
             : <>
-                <p>{m.store && m.plan === "active" ? STORE_LABEL[m.store] : PLAN_LABEL[m.plan] ?? m.plan}</p>
+                <p>{m.store && m.plan === "active" ? STORE_LABEL[m.store] : !m.store && m.plan !== "active" ? t("未契約") : PLAN_LABEL[m.plan] ?? m.plan}</p>
                 {!m.setup.verified
                   ? <div class="notice">
                       <p>{t("契約の前に、セットアップ確認を済ませてください。答えがAIまで届くことを確かめてから契約できます。")}</p>

@@ -52,7 +52,7 @@ export class Accounts {
 
   createUser(): string {
     const id = uuid();
-    run(this.db, "insert into users (id, created_at) values (?, ?)", id, now());
+    run(this.db, "insert into users (id, created_at, plan) values (?, ?, 'expired')", id, now()); // 製品は無料期間を持たない。使えるのはストアの契約から
     return id;
   }
 
@@ -207,7 +207,7 @@ export class Accounts {
   assertCanUse(userId: string) {
     if (this.billing === "off" || this.freeAccountIds.has(userId)) return;
     const user = get<UserRow>(this.db, "select * from users where id = ?", userId)!;
-    if (effectivePlan(user) === "expired") throw new ApiError("subscription_expired", "Approval Boxの契約が切れています。アプリかWeb版の契約画面から更新してください。");
+    if (effectivePlan(user) !== "active") throw new ApiError("subscription_expired", "Approval Boxの契約がありません。アプリかWeb版の契約画面から契約してください。");
   }
 
   /** ストアで照合した契約を反映する。 */

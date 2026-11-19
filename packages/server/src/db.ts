@@ -29,7 +29,7 @@ create table if not exists users (
   created_at text not null,
   setup_verified_at text,
   retention_days integer not null default 30,
-  plan text not null default 'trial',
+  plan text not null default 'expired',
   plan_expires_at text,
   store text
 );
@@ -395,6 +395,8 @@ const MIGRATIONS: ((db: Db) => void)[] = [
     db.exec("create index if not exists diagnostics_received on diagnostics(received_at); create index if not exists diagnostics_fingerprint on diagnostics(fingerprint);");
     db.exec(`pragma secure_delete = ${secure}`);
   },
+  // 14: 製品の「お試し」を無くす（クオの裁定 2026-11-20）。使えるかはストアの契約（無料期間中を含む）だけで決める。
+  (db) => { db.exec("update users set plan = 'expired' where plan = 'trial'"); },
 ];
 
 function migrate(db: Db) {
