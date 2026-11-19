@@ -184,6 +184,16 @@ create table if not exists stripe_subscriptions (
   updated_at text not null
 );
 create index if not exists stripe_subscriptions_user on stripe_subscriptions(user_id);
+create table if not exists play_subscriptions (
+  purchase_token text primary key,
+  user_id text not null references users(id) on delete cascade,
+  product_id text not null,
+  state text not null,
+  expires_at text,
+  test integer not null default 0,
+  updated_at text not null
+);
+create index if not exists play_subscriptions_user on play_subscriptions(user_id);
 create table if not exists attachments (
   id text primary key,
   user_id text not null references users(id) on delete cascade,

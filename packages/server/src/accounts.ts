@@ -28,6 +28,9 @@ type CheckRow = { connection_id: string; client: string; os: string | null; stat
 
 export type BillingMode = "off" | "store";
 
+/** Google Playで払い済みとして扱う契約の状態（保留・一時停止・失効は含めない）。docs/billing-play.md */
+export const PLAY_PAID_STATES: ReadonlySet<string> = new Set(["ACTIVE", "IN_GRACE_PERIOD", "CANCELED"]);
+
 export class Accounts {
   private readonly db: Db;
   private readonly events: EventHub;
@@ -206,18 +209,20 @@ export class Accounts {
   }
 
   /**
-   * 契約は1アカウントに1つ。users.plan・plan_expires_at・store は、App StoreとStripeの記録から毎回導く（手で書かない）。
+   * 契約は1アカウントに1つ。users.plan・plan_expires_at・store は、App Store・Stripe・Google Playの記録から毎回導く（手で書かない）。
    * 払い済みの期間が残るものがあれば、期限が最も遅いものが決める。無ければ、最後の期間のものを expired で残す。
    * 記録がまだ無いアカウント（無料体験）は触らない。
    */
   syncPlan(userId: string) {
     const nowIso = now();
-    type Candidate = { store: "app_store" | "web"; end: string | null; paid: boolean };
+    type Candidate = { store: "app_store" | "web" | "google_play"; end: string | null; paid: boolean };
     const candidates: Candidate[] = [
       ...all<{ expires_at: string | null; revoked: number }>(this.db, "select expires_at, revoked from appstore_subscriptions where user_id = ?", userId)
         .map((r): Candidate => ({ store: "app_store", end: r.expires_at, paid: !r.revoked && !!r.expires_at && r.expires_at > nowIso })),
       ...all<{ status: string; current_period_end: string | null }>(this.db, "select status, current_period_end from stripe_subscriptions where user_id = ?", userId)
         .map((r): Candidate => ({ store: "web", end: r.current_period_end, paid: (r.status === "active" || r.status === "trialing") && !!r.current_period_end && r.current_period_end > nowIso })),
+      ...all<{ state: string; expires_at: string | null }>(this.db, "select state, expires_at from play_subscriptions where user_id = ?", userId)
+        .map((r): Candidate => ({ store: "google_play", end: r.expires_at, paid: PLAY_PAID_STATES.has(r.state) && !!r.expires_at && r.expires_at > nowIso })),
     ];
     if (!candidates.length) return;
     const latest = (list: Candidate[]) => list.reduce((a, b) => ((b.end ?? "") > (a.end ?? "") ? b : a));

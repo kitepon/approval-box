@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.39
+# Approval Box API（アプリ・Web版向け） v0.40
+
+2026-11-19 v0.40（追加のみ）: Google Playでの契約。`POST /billing/play/verify` を実装し（これまでは呼ぶと500）、サーバー間の `POST /v1/play/notifications`（Pub/Sub push、OIDCで確かめる）を足した（契約は[billing-play.md](billing-play.md)）。照合はGoogleのAPIから読み直し、`obfuscatedExternalAccountId` が自分の `user_id` でなければ409 `conflict`、知らない商品・Googleが知らない購入トークンは400 `validation_failed`、本物の購入で確認前は409 `setup_not_verified`（試験用購入 `testPurchase` は関門を通す）。承認（acknowledge）はサーバーが行う。`/me` の `store` に `google_play` が出る。Playの設定が無いサーバーは404 `not_found`（確認前の関門が先）。契約は1アカウントに1つで、App Store・Stripe・Google Playの記録から期末の遅い方が決める。既存の形・既存クライアントは変わらない。
 
 2026-11-15 v0.39（追加のみ）: Stripeでの契約（Web・Windows・Linuxの利用者向け）。`POST /billing/stripe/checkout`・`/portal` と、サーバー間の `POST /v1/stripe/webhook` を実装した（契約は[billing-stripe.md](billing-stripe.md)）。`/me` の `store` は `web`（変更なし）。Stripeを売れるサーバーだけ `/me` に `web_billing: true` が付く（任意・追加）。契約は1アカウントに1つで、App StoreとStripeの記録から期末の遅い方が `plan`・`expires_at`・`store` を決める。解約しても期末までは `active`。購入の窓口が無い・登録クライアント（BellTeam）のsessionからは決済を始められない（403）。`DELETE /me` はStripeの契約を先に止め、止められなければ削除しない。既存の形・既存クライアントは変わらない。
 
@@ -301,7 +303,7 @@ setup: {
 
 - 契約はアカウントに1つ。`/me` の `store` が契約した窓口を表す。`plan=active` で別の窓口の購入画面は出さない（「App Storeで契約中」のように出す）。
 - 購入に使う `appAccountToken`（iOS）・`obfuscatedAccountId`（Android）には `/me` の `user_id` を入れる。
-- 決済の検証はサーバーが行う。App Storeは `/billing/appstore/verify` と通知V2で、Stripeは通知（署名を確かめ、契約をStripeから読み直す）で実装済み（v0.39）。Stripeの鍵が無いサーバーは404 `not_found`。Google Play（`/billing/play/verify`）は未実装で、呼ぶと500。読む側（BellTeamなど）は、`plan` が `trial` か `active` なら使えるものとして扱う。
+- 決済の検証はサーバーが行う。App Storeは `/billing/appstore/verify` と通知V2で、Stripeは通知（署名を確かめ、契約をStripeから読み直す）で実装済み（v0.39）。Stripeの鍵が無いサーバーは404 `not_found`。Google Playは `/billing/play/verify` と通知（Pub/Sub push）で実装済み（v0.40）で、設定が無いサーバーは404 `not_found`。読む側（BellTeamなど）は、`plan` が `trial` か `active` なら使えるものとして扱う。
 - `trial` には今は期限が無い（`expires_at` を返さない）。無料体験の長さ・数え方はクオの裁定待ちで、決まったら `/me` に `trial_ends_at` を足す（フィールド追加なので、今のアプリは壊れない）。
 - `/billing/appstore/verify`（v0.21 実装）: 署名をAppleのルート証明書まで確かめ、商品（`dev.kitepon.approvalbox.monthly`）・Bundle ID・本番はアプリのApple IDを照らす。期限内で返金されていなければ `plan=active`・`expires_at`・`store=app_store`。断る時: 署名・商品・環境が違う → 400 `validation_failed`、`appAccountToken` が自分の `user_id` でない・同じ購入が別のアカウントに結ばれている → 409 `conflict`、本番の購入で確認前 → 409 `setup_not_verified`。
   - 受け付ける環境は `Sandbox`（審査・TestFlight）と `Production` だけ。Xcodeの StoreKit 設定ファイルでの購入（`Xcode`）はAppleの署名でないので、サーバーは 400 で断る。Xcodeでの試しは画面までにする。
@@ -355,6 +357,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.40 2026-11-19 ユーザー規範（PC版のある製品の課金は Apple・Stripe・Google Play）とAndroid担当（インディビリア）の引き継ぎ: `/billing/play/verify` と `/play/notifications` の実装。商品IDは `PLAY_PRODUCT_IDS`、設定が無ければ404。
 - v0.39 2026-11-15 ブレッディ経由のクオの裁定（決裁箱の月額もStripeで買える）: Stripe Checkout・ポータル・通知、`/me.web_billing`（任意）。税はStripe Tax、当期の返金なし、解約は期末まで使える。
 - v0.38 2026-11-15 BellTeam決裁箱拡張（R1）の依頼: 登録クライアント `bellteam`（公開pairingの `client`・`confirm_client`・範囲付きsession・許可表・403 `forbidden`・接続一覧の `kind:"client"`）と任意の `source.requester_bot_id` を追加。既存契約は変えていない。
 - v0.29 2026-10-14 クオの指摘2つ（「誰から何の仕事での決裁申請かわからないことがある」「IDなんて知らん」）: `source.requester`・`source.work_label`・`source.connection_label` を追加。`source.session_label` は「申請者 / 作業名」の一行。通知に `aps.alert.subtitle`。`POST /connector/v1/decisions` に任意の `requester`。AIへ返す文は件名を先に書き、利用者へは件名で伝えるよう添える。
