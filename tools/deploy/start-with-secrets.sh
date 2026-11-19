@@ -41,5 +41,6 @@ if [ -n "${SECRETS_DIR:-}" ]; then
   put STRIPE_SECRET_KEY stripe-secret.key
   put STRIPE_WEBHOOK_SECRET stripe-webhook.secret
   put PLAY_PRIVATE_KEY play-private-key.pem
+  put APPSTORE_PRIVATE_KEY appstore-private-key.pem pem
 fi
 exec "$@"
