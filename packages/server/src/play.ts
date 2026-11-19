@@ -1,9 +1,9 @@
 // Google Playの購入（Androidの利用者向け）。形は docs/billing-play.md。
-// 依存を足さず、Google APIはfetch、サービスアカウントの署名はnode:cryptoで行う。
-import { sign } from "node:crypto";
+// 依存を足さず、Google APIはfetch、サービスアカウントの認証は google-auth.ts で行う。
 import { PLAY_PAID_STATES, type Accounts } from "./accounts.ts";
 import { type Db, get, run } from "./db.ts";
 import { ApiError } from "./errors.ts";
+import { GoogleToken, type ServiceAccount } from "./google-auth.ts";
 import { now } from "./ids.ts";
 import { type KeySource, verifyIdToken } from "./oidc.ts";
 
@@ -11,7 +11,7 @@ export type PlayConfig = {
   packageName: string;
   /** 売っている定期購読の商品ID。これ以外は断る。 */
   productIds: string[];
-  serviceAccount: { client_email: string; private_key: string };
+  serviceAccount: ServiceAccount;
   /** Pub/Subのpush購読に付けたOIDCの audience と、署名するサービスアカウントのメール。 */
   pushAudience: string;
   pushServiceAccount: string;
@@ -21,7 +21,6 @@ export type PlayConfig = {
 };
 
 const SCOPE = "https://www.googleapis.com/auth/androidpublisher";
-const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications";
 const PENDING = "ACKNOWLEDGEMENT_STATE_PENDING";
 
@@ -37,12 +36,13 @@ export class Play {
   private readonly db: Db;
   private readonly accounts: Accounts;
   private readonly config: PlayConfig;
-  private cached?: { value: string; until: number };
+  private readonly token: GoogleToken;
 
   constructor(db: Db, accounts: Accounts, config: PlayConfig) {
     this.db = db;
     this.accounts = accounts;
     this.config = config;
+    this.token = new GoogleToken(config.serviceAccount, SCOPE, () => config.fetch ?? fetch);
   }
 
   private async send(method: "GET" | "POST", url: string, init: { headers?: Record<string, string>; body?: string } = {}) {
@@ -57,27 +57,13 @@ export class Play {
 
   /** サービスアカウントのJWTをアクセストークンに替える。期限の1分前まで使い回す。 */
   private async accessToken() {
-    if (this.cached && this.cached.until > Date.now()) return this.cached.value;
-    const iat = Math.floor(Date.now() / 1000);
-    const enc = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
-    const input = `${enc({ alg: "RS256", typ: "JWT" })}.${enc({ iss: this.config.serviceAccount.client_email, scope: SCOPE, aud: TOKEN_URL, iat, exp: iat + 3600 })}`;
-    let assertion: string;
     try {
-      assertion = `${input}.${sign("RSA-SHA256", Buffer.from(input), this.config.serviceAccount.private_key).toString("base64url")}`;
-    } catch {
-      console.error("approval-box-server: Google Play のサービスアカウントの鍵で署名できません");
+      return await this.token.get();
+    } catch (error) {
+      console.error(`approval-box-server: Google Play OAuth token -> ${(error as Error).message}`);
+      if ((error as Error).message === "unreachable") throw new ApiError("internal", "決済サービス（Google Play）につながりません。時間を置いて試してください。");
       throw new ApiError("internal", "決済サービス（Google Play）が受け付けませんでした。時間を置いて試してください。");
     }
-    const res = await this.send("POST", TOKEN_URL, {
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }).toString(),
-    });
-    if (!res.ok || typeof res.json.access_token !== "string") {
-      console.error(`approval-box-server: Google OAuth token -> ${res.status} ${String(res.json.error ?? "")}`);
-      throw new ApiError("internal", "決済サービス（Google Play）が受け付けませんでした。時間を置いて試してください。");
-    }
-    this.cached = { value: res.json.access_token, until: Date.now() + (Number(res.json.expires_in) || 3600) * 1000 - 60_000 };
-    return res.json.access_token;
   }
 
   /** 購入トークンはURLに入るので、記録には種類（label）と状態だけ残す。 */
