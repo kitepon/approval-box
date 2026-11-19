@@ -5,7 +5,6 @@ import { ApiError } from "./errors.ts";
 import type { EventHub } from "./events.ts";
 import { hash, normalizePairingCode, now, pairingCode, secret, uuid } from "./ids.ts";
 import type { Connection } from "./decisions.ts";
-import { Diagnostics } from "./diagnostics.ts";
 
 const SESSION_DAYS = 90;
 // 利用者が席を外していても、戻った時にリンクを受け取れるようにする。
@@ -146,11 +145,11 @@ export class Accounts {
    * AppleかGoogleで入る。そのIDのアカウントがあればそこへ、無ければ作る。
    * 同じIDならどの画面から入っても同じアカウント。違うIDなら別のアカウント（結ぶ・まとめる操作は無い。クオの裁定）。
    */
-  signInWithIdentity(provider: "apple" | "google", subject: string, email: string | undefined) {
+  signInWithIdentity(provider: "apple" | "google", subject: string) {
     return tx(this.db, () => {
       const linked = get<{ user_id: string }>(this.db, "select user_id from identities where provider = ? and subject = ?", provider, subject);
       const userId = linked?.user_id ?? this.createUser();
-      if (!linked) run(this.db, "insert into identities (provider, subject, user_id, email, created_at) values (?, ?, ?, ?, ?)", provider, subject, userId, email ?? null, now());
+      if (!linked) run(this.db, "insert into identities (provider, subject, user_id, created_at) values (?, ?, ?, ?)", provider, subject, userId, now());
       return { ...this.issueSession(userId, provider), user: { id: userId } };
     });
   }
@@ -160,10 +159,7 @@ export class Accounts {
   }
 
   deleteUser(userId: string) {
-    tx(this.db, () => {
-      new Diagnostics(this.db).removeUser(userId);
-      run(this.db, "delete from users where id = ?", userId);
-    });
+    run(this.db, "delete from users where id = ?", userId);
   }
 
   me(userId: string) {

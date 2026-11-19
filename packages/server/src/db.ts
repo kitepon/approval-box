@@ -6,10 +6,9 @@ import { dirname } from "node:path";
 const schema = `
 create table if not exists diagnostics (
  id integer primary key autoincrement,
- user_id text not null references users(id) on delete cascade,
- event_id text not null, received_at text not null, payload text not null,
+ event_id text not null unique, received_at text not null, payload text not null,
  payload_hash text not null, fingerprint text not null, severity text not null,
- resolved_at text, unique(user_id,event_id)
+ resolved_at text
 );
 create index if not exists diagnostics_received on diagnostics(received_at);
 create index if not exists diagnostics_fingerprint on diagnostics(fingerprint);
@@ -19,20 +18,11 @@ create table if not exists diagnostic_groups (
  status text not null, payload text not null, resolved_at text, resolution_note text
 );
 create table if not exists diagnostic_receipts (
- user_id text not null references users(id) on delete cascade, event_id text not null,
- payload_hash text not null, created_at text not null, primary key(user_id,event_id)
+ event_id text primary key, payload_hash text not null, created_at text not null
 );
-create index if not exists diagnostic_receipts_event on diagnostic_receipts(event_id,payload_hash);
 create table if not exists diagnostic_rate (
  bucket text not null, scope text not null, count integer not null, primary key(bucket,scope)
 );
-create table if not exists diagnostic_group_sources (
- fingerprint text not null references diagnostic_groups(fingerprint) on delete cascade,
- user_id text not null references users(id) on delete cascade,
- occurrence_count integer not null, first_seen text not null, last_seen text not null,
- payload text not null, primary key(fingerprint,user_id)
-);
-create index if not exists diagnostic_group_sources_user on diagnostic_group_sources(user_id,fingerprint);
 
 create table if not exists users (
   id text primary key,
@@ -56,7 +46,6 @@ create table if not exists identities (
   provider text not null,
   subject text not null,
   user_id text not null references users(id) on delete cascade,
-  email text,
   created_at text not null,
   primary key (provider, subject)
 );
@@ -343,19 +332,7 @@ const MIGRATIONS: ((db: Db) => void)[] = [
     db.exec("create index if not exists events_user on events(user_id,id)");
     // 旧callbackの消費済みflowは所有者を復元できない。再利用不能であり、未使用のflowや発行済みアプリコードには影響しない。
     run(db, "delete from auth_flows where link_user_id is null and used_at is not null");
-    db.exec(`insert or ignore into diagnostic_group_sources
-      select d.fingerprint,d.user_id,count(*),min(d.received_at),max(d.received_at),
-        (select latest.payload from diagnostics latest where latest.fingerprint=d.fingerprint and latest.user_id=d.user_id and latest.received_at>=g.first_seen order by latest.received_at desc,latest.id desc limit 1)
-      from diagnostics d join diagnostic_groups g on g.fingerprint=d.fingerprint
-      where d.received_at>=g.first_seen group by d.fingerprint,d.user_id`);
-    // 原本が間引かれていても、最新payloadの所有者は長期保持の受領記録から復元できる。
-    for (const group of all<{ fingerprint: string; first_seen: string; last_seen: string; payload: string }>(db, "select * from diagnostic_groups")) {
-      const eventId = (JSON.parse(group.payload) as { event_id?: string }).event_id;
-      for (const owner of all<{ user_id: string }>(db, "select user_id from diagnostic_receipts where event_id=? and payload_hash=?", eventId ?? "", hash(group.payload))) {
-        run(db, "insert or ignore into diagnostic_group_sources values (?,?,0,?,?,?)", group.fingerprint, owner.user_id, group.first_seen, group.last_seen, group.payload);
-      }
-    }
-    db.exec("delete from diagnostic_groups where not exists(select 1 from diagnostic_group_sources s where s.fingerprint=diagnostic_groups.fingerprint)");
+    // 診断の帰属（diagnostic_group_sources）は13で廃止した。ここでは作らない。
     db.exec("delete from diagnostic_rate where scope<>'global' and not exists(select 1 from users where id=scope)");
   },
   // 8: Notification locale is per-device. Legacy registrations retain Japanese.
@@ -395,6 +372,29 @@ const MIGRATIONS: ((db: Db) => void)[] = [
     const columns = all<{ name: string }>(db, "select name from pragma_table_info('auth_flows')").map((c) => c.name);
     if (!columns.includes("redirect_uri")) db.exec("alter table auth_flows add column redirect_uri text");
   },
+  // 13: 利用者の情報をサーバーに置かない（クオの方針 2026-11-19）。使っていないメールを消し、診断から利用者IDを外す。消した値はページにも残さない。
+  (db) => {
+    const columns = (table: string) => all<{ name: string }>(db, `select name from pragma_table_info('${table}')`).map((c) => c.name);
+    const secure = get<{ secure_delete: number }>(db, "pragma secure_delete")?.secure_delete ?? 0;
+    db.exec("pragma secure_delete = on");
+    if (columns("identities").includes("email")) {
+      db.exec("update identities set email = null");
+      db.exec("alter table identities drop column email");
+    }
+    db.exec("drop table if exists diagnostic_group_sources");
+    db.exec("delete from diagnostic_rate where scope <> 'global'");
+    // 同じ event_id が別の利用者から届いていた時は、新しい方を残す。
+    for (const [name, kept, newest] of [["diagnostics", "id,event_id,received_at,payload,payload_hash,fingerprint,severity,resolved_at", "id desc"], ["diagnostic_receipts", "event_id,payload_hash,created_at", "created_at desc"]] as const) {
+      if (!columns(name).includes("user_id")) continue;
+      const definition = schema.match(new RegExp(`create table if not exists ${name} \\([\\s\\S]*?\\n\\);`))![0];
+      db.exec(`alter table ${name} rename to anonymous_legacy_${name}`);
+      db.exec(definition);
+      db.exec(`insert or ignore into ${name} (${kept}) select ${kept} from anonymous_legacy_${name} order by ${newest}`);
+      db.exec(`drop table anonymous_legacy_${name}`);
+    }
+    db.exec("create index if not exists diagnostics_received on diagnostics(received_at); create index if not exists diagnostics_fingerprint on diagnostics(fingerprint);");
+    db.exec(`pragma secure_delete = ${secure}`);
+  },
 ];
 
 function migrate(db: Db) {
@@ -410,6 +410,8 @@ function migrate(db: Db) {
       throw error;
     }
   }
+  // 移した後の空きページを本体へ書き戻し、消した値をWALにも残さない。
+  if (version < MIGRATIONS.length) db.exec("pragma wal_checkpoint(truncate)");
 }
 
 export function get<T>(db: Db, sql: string, ...params: SQLInputValue[]): T | undefined {
