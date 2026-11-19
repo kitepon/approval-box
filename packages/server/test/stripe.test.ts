@@ -48,7 +48,7 @@ function setup(options: { stripeDown?: boolean } = {}) {
   };
   const sub = (fields: Record<string, unknown> = {}) => ({
     id: "sub_1", customer: "cus_1", status: "active", cancel_at_period_end: false,
-    items: { data: [{ current_period_end: Math.floor(Date.now() / 1000) + 30 * DAY }] }, metadata: { user_id: userId }, ...fields,
+    items: { data: [{ current_period_end: Math.floor(Date.now() / 1000) + 30 * DAY, price: { id: "price_1" } }] }, metadata: { user_id: userId }, ...fields,
   });
   const verified = () => run(db, "update users set setup_verified_at = ? where id = ?", new Date().toISOString(), userId);
   return { db, accounts, call, hook, sub, subs, sent, userId, session, verified, app };
@@ -232,4 +232,19 @@ test("課金の対象外のアカウントは、契約が切れていても契�
   assert.doesNotThrow(() => free.assertCanUse(t.userId));
   assert.equal(free.me(other).plan, "expired");
   assert.throws(() => free.assertCanUse(other));
+});
+
+test("Stripe: 共有アカウントの他製品の契約・決済は、同じ印が付いていても200で何も変えない", async () => {
+  const t = setup();
+  t.verified();
+  // 他製品も metadata.user_id を使う。値が同じでも、価格が違えば別製品。
+  t.subs.set("sub_other", t.sub({ id: "sub_other", items: { data: [{ current_period_end: Math.floor(Date.now() / 1000) + 30 * DAY, price: { id: "price_reminderbot" } }] } }));
+  for (const type of ["customer.subscription.created", "customer.subscription.updated"]) {
+    const res = await t.hook(subscriptionEvent(type, "sub_other"));
+    assert.equal(res.status, 200);
+  }
+  assert.equal((await t.hook({ type: "checkout.session.completed", data: { object: { subscription: "sub_other", client_reference_id: t.userId } } })).status, 200);
+  for (const type of ["invoice.paid", "charge.succeeded"]) assert.equal((await t.hook({ type, data: { object: { id: "x" } } })).status, 200);
+  assert.equal((await t.call("GET", "/v1/me")).json.plan === "active", false);
+  assert.equal(t.db.prepare("select count(*) as n from stripe_subscriptions").get()!.n, 0);
 });
