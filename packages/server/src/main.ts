@@ -13,6 +13,7 @@ import { Decisions } from "./decisions.ts";
 import { EventHub } from "./events.ts";
 import { AppStore, appleRootCertificates } from "./appstore.ts";
 import { Stripe } from "./stripe.ts";
+import { Play } from "./play.ts";
 import { createApp } from "./http.ts";
 import { CallBridgeDeliverer, callBridgeSender, readHeaderFile } from "./callbridge.ts";
 
@@ -99,6 +100,23 @@ const appStore = appStoreProducts.length ? new AppStore(db, accounts, {
 }) : undefined;
 const stripe = stripeOn ? new Stripe(db, accounts, { ...stripeConfig, publicUrl }) : undefined;
 if (stripe) console.log("approval-box-server: Stripeでの契約を受け付けます");
+// Google Playの購入の照合。商品・サービスアカウントの鍵・Pub/Subのpush設定が揃った時だけ使う。
+const playProducts = (env.PLAY_PRODUCT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const playKey = secretValue("PLAY_SERVICE_ACCOUNT");
+let playServiceAccount: { client_email: string; private_key: string } | undefined;
+if (playKey) {
+  try {
+    const parsed = JSON.parse(playKey) as { client_email?: unknown; private_key?: unknown };
+    if (typeof parsed.client_email === "string" && typeof parsed.private_key === "string") playServiceAccount = { client_email: parsed.client_email, private_key: parsed.private_key };
+  } catch { /* 下で使わない旨を出す */ }
+  if (!playServiceAccount) console.error("approval-box-server: PLAY_SERVICE_ACCOUNT が読めません（client_email と private_key のJSON）。Google Playの契約は受け付けません。");
+}
+const playPushAudience = (env.PLAY_PUSH_AUDIENCE ?? "").trim();
+const playPushServiceAccount = (env.PLAY_PUSH_SERVICE_ACCOUNT ?? "").trim();
+const play = billing === "store" && playProducts.length && playServiceAccount && playPushAudience && playPushServiceAccount
+  ? new Play(db, accounts, { packageName: env.PLAY_PACKAGE_NAME?.trim() || "dev.kitepon.approvalbox", productIds: playProducts, serviceAccount: playServiceAccount, pushAudience: playPushAudience, pushServiceAccount: playPushServiceAccount })
+  : undefined;
+if (play) console.log("approval-box-server: Google Playでの契約を受け付けます");
 // 答えを call-bridge の通話で届ける接続（GrokBotなど）。ヘッダーのファイル（Authorization など）が読めなければ使わない。
 const callBridgeIds = (env.CALL_BRIDGE_CONNECTIONS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 let callBridgeConnections: Set<string> | undefined;
@@ -125,7 +143,7 @@ if (callBridgeIds.length) {
 const diagnosticsAdminToken = env.DIAGNOSTICS_ADMIN_KEY_FILE ? readFileSync(env.DIAGNOSTICS_ADMIN_KEY_FILE,"utf8").trim() : env.DIAGNOSTICS_ADMIN_KEY;
 // 停止の合図。開いたままの更新の知らせ（SSE）を正しく閉じてから終える。
 const shutdown = new AbortController();
-const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(stripe ? { stripe } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) } }, { staticHandler });
+const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(stripe ? { stripe } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) } }, { staticHandler });
 
 setInterval(() => {
   new Diagnostics(db).prune();

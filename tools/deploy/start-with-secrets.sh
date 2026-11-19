@@ -40,5 +40,6 @@ if [ -n "${SECRETS_DIR:-}" ]; then
   put CALL_BRIDGE_HEADERS call-bridge.header
   put STRIPE_SECRET_KEY stripe-secret.key
   put STRIPE_WEBHOOK_SECRET stripe-webhook.secret
+  put PLAY_SERVICE_ACCOUNT play-service-account.json
 fi
 exec "$@"

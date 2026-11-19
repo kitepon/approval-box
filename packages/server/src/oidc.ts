@@ -32,7 +32,7 @@ async function keyFor(provider: Provider, kid: string, keys: KeySource): Promise
 const decode = (part: string) => JSON.parse(Buffer.from(part, "base64url").toString("utf8")) as Record<string, unknown>;
 const sha256hex = (value: string) => createHash("sha256").update(value).digest("hex");
 
-export async function verifyIdToken(provider: Provider, token: string, options: { audiences: string[]; nonce?: string; keys?: KeySource; now?: number }): Promise<{ sub: string; email?: string }> {
+export async function verifyIdToken(provider: Provider, token: string, options: { audiences: string[]; nonce?: string; keys?: KeySource; now?: number }): Promise<{ sub: string; email?: string; email_verified?: boolean }> {
   const { label, issuers } = PROVIDERS[provider];
   const invalid = () => new ApiError("unauthorized", `${label}のログインを確かめられませんでした。もう一度ログインしてください。`);
   const parts = token.split(".");
@@ -52,7 +52,8 @@ export async function verifyIdToken(provider: Provider, token: string, options: 
   if (typeof claims.sub !== "string" || !claims.sub) throw invalid();
   // nonce はアプリが送った時だけ確かめる。アプリが渡すのは生の値か、そのSHA-256のどちらか。
   if (options.nonce !== undefined && claims.nonce !== options.nonce && claims.nonce !== sha256hex(options.nonce)) throw invalid();
-  return { sub: claims.sub, ...(typeof claims.email === "string" ? { email: claims.email } : {}) };
+  // email_verified はGoogleが "true" の文字列で入れる場合もある。送り手の確認（Pub/Sub push）に使う。
+  return { sub: claims.sub, ...(typeof claims.email === "string" ? { email: claims.email } : {}), ...(claims.email_verified !== undefined ? { email_verified: claims.email_verified === true || claims.email_verified === "true" } : {}) };
 }
 
 /** 試験用: 覚えた公開鍵を捨てる。 */

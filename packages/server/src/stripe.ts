@@ -82,7 +82,7 @@ export class Stripe {
     if (this.hasPaidPeriod(userId)) throw new ApiError("conflict", "すでに契約中です。契約の変更・解約は、契約している窓口で行ってください。");
     const customer = get<{ customer_id: string }>(this.db, "select customer_id from stripe_subscriptions where user_id = ? order by updated_at desc", userId)?.customer_id;
     // 無料期間は初めての契約だけ。解約して買い直しても、もう一度は付けない（契約の記録は残る）。
-    const firstTime = !get(this.db, "select 1 from stripe_subscriptions where user_id = ?", userId) && !get(this.db, "select 1 from appstore_subscriptions where user_id = ?", userId);
+    const firstTime = !get(this.db, "select 1 from stripe_subscriptions where user_id = ?", userId) && !get(this.db, "select 1 from appstore_subscriptions where user_id = ?", userId) && !get(this.db, "select 1 from play_subscriptions where user_id = ?", userId);
     const session = await this.call("POST", "/checkout/sessions", {
       mode: "subscription",
       ...(firstTime ? { "subscription_data[trial_period_days]": String(TRIAL_DAYS) } : {}),
