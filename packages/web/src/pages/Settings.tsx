@@ -88,6 +88,12 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         <button class="ghost danger" disabled={busy} onClick={deleteHistory}>{t("既決の履歴を削除")}</button>
       </div>
       <div class="panel">
+        <h2>{t("Linux版アプリ")}</h2>
+        <p class="muted">{t("Ubuntu 24.04以降・Debian 13以降（amd64）向けの.debです。自動更新はないので、新しい版は入れ直してください。")}</p>
+        {/* shortcut: releases/latest assumes every release in this repo is the Linux app, change it if other releases are added */}
+        <a href="https://github.com/kitepon/approval-box/releases/latest" target="_blank" rel="noopener">{t("ダウンロード（GitHub）")}</a>
+      </div>
+      <div class="panel">
         <h2>{t("アカウント")}</h2>
         <div class="row">
           <button class="ghost" onClick={logout}>{t("ログアウト")}</button>
