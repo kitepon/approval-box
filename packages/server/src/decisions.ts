@@ -389,13 +389,15 @@ export class Decisions {
     run(this.db, "insert into request_checks (token_hash, connection_id, created_at, expires_at) values (?, ?, ?, ?)",
       hash(token), conn.id, at.toISOString(), new Date(at.getTime() + CHECK_TTL_MS).toISOString());
     const head = input.check_token ? "確認の札が古いか、もう使われています。もう一度確かめてください。\n" : "";
+    // 名前を入れずに出すと、利用者のカードに誰の申請か出ない（ヘンゼル 2026-11-21）。名前を持たないAIは空のまま出し直せる。
+    const nameless = input.requester ? "" : "申請者の名前（requester_name）が空です。このままでは利用者に誰からの申請か分かりません。Botや担当としての名前を持つなら、requester_name に入れて出し直してください。\n";
     const decisions = this.listMine(conn, input.route?.channel_id);
     // 0.1.6までのコネクタは message だけをAIに見せる。一覧と札も message に入れ、古いコネクタのAIも出し直せるようにする。
     const list = decisions.length
       ? decisions.map((d) => `- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version}${d.has_answer ? " 答えあり" : ""}`).join("\n")
       : "（この端末から出した申請はありません）";
     throw new ApiError("confirm_required",
-      `${head}申請はまだ受け付けていません。下は同じ接続から出した申請の要約一覧です。直す申請があれば amend_decision、要らなくなった申請があれば cancel_decision を先に済ませてください。答えが出ている申請は get_decision で確認してください。問題が無ければ、同じ申請に check_token: "${token}" を付けて出し直してください。\n${list}`,
+      `${head}${nameless}申請はまだ受け付けていません。下は同じ接続から出した申請の要約一覧です。直す申請があれば amend_decision、要らなくなった申請があれば cancel_decision を先に済ませてください。答えが出ている申請は get_decision で確認してください。問題が無ければ、同じ申請に check_token: "${token}" を付けて出し直してください。\n${list}`,
       { check_token: token, decisions });
   }
 
