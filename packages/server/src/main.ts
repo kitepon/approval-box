@@ -132,14 +132,16 @@ if (callBridgeIds.length) {
 // 共有ライブラリ（login-billing）。LB_K_KEY・LB_PASS_KEY・LB_PASS_KEY_ID が揃った時だけ /auth/v1 に置き、無ければ今まで通り。
 // ストアの鍵は上の APPLE_AUDIENCES・GOOGLE_CLIENT_IDS・APPSTORE_*・PLAY_* をそのまま使う。
 let library: Library | undefined;
-const lbSettings = { LB_K_KEY: secretValue("LB_K_KEY"), LB_PASS_KEY: secretValue("LB_PASS_KEY"), LB_PASS_KEY_ID: (env.LB_PASS_KEY_ID ?? "").trim() };
+// 保管庫の鍵は普通の base64 で入っていることがある。ライブラリは base64url を受けるので、同じバイト列のまま書き直す。
+const base64url = (value: string) => value.trim().replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const lbSettings = { LB_K_KEY: base64url(secretValue("LB_K_KEY") ?? ""), LB_PASS_KEY: base64url(secretValue("LB_PASS_KEY") ?? ""), LB_PASS_KEY_ID: (env.LB_PASS_KEY_ID ?? "").trim() };
 const lbMissing = Object.entries(lbSettings).filter(([, value]) => !value).map(([name]) => name);
 if (lbMissing.length === 3) {
   console.log("approval-box-server: ライブラリのログインは使いません（LB_K_KEY・LB_PASS_KEY・LB_PASS_KEY_ID が未設定）");
 } else if (lbMissing.length) {
   console.error(`approval-box-server: ライブラリのログインは使いません（${lbMissing.join("・")} が足りません）`);
 } else {
-  const previousKey = secretValue("LB_PASS_KEY_PREVIOUS");
+  const previousKey = base64url(secretValue("LB_PASS_KEY_PREVIOUS") ?? "");
   const previousId = (env.LB_PASS_KEY_PREVIOUS_ID ?? "").trim();
   try {
     library = createLibrary({
