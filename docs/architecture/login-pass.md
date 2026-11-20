@@ -58,7 +58,7 @@ flowchart LR
 
 ## Contract 1.5 / library 0.2.1 details for Approval Box (t14, 2026-11-20)
 
-- Pinned: npm tgz sha256 9e64b2eca3be6293c1a1fe8ae5cc4852ae50cc44aa7fca5ef02a80be9d9a85dd (server + web), core jar 155a5550662171b78f289d3e784081184d2570a3e86158bb829869cfadecdb89, android aar b43467757a39bccd4f8ab69b7e6fc7a58bccbfb9016c61b63d859c6f8ac997d4, Swift package tag v0.2.1 (release https://github.com/kitepon/login-billing/releases/tag/v0.2.1). Used unchanged; a need or bug goes to Mint as one message.
+- Pinned: library 0.4.0 (contract 1.8), npm tgz sha256 988c522838594992741fc74a135dd60a73941e2f3983928c55deb4c4a14b496d (server + web; 0.2.1 before 2026-11-20 12:30 JST), core jar 155a5550662171b78f289d3e784081184d2570a3e86158bb829869cfadecdb89, android aar b43467757a39bccd4f8ab69b7e6fc7a58bccbfb9016c61b63d859c6f8ac997d4, Swift package tag v0.2.1 (release https://github.com/kitepon/login-billing/releases/tag/v0.2.1). Used unchanged; a need or bug goes to Mint as one message.
 - Mount: the library handler at `/auth/v1` (wire v1: signin/nonce, signin, receipt, handoff/start|approve|confirm|take, refuse, stop-all-others, signout). Product routes `/v1/*` use the handler's authenticate(request): Bearer for apps and the Linux client, cookie `lb_pass` with allowed origin https://approval-box.kitepon.dev for the Web. A renewed pass comes back in `Login-Billing-Pass`.
 - Pass kinds: only a phone's (store) pass may attach receipts, approve a QR, refuse, stop all others. Web/Linux hold handoff passes.
 - Storage: SQLite `lb_kv(key, value, expires_at)` behind the library Storage interface for nonces, handoff slots, refused pass ids and notBefore records; signin/nonce and handoff/start rate-limited per client by Approval Box.
@@ -71,3 +71,5 @@ flowchart LR
 - Connection tokens and BellTeam client tokens stay valid; only their owner key becomes K. Nobody pairs again.
 - Diagnostics stay unlinked to accounts.
 - Account deletion deletes content under K; store contracts are cancelled by the user in the store.
+
+- Google id-only route (test server only): LB_GOOGLE_CODE_CLIENT_ID and LB_GOOGLE_CODE_CLIENT_SECRET (Cielo's dedicated project approval-box-id-only-test) turn on the library's signIn.googleCode; absent elsewhere.
