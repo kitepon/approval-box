@@ -34,8 +34,6 @@ export class Accounts {
   private readonly db: Db;
   private readonly events: EventHub;
   private readonly billing: BillingMode;
-  /** Stripeで売れるサーバーか。/me の web_billing になる（Web版が買うボタンを出す目印）。 */
-  private readonly webBilling: boolean;
 
   /** 契約なしで使える、課金の対象外のアカウント（運営者のもの）。環境変数 FREE_ACCOUNT_IDS で渡す。 */
   private readonly freeAccountIds: ReadonlySet<string>;
@@ -43,12 +41,11 @@ export class Accounts {
   /** 期限切れのアカウントを me / assertCanUse が見た時の合図（App Storeが、更新の取りこぼしをAppleから読み直す）。待たない。 */
   onExpired?: (userId: string) => void;
 
-  constructor(db: Db, events: EventHub, billing: BillingMode, webBilling = false, freeAccountIds: ReadonlySet<string> = new Set()) {
+  constructor(db: Db, events: EventHub, billing: BillingMode, freeAccountIds: ReadonlySet<string> = new Set()) {
     this.freeAccountIds = freeAccountIds;
     this.db = db;
     this.events = events;
     this.billing = billing;
-    this.webBilling = webBilling && billing !== "off";
   }
 
   // ---- 利用者とsession ----
@@ -194,7 +191,6 @@ export class Accounts {
       ...(user.plan_expires_at && !free ? { expires_at: user.plan_expires_at } : {}),
       ...(user.store && !free ? { store: user.store } : {}),
       billing: this.billing,
-      ...(this.webBilling ? { web_billing: true } : {}),
     };
   }
 
@@ -213,28 +209,26 @@ export class Accounts {
     const user = get<UserRow>(this.db, "select * from users where id = ?", userId)!;
     if (effectivePlan(user) !== "active") {
       this.onExpired?.(userId);
-      throw new ApiError("subscription_expired", "Approval Boxの契約がありません。アプリかWeb版の契約画面から契約してください。");
+      throw new ApiError("subscription_expired", "Approval Boxの契約がありません。iPhone・Mac・Android のアプリで契約してください。");
     }
   }
 
   /** ストアで照合した契約を反映する。 */
-  setPlan(userId: string, plan: "active" | "expired", expiresAt: string | null, store: "app_store" | "google_play" | "web") {
+  setPlan(userId: string, plan: "active" | "expired", expiresAt: string | null, store: "app_store" | "google_play") {
     run(this.db, "update users set plan = ?, plan_expires_at = ?, store = ? where id = ?", plan, expiresAt, store, userId);
   }
 
   /**
-   * 契約は1アカウントに1つ。users.plan・plan_expires_at・store は、App Store・Stripe・Google Playの記録から毎回導く（手で書かない）。
+   * 契約は1アカウントに1つ。users.plan・plan_expires_at・store は、App Store・Google Playの記録から毎回導く（手で書かない）。
    * 払い済みの期間が残るものがあれば、期限が最も遅いものが決める。無ければ、最後の期間のものを expired で残す。
    * 記録がまだ無いアカウント（無料体験）は触らない。
    */
   syncPlan(userId: string) {
     const nowIso = now();
-    type Candidate = { store: "app_store" | "web" | "google_play"; end: string | null; paid: boolean };
+    type Candidate = { store: "app_store" | "google_play"; end: string | null; paid: boolean };
     const candidates: Candidate[] = [
       ...all<{ expires_at: string | null; revoked: number }>(this.db, "select expires_at, revoked from appstore_subscriptions where user_id = ?", userId)
         .map((r): Candidate => ({ store: "app_store", end: r.expires_at, paid: !r.revoked && !!r.expires_at && r.expires_at > nowIso })),
-      ...all<{ status: string; current_period_end: string | null }>(this.db, "select status, current_period_end from stripe_subscriptions where user_id = ?", userId)
-        .map((r): Candidate => ({ store: "web", end: r.current_period_end, paid: (r.status === "active" || r.status === "trialing") && !!r.current_period_end && r.current_period_end > nowIso })),
       ...all<{ state: string; expires_at: string | null }>(this.db, "select state, expires_at from play_subscriptions where user_id = ?", userId)
         .map((r): Candidate => ({ store: "google_play", end: r.expires_at, paid: PLAY_PAID_STATES.has(r.state) && !!r.expires_at && r.expires_at > nowIso })),
     ];

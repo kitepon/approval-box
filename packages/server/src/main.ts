@@ -12,7 +12,6 @@ import { openDb } from "./db.ts";
 import { Decisions } from "./decisions.ts";
 import { EventHub } from "./events.ts";
 import { AppStore, appleRootCertificates } from "./appstore.ts";
-import { Stripe } from "./stripe.ts";
 import { Play } from "./play.ts";
 import { createApp } from "./http.ts";
 import { CallBridgeDeliverer, callBridgeSender, readHeaderFile } from "./callbridge.ts";
@@ -25,16 +24,14 @@ const billing: BillingMode = env.BILLING === "store" ? "store" : "off";
 
 const db = openDb(join(dataDir, "approval-box.db"));
 const events = new EventHub(db);
-// Stripeでの契約。鍵2つと価格IDが揃った時だけ使う（鍵は *_FILE のファイルか、直接の値）。
+// 鍵は *_FILE のファイルか、直接の値。
 const secretValue = (name: string) => {
   const file = env[`${name}_FILE`];
   return (file && existsSync(file) ? readFileSync(file, "utf8") : env[name] ?? "").trim();
 };
-const stripeConfig = { secretKey: secretValue("STRIPE_SECRET_KEY"), webhookSecret: secretValue("STRIPE_WEBHOOK_SECRET"), priceId: (env.STRIPE_PRICE_ID ?? "").trim(), portalConfiguration: (env.STRIPE_PORTAL_CONFIGURATION ?? "").trim() };
-const stripeOn = billing === "store" && !!stripeConfig.secretKey && !!stripeConfig.webhookSecret && !!stripeConfig.priceId;
 // 課金の対象外にするアカウント（運営者）。利用者IDをカンマで並べる。
 const freeAccountIds = new Set((env.FREE_ACCOUNT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
-const accounts = new Accounts(db, events, billing, stripeOn, freeAccountIds);
+const accounts = new Accounts(db, events, billing, freeAccountIds);
 const decisions = new Decisions(db, events);
 const attachments = new Attachments(db, join(dataDir, "attachments"));
 
@@ -104,8 +101,6 @@ const appStore = appStoreProducts.length ? new AppStore(db, accounts, {
   productIds: appStoreProducts,
   rootCertificates: appleRootCertificates(env.APPLE_ROOT_CERTS ?? join(here, "..", "certs")),
 }) : undefined;
-const stripe = stripeOn ? new Stripe(db, accounts, { ...stripeConfig, publicUrl }) : undefined;
-if (stripe) console.log("approval-box-server: Stripeでの契約を受け付けます");
 // Google Playの購入の照合。商品・サービスアカウントの鍵・Pub/Subのpush設定が揃った時だけ使う。
 const playProducts = (env.PLAY_PRODUCT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 // 鍵は保管庫の項目の2つの欄（client_email・private_key）から別々に受ける。PEMの改行が \n の文字で届いても読めるようにする。
@@ -149,7 +144,7 @@ if (callBridgeIds.length) {
 const diagnosticsAdminToken = env.DIAGNOSTICS_ADMIN_KEY_FILE ? readFileSync(env.DIAGNOSTICS_ADMIN_KEY_FILE,"utf8").trim() : env.DIAGNOSTICS_ADMIN_KEY;
 // 停止の合図。開いたままの更新の知らせ（SSE）を正しく閉じてから終える。
 const shutdown = new AbortController();
-const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(stripe ? { stripe } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) } }, { staticHandler });
+const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) } }, { staticHandler });
 
 setInterval(() => {
   new Diagnostics(db).prune();

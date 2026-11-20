@@ -1,6 +1,6 @@
 # Approval Box billing: Google Play (API v0.40)
 
-Owner: Nayuta (bot-4366a50b). Canonical for the Google Play purchase path. The plan-sharing rules (one plan per account, the latest period end wins, `/me` shape) are in [billing-stripe.md](billing-stripe.md); this page adds the third store. Reason: the user rule requires Apple, Stripe and Google Play for a product with a PC version, and the Android app already starts Play Billing (`setObfuscatedAccountId(user_id)`, then `POST /v1/billing/play/verify {product_id, purchase_token}`).
+Owner: Nayuta (bot-4366a50b). Canonical for the Google Play purchase path. The plan-sharing rules (one plan per account, the latest period end wins, `/me` shape) are in [billing.md](billing.md); this page adds the second store. Stripe was abolished by the Owner (2026-11-20), so billing is App Store plus Google Play only. The Android app already starts Play Billing (`setObfuscatedAccountId(user_id)`, then `POST /v1/billing/play/verify {product_id, purchase_token}`).
 
 ## What the account answers
 
@@ -27,15 +27,15 @@ flowchart LR
   N -->|re-read GET purchases.subscriptionsv2.get| G
   N -->|upsert| T
   T --> P[Accounts.syncPlan]
-  T2[(stripe_subscriptions, appstore_subscriptions)] --> P
+  T2[(appstore_subscriptions)] --> P
   P -->|users.plan, plan_expires_at, store| ME[GET /v1/me]
 ```
 
 | Function | Owner of state | Input → output | Failure / exit |
 | --- | --- | --- | --- |
-| `POST /v1/billing/play/verify` | `play_subscriptions` (purchase token, user id, product id, state, expiry, test flag) | login session (not a client session) + `{product_id, purchase_token}` → the account's `/me` after the update | 400 `validation_failed` for a product we do not sell or a token Google does not know (404/410); 409 `conflict` when Google's `obfuscatedExternalAccountId` is not this account or the token is already bound to another account; 409 `setup_not_verified` for a production purchase before the setup check (a `testPurchase` skips the gate); 404 `not_found` when this server has no Play (after the setup gate, like Stripe); 500 `internal` when Google cannot be reached or the acknowledge fails (the record is already saved; the app retries and the acknowledge is repeated) |
+| `POST /v1/billing/play/verify` | `play_subscriptions` (purchase token, user id, product id, state, expiry, test flag) | login session (not a client session) + `{product_id, purchase_token}` → the account's `/me` after the update | 400 `validation_failed` for a product we do not sell or a token Google does not know (404/410); 409 `conflict` when Google's `obfuscatedExternalAccountId` is not this account or the token is already bound to another account; 409 `setup_not_verified` for a production purchase before the setup check (a `testPurchase` skips the gate); 404 `not_found` when this server has no Play (after the setup gate); 500 `internal` when Google cannot be reached or the acknowledge fails (the record is already saved; the app retries and the acknowledge is repeated) |
 | `POST /v1/play/notifications` | `play_subscriptions` | Pub/Sub push: `Authorization: Bearer <OIDC token>` + `{message:{data}}` → `{applied}` | 401 when the OIDC token is missing, wrong audience, or the email is not the push service account; ignored (200 `{applied:false}`) for another package, `testNotification`, non-subscription events, a product we do not sell, an unknown or deleted account, or a token Google no longer knows, so Pub/Sub does not retry forever; 500 when Google cannot be reached, so Pub/Sub retries |
-| `Accounts.syncPlan` | `users.plan, plan_expires_at, store` (derived) | all three subscription tables → plan | pure derivation, runs after every write |
+| `Accounts.syncPlan` | `users.plan, plan_expires_at, store` (derived) | both subscription tables → plan | pure derivation, runs after every write |
 
 Rules the code keeps:
 

@@ -20,8 +20,8 @@ function setup() {
   const dir = mkdtempSync(join(tmpdir(), "abx-att-"));
   const db = openDb(":memory:");
   const events = new EventHub(db);
-  const entitled = new Set<string>(); // 申請を出す試験の利用者は契約済み（課金の対象外）として扱う。契約の有無の試験は stripe/appstore/play/api の課金の試験で行う。
-  const accounts = new Accounts(db, events, "store", false, entitled);
+  const entitled = new Set<string>(); // 申請を出す試験の利用者は契約済み（課金の対象外）として扱う。契約の有無の試験は appstore/play/api の課金の試験で行う。
+  const accounts = new Accounts(db, events, "store", entitled);
   const decisions = new Decisions(db, events);
   const attachments = new Attachments(db, dir);
   const app = createApp({ db, accounts, decisions, events, publicUrl: "https://kb.test", attachments, remoteMcp: { attachments } });
