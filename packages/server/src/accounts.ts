@@ -5,6 +5,7 @@ import { ApiError } from "./errors.ts";
 import type { EventHub } from "./events.ts";
 import { hash, normalizePairingCode, now, pairingCode, secret, uuid } from "./ids.ts";
 import type { Connection } from "./decisions.ts";
+import { PRODUCT_ID } from "./lb.ts";
 
 const SESSION_DAYS = 90;
 // 利用者が席を外していても、戻った時にリンクを受け取れるようにする。
@@ -41,6 +42,9 @@ export class Accounts {
   /** 期限切れのアカウントを me / assertCanUse が見た時の合図（App Storeが、更新の取りこぼしをAppleから読み直す）。待たない。 */
   onExpired?: (userId: string) => void;
 
+  /** 共有ライブラリが覚えている、そのアカウントの契約（device の確認で更新される）。ライブラリを使わない時は無い。 */
+  contract?: (userId: string) => "active" | "none" | "unknown";
+
   constructor(db: Db, events: EventHub, billing: BillingMode, freeAccountIds: ReadonlySet<string> = new Set()) {
     this.freeAccountIds = freeAccountIds;
     this.db = db;
@@ -50,10 +54,15 @@ export class Accounts {
 
   // ---- 利用者とsession ----
 
-  createUser(): string {
-    const id = uuid();
-    run(this.db, "insert into users (id, created_at, plan) values (?, ?, 'expired')", id, now()); // 製品は無料期間を持たない。使えるのはストアの契約から
+  /** id は共有ライブラリのKで作る時だけ渡す（ライブラリの通行証が先に作っていれば、そのまま使う）。 */
+  createUser(id: string = uuid()): string {
+    run(this.db, "insert or ignore into users (id, created_at, plan) values (?, ?, 'expired')", id, now()); // 製品は無料期間を持たない。使えるのはストアの契約から
     return id;
+  }
+
+  /** ライブラリの通行証で初めて来たKのアカウントを作る（あれば何もしない）。 */
+  ensureUser(id: string) {
+    if (!get(this.db, "select 1 from users where id = ?", id)) this.createUser(id);
   }
 
   issueSession(userId: string, label: string, client?: string): { session: string; expires_at: string } {
@@ -145,10 +154,10 @@ export class Accounts {
    * AppleかGoogleで入る。そのIDのアカウントがあればそこへ、無ければ作る。
    * 同じIDならどの画面から入っても同じアカウント。違うIDなら別のアカウント（結ぶ・まとめる操作は無い。クオの裁定）。
    */
-  signInWithIdentity(provider: "apple" | "google", subject: string) {
+  signInWithIdentity(provider: "apple" | "google", subject: string, newUserId?: string) {
     return tx(this.db, () => {
       const linked = get<{ user_id: string }>(this.db, "select user_id from identities where provider = ? and subject = ?", provider, subject);
-      const userId = linked?.user_id ?? this.createUser();
+      const userId = linked?.user_id ?? this.createUser(newUserId);
       if (!linked) run(this.db, "insert into identities (provider, subject, user_id, created_at) values (?, ?, ?, ?)", provider, subject, userId, now());
       return { ...this.issueSession(userId, provider), user: { id: userId } };
     });
@@ -162,7 +171,8 @@ export class Accounts {
     run(this.db, "delete from users where id = ?", userId);
   }
 
-  me(userId: string) {
+  /** entitlements は共有ライブラリの通行証で来た時だけ（契約はそこから決める）。 */
+  me(userId: string, entitlements?: { productId: string; store: string; expiresAt?: string }[]) {
     const user = get<UserRow>(this.db, "select * from users where id = ?", userId);
     if (!user) throw new ApiError("unauthorized", "アカウントが見つかりません。");
     const checks = all<CheckRow>(this.db, "select * from setup_checks where user_id = ? order by client", userId).map((c) => ({
@@ -179,18 +189,23 @@ export class Accounts {
       }
     }
     // セルフホスト（課金なし）は全員を契約中として扱う。
-    const free = this.billing === "off" || this.freeAccountIds.has(userId);
-    const plan = free ? "active" : effectivePlan(user);
-    if (plan === "expired") this.onExpired?.(userId);
+    const live = entitlements?.find((e) => e.productId === PRODUCT_ID);
+    // 通行証の契約は exempt（課金の対象外）なら期限もストアも出さない。
+    const free = entitlements ? live?.store === "exempt" : this.billing === "off" || this.freeAccountIds.has(userId);
+    const plan = entitlements ? (live ? "active" : "expired") : free ? "active" : effectivePlan(user);
+    const store = entitlements ? ({ apple: "app_store", google: "google_play" } as Record<string, string>)[live?.store ?? ""] : user.store;
+    const expiresAt = entitlements ? live?.expiresAt : user.plan_expires_at;
+    if (plan === "expired" && !entitlements) this.onExpired?.(userId);
     const login = get<{ provider: string }>(this.db, "select provider from identities where user_id = ? order by created_at", userId);
     return {
       user_id: user.id,
       login: login?.provider ?? null,
       setup: { verified: !!user.setup_verified_at, ...(user.setup_verified_at ? { verified_at: user.setup_verified_at } : {}), checks },
       plan,
-      ...(user.plan_expires_at && !free ? { expires_at: user.plan_expires_at } : {}),
-      ...(user.store && !free ? { store: user.store } : {}),
+      ...(expiresAt && !free ? { expires_at: expiresAt } : {}),
+      ...(store && !free ? { store } : {}),
       billing: this.billing,
+      ...(entitlements ? { purchase_mark: userId } : {}), // 購入に付ける印。Kそのもの（ライブラリの契約）
     };
   }
 
@@ -204,8 +219,15 @@ export class Accounts {
     return this.settings(userId);
   }
 
+  /** 共有ライブラリが「契約なし」と覚えているアカウントは402（G2）。覚えが無い（unknown）時は何もしない。 */
+  assertContract(userId: string) {
+    if (this.contract?.(userId) === "none") throw new ApiError("subscription_expired", "Approval Boxの契約がありません。iPhone・Mac・Android のアプリで契約してください。");
+  }
+
   assertCanUse(userId: string) {
     if (this.billing === "off" || this.freeAccountIds.has(userId)) return;
+    if (this.contract?.(userId) === "active") return;
+    this.assertContract(userId);
     const user = get<UserRow>(this.db, "select * from users where id = ?", userId)!;
     if (effectivePlan(user) !== "active") {
       this.onExpired?.(userId);

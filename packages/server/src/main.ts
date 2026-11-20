@@ -15,6 +15,8 @@ import { AppStore, appleRootCertificates } from "./appstore.ts";
 import { Play } from "./play.ts";
 import { createApp } from "./http.ts";
 import { CallBridgeDeliverer, callBridgeSender, readHeaderFile } from "./callbridge.ts";
+import { type Library, createLibrary } from "./lb.ts";
+import { rekeyToK } from "./rekey.ts";
 
 const env = process.env;
 const dataDir = resolve(env.APPROVAL_BOX_DATA ?? "data");
@@ -34,20 +36,6 @@ const freeAccountIds = new Set((env.FREE_ACCOUNT_IDS ?? "").split(",").map((s) =
 const accounts = new Accounts(db, events, billing, freeAccountIds);
 const decisions = new Decisions(db, events);
 const attachments = new Attachments(db, join(dataDir, "attachments"));
-
-const [command, ...args] = process.argv.slice(2);
-
-if (command === "admin") {
-  const [sub, value] = args;
-  // 運用者だけが使う。ログインはAppleかGoogleで行い、ここでアカウントは作らない。
-  if (sub === "session" && value) {
-    console.log(JSON.stringify(accounts.issueSession(value, "admin"), null, 2));
-  } else {
-    console.error("usage: approval-box-server admin session <user_id>   # 運用の調べもの用。利用者のログインはAppleかGoogle");
-    process.exit(2);
-  }
-  process.exit(0);
-}
 
 // Web版（packages/web のビルド結果）。APIでないGETは index.html を返し、画面の振り分けはWeb版が行う。
 const here = fileURLToPath(new URL(".", import.meta.url));
@@ -141,16 +129,54 @@ if (callBridgeIds.length) {
     console.log(`approval-box-server: call-bridge で答えを届けます（接続 ${callBridgeIds.length}）`);
   }
 }
+// 共有ライブラリ（login-billing）。LB_K_KEY・LB_PASS_KEY・LB_PASS_KEY_ID が揃った時だけ /auth/v1 に置き、無ければ今まで通り。
+// ストアの鍵は上の APPLE_AUDIENCES・GOOGLE_CLIENT_IDS・APPSTORE_*・PLAY_* をそのまま使う。
+let library: Library | undefined;
+const lbSettings = { LB_K_KEY: secretValue("LB_K_KEY"), LB_PASS_KEY: secretValue("LB_PASS_KEY"), LB_PASS_KEY_ID: (env.LB_PASS_KEY_ID ?? "").trim() };
+const lbMissing = Object.entries(lbSettings).filter(([, value]) => !value).map(([name]) => name);
+if (lbMissing.length === 3) {
+  console.log("approval-box-server: ライブラリのログインは使いません（LB_K_KEY・LB_PASS_KEY・LB_PASS_KEY_ID が未設定）");
+} else if (lbMissing.length) {
+  console.error(`approval-box-server: ライブラリのログインは使いません（${lbMissing.join("・")} が足りません）`);
+} else {
+  const previousKey = secretValue("LB_PASS_KEY_PREVIOUS");
+  const previousId = (env.LB_PASS_KEY_PREVIOUS_ID ?? "").trim();
+  try {
+    library = createLibrary({
+      db, publicUrl, billing, kKey: lbSettings.LB_K_KEY, passKey: { id: lbSettings.LB_PASS_KEY_ID, key: lbSettings.LB_PASS_KEY },
+      ...(previousKey && previousId ? { passKeyPrevious: { id: previousId, key: previousKey } } : {}),
+      appleAudiences, googleAudiences, exemptK: [...freeAccountIds],
+      ...(appStoreApiOn ? { apple: { bundleId: env.APPSTORE_BUNDLE_ID || "dev.kitepon.approvalbox", issuerId: appStoreApi.issuerId, keyId: appStoreApi.keyId, privateKey: appStoreApi.privateKey } } : {}),
+      ...(playServiceAccount ? { google: { packageName: env.PLAY_PACKAGE_NAME?.trim() || "dev.kitepon.approvalbox", serviceAccount: playServiceAccount } } : {}),
+    });
+  } catch (error) {
+    console.error(`approval-box-server: ライブラリのログインは使いません（設定が正しくありません: ${error instanceof Error ? error.message : "不明"}）`); // ライブラリの文は設定の名前だけで、値を含まない
+  }
+}
+if (library) {
+  // 利用者IDをKへ付け替える（一度きり）。前提が外れたら何も変えず、ライブラリは使わずに今まで通り動く。
+  const result = await rekeyToK(db, library.lb.deriveK, (env.LB_REKEY_DELETE_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+  if ("failed" in result) {
+    console.error(`approval-box-server: アカウントの付け替えを止めました（外れた確認: ${result.failed}）。ライブラリのログインは使わず、今まで通りに動かします`);
+    library = undefined;
+  } else {
+    const lb = library.lb;
+    accounts.contract = (userId) => lb.known(userId);
+    lb.onNone((userId) => decisions.endForNoContract(userId));
+    console.log(`approval-box-server: ライブラリのログインを使います（付け替え ${result.rekeyed}、削除 ${result.deleted}）`);
+  }
+}
 const diagnosticsAdminToken = env.DIAGNOSTICS_ADMIN_KEY_FILE ? readFileSync(env.DIAGNOSTICS_ADMIN_KEY_FILE,"utf8").trim() : env.DIAGNOSTICS_ADMIN_KEY;
 // 停止の合図。開いたままの更新の知らせ（SSE）を正しく閉じてから終える。
 const shutdown = new AbortController();
-const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) } }, { staticHandler });
+const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) }, ...(library ? { library } : {}) }, { staticHandler });
 
 setInterval(() => {
   new Diagnostics(db).prune();
   decisions.purgeExpired();
   attachments.gc();
   accounts.prunePairings();
+  library?.storage.sweep();
   events.prune(7);
 }, 3600_000).unref();
 

@@ -461,6 +461,18 @@ export class Decisions {
     });
   }
 
+  /** 契約が無くなったアカウントの、待っている申請（セットアップ確認以外）を取り下げる。共有ライブラリの onNone から呼ぶ。 */
+  endForNoContract(userId: string) {
+    tx(this.db, () => {
+      for (const { id } of all<{ id: string }>(this.db, "select id from decisions where user_id = ? and test = 0 and status in ('pending', 'held')", userId)) {
+        run(this.db, "update decisions set status = 'cancelled', cancel_reason = 'subscription_expired', updated_at = ?, version = version + 1 where id = ?", now(), id);
+        run(this.db, "delete from attachments where decision_id = ? and position is null", id);
+        this.history(id, "cancelled", "ai", "subscription_expired");
+        this.changed(this.row(id)!, "cancelled");
+      }
+    });
+  }
+
   aiView(conn: Connection, id: string, routeChannel?: string) {
     return this.toAi(this.forConnection(conn, id), routeChannel);
   }

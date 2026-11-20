@@ -40,5 +40,8 @@ if [ -n "${SECRETS_DIR:-}" ]; then
   put CALL_BRIDGE_HEADERS call-bridge.header
   put PLAY_PRIVATE_KEY play-private-key.pem
   put APPSTORE_PRIVATE_KEY appstore-private-key.pem pem
+  put LB_K_KEY lb-k-key
+  put LB_PASS_KEY lb-pass-key
+  put LB_PASS_KEY_PREVIOUS lb-pass-key-previous
 fi
 exec "$@"
