@@ -201,6 +201,39 @@ test("通行証の更新は Login-Billing-Pass に付いて返り、更新後の
   assert.equal((await x.call("GET", "/v1/me", { token: "kss_nobody" })).status, 401);
 });
 
+test("QRの引き継ぎ: Webのcookieで、TLSの手前の同じサイトのGETが通る（Originなし・request.urlはhttp）。止める・ほかをすべて止める・写し・ログアウト", async () => {
+  const x = setup();
+  const { pass: first, k } = await x.signIn("sub-handoff");
+  x.state.mark = k;
+  let app = (await x.call("POST", "/auth/v1/receipt", { token: first, body: { receipts: [{ store: "apple", transactionId: "2000" }] } })).json.pass as string;
+  const renew = (r: { headers: Headers }) => { app = r.headers.get("login-billing-pass") ?? app; };
+  const web = { origin: ORIGIN };
+  const browser = async () => {
+    const start = await x.call("POST", "/auth/v1/handoff/start", { headers: web, body: { deviceLabel: "Chrome on iOS" } });
+    const approve = await x.call("POST", "/auth/v1/handoff/approve", { token: app, body: { shortCode: start.json.shortCode } });
+    assert.equal(approve.json.deviceLabel, "Chrome on iOS"); renew(approve);
+    const confirm = await x.call("POST", "/auth/v1/handoff/confirm", { token: app, body: { slotId: start.json.slotId } }); renew(confirm);
+    const take = await x.call("POST", "/auth/v1/handoff/take", { headers: web, body: { slotId: start.json.slotId, takeSecret: start.json.takeSecret, carrier: "cookie" } });
+    assert.equal(take.json.status, "ready");
+    return { cookie: take.headers.getSetCookie()[0]!.split(";")[0]!, passId: confirm.json.issuedPassId as string };
+  };
+  // ブラウザは同じサイトのGETにOriginを付けない。app.request のURLは http://localhost（TLSの手前の形）。0.4.0 はここで403だった。
+  const get = (cookie: string, site = "same-origin") => x.call("GET", "/v1/decisions", { headers: { cookie, "sec-fetch-site": site } });
+  const one = await browser();
+  assert.equal((await get(one.cookie)).status, 200);
+  assert.equal((await get(one.cookie, "cross-site")).status, 403);
+  renew(await x.call("POST", "/auth/v1/refuse", { token: app, body: { passId: one.passId } }));
+  assert.equal((await get(one.cookie)).status, 401);
+  const two = await browser();
+  assert.equal((await get(two.cookie)).status, 200);
+  const all = await x.call("POST", "/auth/v1/stop-all-others", { token: app });
+  assert.equal(all.status, 200); app = all.json.pass;
+  assert.equal((await get(two.cookie)).status, 401);
+  assert.equal((await x.call("GET", "/v1/me/export", { token: app })).status, 200);
+  assert.equal((await x.call("POST", "/auth/v1/signout", { token: app })).status, 200);
+  assert.equal((await x.call("GET", "/v1/me", { token: app })).status, 401);
+});
+
 test("ストアの契約がある通行証は通り、/me は store と期限を返す", async () => {
   const x = setup();
   const { pass, k } = await x.signIn("sub-paid");
