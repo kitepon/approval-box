@@ -146,6 +146,7 @@ if (lbMissing.length === 3) {
       db, publicUrl, billing, kKey: lbSettings.LB_K_KEY, passKey: { id: lbSettings.LB_PASS_KEY_ID, key: lbSettings.LB_PASS_KEY },
       ...(previousKey && previousId ? { passKeyPrevious: { id: previousId, key: previousKey } } : {}),
       appleAudiences, googleAudiences, exemptK: [...freeAccountIds],
+      ...(env.LB_GOOGLE_CODE_CLIENT_ID && secretValue("LB_GOOGLE_CODE_CLIENT_SECRET") ? { googleCode: { clientId: env.LB_GOOGLE_CODE_CLIENT_ID.trim(), clientSecret: secretValue("LB_GOOGLE_CODE_CLIENT_SECRET") } } : {}),
       ...(appStoreApiOn ? { apple: { bundleId: env.APPSTORE_BUNDLE_ID || "dev.kitepon.approvalbox", issuerId: appStoreApi.issuerId, keyId: appStoreApi.keyId, privateKey: appStoreApi.privateKey } } : {}),
       ...(playServiceAccount ? { google: { packageName: env.PLAY_PACKAGE_NAME?.trim() || "dev.kitepon.approvalbox", serviceAccount: playServiceAccount } } : {}),
     });

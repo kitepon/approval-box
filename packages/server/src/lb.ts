@@ -1,4 +1,4 @@
-// 共有の login-billing ライブラリ（kitepon/login-billing 0.2.1、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
+// 共有の login-billing ライブラリ（kitepon/login-billing 0.4.0、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
 // ライブラリの内側は読まない。公開の入口（createLoginBilling・createHandler・Storage）だけを使う。
 import { createHandler, createLoginBilling, type AppleStoreConfig, type GoogleStoreConfig, type LoginBilling, type Storage } from "@kitepon/login-billing/server";
 import { type Db, get, run } from "./db.ts";
@@ -61,6 +61,8 @@ export type LibraryInput = {
   passKeyPrevious?: { id: string; key: string };
   appleAudiences: string[];
   googleAudiences: string[];
+  /** Google の id だけで入る道（試験。LB_GOOGLE_CODE_CLIENT_ID・LB_GOOGLE_CODE_CLIENT_SECRET が揃った時だけ）。 */
+  googleCode?: { clientId: string; clientSecret: string };
   apple?: AppleStoreConfig;
   google?: GoogleStoreConfig;
   /** 課金の対象外にする K（FREE_ACCOUNT_IDS）。 */
@@ -73,7 +75,7 @@ export type LibraryInput = {
 export function createLibrary(input: LibraryInput) {
   const storage = new SqliteStorage(input.db, input.now);
   const lb: LoginBilling = createLoginBilling({
-    signIn: { apple: input.appleAudiences, google: input.googleAudiences },
+    signIn: { apple: input.appleAudiences, google: input.googleAudiences, ...(input.googleCode ? { googleCode: input.googleCode } : {}) },
     stores: { ...(input.apple ? { apple: input.apple } : {}), ...(input.google ? { google: input.google } : {}) },
     products: [{ productId: PRODUCT_ID, store: "apple", kind: "subscription" }, { productId: PRODUCT_ID, store: "google", kind: "subscription" }],
     kKey: input.kKey,
