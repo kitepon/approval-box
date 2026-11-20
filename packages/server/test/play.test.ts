@@ -8,7 +8,6 @@ import { EventHub } from "../src/events.ts";
 import { createApp } from "../src/http.ts";
 import { type Jwk, resetKeyCache } from "../src/oidc.ts";
 import { Play } from "../src/play.ts";
-import { Stripe } from "../src/stripe.ts";
 
 const PACKAGE = "dev.kitepon.approvalbox";
 const PRODUCT = "approvalbox_monthly";
@@ -307,24 +306,6 @@ test("App StoreとPlayが両方ある時は、期末が遅い方が決める", a
   const me = await t.me();
   assert.equal(me.plan, "active");
   assert.equal(me.store, "app_store");
-});
-
-test("Stripeの無料期間はStripeの記録だけで決め、Playの契約の記録があっても付ける（窓口ごとに無料）", async () => {
-  const t = setup();
-  t.verified();
-  const sent: URLSearchParams[] = [];
-  const stripeFetch = (async (_url: string, init: RequestInit) => {
-    sent.push(new URLSearchParams(String(init.body)));
-    return new Response(JSON.stringify({ id: "cs_1", url: "https://checkout.stripe.test/c/cs_1" }));
-  }) as unknown as typeof fetch;
-  const stripe = new Stripe(t.db, t.accounts, { secretKey: "rk_test", webhookSecret: "whsec_test", priceId: "price_1", publicUrl: "https://kb.test", fetch: stripeFetch });
-  await stripe.checkout(t.userId);
-  assert.equal(sent[0]!.get("subscription_data[trial_period_days]"), "30");
-  // 期限切れのPlay契約の記録があっても、Stripeで初めてなら無料期間を付ける（クオの裁定 2026-11-20）
-  t.subs.set("tok_1", t.sub({ subscriptionState: "SUBSCRIPTION_STATE_EXPIRED", lineItems: [{ productId: PRODUCT, expiryTime: new Date(Date.now() - DAY).toISOString() }] }));
-  await t.verifyCall();
-  await stripe.checkout(t.userId);
-  assert.equal(sent[1]!.get("subscription_data[trial_period_days]"), "30");
 });
 
 test("Play: アカウントを削除すると記録も消える", async () => {

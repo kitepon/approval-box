@@ -38,8 +38,6 @@ if [ -n "${SECRETS_DIR:-}" ]; then
   put APNS_KEY apns-AuthKey.p8 pem
   put DIAGNOSTICS_ADMIN_KEY diagnostics-admin.key
   put CALL_BRIDGE_HEADERS call-bridge.header
-  put STRIPE_SECRET_KEY stripe-secret.key
-  put STRIPE_WEBHOOK_SECRET stripe-webhook.secret
   put PLAY_PRIVATE_KEY play-private-key.pem
   put APPSTORE_PRIVATE_KEY appstore-private-key.pem pem
 fi

@@ -164,16 +164,6 @@ create table if not exists appstore_subscriptions (
   revoked integer not null default 0,
   updated_at text not null
 );
-create table if not exists stripe_subscriptions (
-  subscription_id text primary key,
-  user_id text not null references users(id) on delete cascade,
-  customer_id text not null,
-  status text not null,
-  current_period_end text,
-  cancel_at_period_end integer not null default 0,
-  updated_at text not null
-);
-create index if not exists stripe_subscriptions_user on stripe_subscriptions(user_id);
 create table if not exists play_subscriptions (
   purchase_token text primary key,
   user_id text not null references users(id) on delete cascade,
@@ -397,6 +387,8 @@ const MIGRATIONS: ((db: Db) => void)[] = [
   },
   // 14: 製品の「お試し」を無くす（クオの裁定 2026-11-20）。使えるかはストアの契約（無料期間中を含む）だけで決める。
   (db) => { db.exec("update users set plan = 'expired' where plan = 'trial'"); },
+  // 15: Stripeを廃止した（クオの裁定 2026-11-20。契約者は0人）。契約の表を落とす。
+  (db) => { db.exec("drop table if exists stripe_subscriptions"); },
 ];
 
 function migrate(db: Db) {

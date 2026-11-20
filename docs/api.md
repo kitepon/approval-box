@@ -1,8 +1,10 @@
-# Approval Box API（アプリ・Web版向け） v0.44
+# Approval Box API（アプリ・Web版向け） v0.45
 
-2026-11-20 v0.44（意味の変更・形は変わらない）: App Storeの契約の状態を、Appleのサーバー（App Store Server API）から読み直すようにした。通知（V2）と `POST /billing/appstore/verify` は、署名を確かめたあと、アプリが送った署名付きの取引や通知の本文ではなく、Appleが返す最新の状態で `plan`・`expires_at` を決める。更新の通知を取りこぼしても、期限が過ぎた契約を `/me` やAIの申請が見つけた時に、サーバーが10分に1回までAppleへ読みに行く。課金の猶予期間（Billing Grace Period）の間は `active` のままになる。Appleの鍵が無いサーバーは今までどおり（署名付きの取引だけで決める）。アプリのリクエスト・レスポンスは変わらない。契約は[billing-stripe.md](billing-stripe.md)。
+2026-11-20 v0.45（意味の変更・形は縮む）: クオの裁定でStripeを廃止した。課金はApp StoreとGoogle Playだけ。`GET /billing/stripe/offer`・`POST /billing/stripe/checkout`・`POST /billing/stripe/portal`・`POST /v1/stripe/webhook` を削除し、`/me` の `web_billing` と `store: "web"` を無くした（`store` は `app_store` か `google_play`）。Stripeの契約者は0人だった。`DELETE /me` はStripeの契約を止めない。アプリの呼ぶ経路（App Store・Google Playの検証）は変わらない。契約は[billing.md](billing.md)。
 
-2026-11-20 v0.43（追加のみ）: Web版の契約の前に出す確認画面のため、`GET /billing/stripe/offer` を足した（`{ amount, currency, interval: "month", trial_days, first_charge_at }`。ログインのsessionだけ。BellTeamのclient sessionは使えない）。`POST /billing/stripe/checkout` のStripe画面で、利用規約への同意を必須にした（レスポンスの形は変わらない）。契約は[billing-stripe.md](billing-stripe.md)。
+2026-11-20 v0.44（意味の変更・形は変わらない）: App Storeの契約の状態を、Appleのサーバー（App Store Server API）から読み直すようにした。通知（V2）と `POST /billing/appstore/verify` は、署名を確かめたあと、アプリが送った署名付きの取引や通知の本文ではなく、Appleが返す最新の状態で `plan`・`expires_at` を決める。更新の通知を取りこぼしても、期限が過ぎた契約を `/me` やAIの申請が見つけた時に、サーバーが10分に1回までAppleへ読みに行く。課金の猶予期間（Billing Grace Period）の間は `active` のままになる。Appleの鍵が無いサーバーは今までどおり（署名付きの取引だけで決める）。アプリのリクエスト・レスポンスは変わらない。契約は[billing.md](billing.md)。
+
+2026-11-20 v0.43（追加のみ）: Web版の契約の前に出す確認画面のため、`GET /billing/stripe/offer` を足した（`{ amount, currency, interval: "month", trial_days, first_charge_at }`。ログインのsessionだけ。BellTeamのclient sessionは使えない）。`POST /billing/stripe/checkout` のStripe画面で、利用規約への同意を必須にした（レスポンスの形は変わらない）。契約は[billing.md](billing.md)。
 
 2026-11-20 v0.42（意味の変更）: 製品の「お試し」を無くした（クオの裁定）。`/me` の `plan` は `active` か `expired` だけになり、どのストアの契約も無いアカウントは `expired`（`store` 無し）で、AIの申請を402 `subscription_expired` で断る。無料の1か月は各ストアの無料期間だけで決まる。Stripeの無料30日は、そのアカウントにStripeの契約記録が無い時に付く（App Store・Google Playの記録は見ない）。形は変わらない。
 
@@ -10,7 +12,7 @@
 
 2026-11-19 v0.40（追加のみ）: Google Playでの契約。`POST /billing/play/verify` を実装し（これまでは呼ぶと500）、サーバー間の `POST /v1/play/notifications`（Pub/Sub push、OIDCで確かめる）を足した（契約は[billing-play.md](billing-play.md)）。照合はGoogleのAPIから読み直し、`obfuscatedExternalAccountId` が自分の `user_id` でなければ409 `conflict`、知らない商品・Googleが知らない購入トークンは400 `validation_failed`、本物の購入で確認前は409 `setup_not_verified`（試験用購入 `testPurchase` は関門を通す）。承認（acknowledge）はサーバーが行う。`/me` の `store` に `google_play` が出る。Playの設定が無いサーバーは404 `not_found`（確認前の関門が先）。契約は1アカウントに1つで、App Store・Stripe・Google Playの記録から期末の遅い方が決める。既存の形・既存クライアントは変わらない。
 
-2026-11-15 v0.39（追加のみ）: Stripeでの契約（Web・Windows・Linuxの利用者向け）。`POST /billing/stripe/checkout`・`/portal` と、サーバー間の `POST /v1/stripe/webhook` を実装した（契約は[billing-stripe.md](billing-stripe.md)）。`/me` の `store` は `web`（変更なし）。Stripeを売れるサーバーだけ `/me` に `web_billing: true` が付く（任意・追加）。契約は1アカウントに1つで、App StoreとStripeの記録から期末の遅い方が `plan`・`expires_at`・`store` を決める。解約しても期末までは `active`。購入の窓口が無い・登録クライアント（BellTeam）のsessionからは決済を始められない（403）。`DELETE /me` はStripeの契約を先に止め、止められなければ削除しない。既存の形・既存クライアントは変わらない。
+2026-11-15 v0.39（追加のみ）: Stripeでの契約（Web・Windows・Linuxの利用者向け）。`POST /billing/stripe/checkout`・`/portal` と、サーバー間の `POST /v1/stripe/webhook` を実装した（契約は[billing.md](billing.md)）。`/me` の `store` は `web`（変更なし）。Stripeを売れるサーバーだけ `/me` に `web_billing: true` が付く（任意・追加）。契約は1アカウントに1つで、App StoreとStripeの記録から期末の遅い方が `plan`・`expires_at`・`store` を決める。解約しても期末までは `active`。購入の窓口が無い・登録クライアント（BellTeam）のsessionからは決済を始められない（403）。`DELETE /me` はStripeの契約を先に止め、止められなければ削除しない。既存の形・既存クライアントは変わらない。
 
 2026-11-15 v0.38（追加のみ）: ①登録クライアント（今は `bellteam`）の接続。公開の `POST /connector/v1/pairing` に任意の `client` を足し、利用者がWeb `/pair` で許す相手を見て承認（`claim` に `confirm_client`）すると、相手は待ち受けて範囲付きsessionを一度受け取る。使える経路は一覧・1件・answer・hold/unhold・添付GET・`/events`・`GET /me`だけで、他は403 `forbidden`。接続一覧に `kind:"client"` が出て、外すと即失効。②`source.requester_bot_id`（任意、BellTeamの席から出た申請のBot ID、自己申告）。既存の形・既存クライアントは変わらない。契約は[bellteam-client.md](bellteam-client.md)。
 
@@ -298,7 +300,7 @@ setup: {
 
 | メソッド | パス | 内容 |
 |---|---|---|
-| GET | `/me` | `{ user_id (UUID、小文字), login: "apple" \| "google" \| null, setup, plan: "active" \| "expired", expires_at?, store?: "app_store" \| "google_play" \| "web" }` |
+| GET | `/me` | `{ user_id (UUID、小文字), login: "apple" \| "google" \| null, setup, plan: "active" \| "expired", expires_at?, store?: "app_store" \| "google_play" }` |
 | DELETE | `/me` | アカウントと全データの削除（App Store・Google Playの審査で必須） |
 | DELETE | `/decisions?status=answered,cancelled` | 設定の「データ削除」。既決（answered・cancelled）だけを消す → `{ deleted: int }`。pending・heldは消さない（AIが答えを待っているため）。アカウント・接続・端末は残る |
 | GET | `/me/settings` | `{ retention_days: 7 \| 30 \| 90 \| 365 }`（既定30。既決をこの日数で自動削除） |
@@ -308,15 +310,12 @@ setup: {
 
 | POST | `/billing/appstore/verify` | iOS: 購入直後に `{ jws }` を送る。jws は StoreKit 2 の `jwsRepresentation`（署名付きtransaction）そのまま → 更新後の `/me` |
 | POST | `/billing/play/verify` | Android: 購入直後に `{ product_id, purchase_token }` を送る → 更新後の `/me`。承認（acknowledge）はサーバーが行う |
-| GET | `/billing/stripe/offer` | Web: → `{ amount, currency, interval: "month", trial_days, first_charge_at }`。amount・currencyはStripeの価格から（最小単位。円なら300）。`trial_days` は、このアカウントにStripeの契約の記録が無ければ30、あれば0。`first_charge_at` は今から `trial_days` 日後（ISO）。Stripeが無いサーバーは404 `not_found` |
-| POST | `/billing/stripe/checkout` | Web: → `{ url }`（Stripe Checkoutへ移る。利用規約への同意が必須） |
-| POST | `/billing/stripe/portal` | Web: → `{ url }`（解約・カード変更） |
-| POST | `/appstore/notifications`・`/play/notifications`・`/stripe/webhook` | サーバー間。アプリは呼ばない |
+| POST | `/appstore/notifications`・`/play/notifications` | サーバー間。アプリは呼ばない |
 
 - 契約はアカウントに1つ。`/me` の `store` が契約した窓口を表す。`plan=active` で別の窓口の購入画面は出さない（「App Storeで契約中」のように出す）。
 - 購入に使う `appAccountToken`（iOS）・`obfuscatedAccountId`（Android）には `/me` の `user_id` を入れる。
-- 決済の検証はサーバーが行う。App Storeは `/billing/appstore/verify` と通知V2で、Stripeは通知（署名を確かめ、契約をStripeから読み直す）で実装済み（v0.39）。Stripeの鍵が無いサーバーは404 `not_found`。Google Playは `/billing/play/verify` と通知（Pub/Sub push）で実装済み（v0.40）で、設定が無いサーバーは404 `not_found`。読む側（BellTeamなど）は、`plan` が `active` の時だけ使えるものとして扱う。
-- 製品は無料期間の状態を持たない（クオの裁定 2026-11-20）。無料の1か月は各ストアの無料期間（Appleの導入オファー・Playの無料体験・Stripeの30日）で、その間ストアは払い済みの状態を返すので `plan=active` になる。どのストアの契約も無いアカウントは `plan=expired` で `store` が無い（契約したことが無い）。ログイン・設定・購入はできるが、AIの申請（`POST /decisions`・画像の送信）は402 `subscription_expired`。`trial` はもう返さない（知らない値は使えないものとして扱う）。
+- 決済の検証はサーバーが行う。App Storeは `/billing/appstore/verify` と通知V2で、Google Playは `/billing/play/verify` と通知（Pub/Sub push）で実装済み（v0.40）。設定が無いサーバーは404 `not_found`。Stripeは廃止した（v0.45）。読む側（BellTeamなど）は、`plan` が `active` の時だけ使えるものとして扱う。
+- 製品は無料期間の状態を持たない（クオの裁定 2026-11-20）。無料の1か月は各ストアの無料期間（Appleの導入オファー・Playの無料体験）で、その間ストアは払い済みの状態を返すので `plan=active` になる。どのストアの契約も無いアカウントは `plan=expired` で `store` が無い（契約したことが無い）。ログイン・設定・購入はできるが、AIの申請（`POST /decisions`・画像の送信）は402 `subscription_expired`。`trial` はもう返さない（知らない値は使えないものとして扱う）。
 - `/billing/appstore/verify`（v0.21 実装）: 署名をAppleのルート証明書まで確かめ、商品（`dev.kitepon.approvalbox.monthly`）・Bundle ID・本番はアプリのApple IDを照らす。期限内で返金されていなければ `plan=active`・`expires_at`・`store=app_store`。断る時: 署名・商品・環境が違う → 400 `validation_failed`、`appAccountToken` が自分の `user_id` でない・同じ購入が別のアカウントに結ばれている → 409 `conflict`、本番の購入で確認前 → 409 `setup_not_verified`。
   - 受け付ける環境は `Sandbox`（審査・TestFlight）と `Production` だけ。Xcodeの StoreKit 設定ファイルでの購入（`Xcode`）はAppleの署名でないので、サーバーは 400 で断る。Xcodeでの試しは画面までにする。
   - 通知V2の受け口は `POST /v1/appstore/notifications`（ASCの本番・Sandboxの両方に登録）。更新・返金の知らせを受けたら、署名を確かめたうえで、Appleの App Store Server API（Get All Subscription Statuses）から契約の状態を読み直して反映する（通知の本文は合図で、状態には使わない。v0.44）。状態 1（有効）は取引の期限まで、4（課金の猶予期間）は猶予の期限まで払い済み。3（課金の再試行）・2（期限切れ）は未払い、5（返金・取り消し）は取り消し。Appleの鍵（`APPSTORE_ISSUER_ID`・`APPSTORE_KEY_ID`・`APPSTORE_PRIVATE_KEY`）が無いサーバーは、署名付きの取引の値だけで決める（従来どおり）。更新の知らせが届かず期限を過ぎた契約は、`/me` かAIの申請がそれを見た時にAppleから読み直す（10分に1回まで。読めなければ `expired` のまま）。
@@ -369,6 +368,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.45 2026-11-20 クオの裁定（Stripeを全アプリで廃止。課金はApp StoreとGoogle Playだけ）: `/billing/stripe/*`・`/stripe/webhook`・`/me.web_billing`・`store: "web"` を削除。`stripe_subscriptions` の表を落とす。アプリの呼ぶ経路は変えていない。
 - v0.44 2026-11-20 クオの規則（ストアの契約の状態はストアのサーバーから読み、通知は合図にとどめる）: App Storeも通知・verifyのあとAppleから読み直す。猶予期間は払い済み、課金の再試行・期限切れは未払い。期限切れを見た時は10分に1回までバックグラウンドで読み直す。アプリの形は変えていない。
 - v0.43 2026-11-20 Web版の契約前の確認画面（旦那の承認した文言）: `GET /billing/stripe/offer` を追加し、Checkoutに利用規約への同意（`consent_collection[terms_of_service]=required`）を付けた。
 - v0.42 2026-11-20 クオの裁定（製品は無料期間の状態を持たず、ストアの契約だけで決める）: `plan=trial` を廃止し、契約の無いアカウントは `expired`。Stripeの無料30日の判定はStripeの記録だけ。

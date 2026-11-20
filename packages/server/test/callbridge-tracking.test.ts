@@ -90,7 +90,7 @@ test("schema9 migration preserves legacy answers and unknown; journal cascades w
   db.exec("drop table bridge_deliveries; pragma user_version=9;");
   run(db, "update decisions set delivery='unknown', delivery_detail='call_send: queued'");
   db.close(); db = openDb(file);
-  assert.equal(get<{ user_version: number }>(db, "pragma user_version")!.user_version, 14);
+  assert.equal(get<{ user_version: number }>(db, "pragma user_version")!.user_version, 15);
   assert.equal(status(db), "unknown");
   run(db, "insert into bridge_deliveries(decision_id,session_id,seq,state) values('K-TEST','s',1,'failed')");
   run(db, "delete from decisions where id='K-TEST'");

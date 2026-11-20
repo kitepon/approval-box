@@ -25,7 +25,7 @@ export type AppStoreConfig = {
 /** 期限切れを見て読み直す間隔の下限（同じ購入につき）。 */
 const REREAD_INTERVAL_MS = 10 * 60_000;
 
-/** Appleの契約の状態（Status）を、払い済みの期限と取り消しへ直す。表は docs/billing-stripe.md。 */
+/** Appleの契約の状態（Status）を、払い済みの期限と取り消しへ直す。表は docs/billing.md。 */
 function paidState(status: number | undefined, transaction: JWSTransactionDecodedPayload, renewal: JWSRenewalInfoDecodedPayload | undefined) {
   const iso = (ms?: number) => (ms ? new Date(ms).toISOString() : null);
   const end = iso(transaction.expiresDate);

@@ -9,8 +9,8 @@ import { createApp } from "../src/http.ts";
 function setup(billing: "off" | "store" = "store") {
   const db = openDb(":memory:");
   const events = new EventHub(db);
-  const entitled = new Set<string>(); // 申請を出す試験の利用者は契約済み（課金の対象外）として扱う。契約の有無の試験は stripe/appstore/play/api の課金の試験で行う。
-  const accounts = new Accounts(db, events, billing, false, entitled);
+  const entitled = new Set<string>(); // 申請を出す試験の利用者は契約済み（課金の対象外）として扱う。契約の有無の試験は appstore/play/api の課金の試験で行う。
+  const accounts = new Accounts(db, events, billing, entitled);
   const decisions = new Decisions(db, events);
   const app = createApp({ db, accounts, decisions, events, publicUrl: "https://kb.test" });
   const userId = accounts.createUser();
@@ -227,7 +227,7 @@ test("セットアップ確認が済むまで課金させない（契約の無�
   const ctx = setup();
   ctx.entitled.delete(ctx.userId);
   const token = await paired(ctx);
-  const blocked = await ctx.call("POST", "/v1/billing/stripe/checkout", { token: ctx.session });
+  const blocked = await ctx.call("POST", "/v1/billing/play/verify", { token: ctx.session });
   assert.equal(blocked.json.error.code, "setup_not_verified");
   const me0 = await ctx.call("GET", "/v1/me", { token: ctx.session });
   assert.equal(me0.json.setup.verified, false);
@@ -246,7 +246,7 @@ test("セットアップ確認が済むまで課金させない（契約の無�
   const me = await ctx.call("GET", "/v1/me", { token: ctx.session });
   assert.equal(me.json.setup.verified, true);
   assert.equal(me.json.setup.checks.find((c: { client: string }) => c.client === "claude-code").status, "passed");
-  const nowAllowed = await ctx.call("POST", "/v1/billing/stripe/checkout", { token: ctx.session });
+  const nowAllowed = await ctx.call("POST", "/v1/billing/play/verify", { token: ctx.session });
   assert.notEqual(nowAllowed.json.error.code, "setup_not_verified");
 });
 
