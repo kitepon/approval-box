@@ -128,6 +128,7 @@ test("ライブラリを使わない時は今までどおり: /auth/v1 は無く
   const userId = accounts.createUser();
   const { session } = accounts.issueSession(userId, "test");
   assert.equal((await app.request("/auth/v1/signin/nonce", { method: "POST" })).status, 404);
+  assert.deepEqual(await (await app.request("/v1/auth/config")).json(), { library_login: false });
   const me = await app.request("/v1/me", { headers: { authorization: `Bearer ${session}` } });
   assert.equal(me.status, 200);
   const body = await me.json() as Record<string, unknown>;
@@ -139,6 +140,7 @@ test("ライブラリを使わない時は今までどおり: /auth/v1 は無く
 
 test("受け口: signin/nonce と signin に答え、K は公開の deriveK と同じ。回数は接続元ごとに絞る", async () => {
   const x = setup();
+  assert.equal((await x.call("GET", "/v1/auth/config")).json.library_login, true); // Web版がライブラリのQRログインへ切り替える目印
   const nonce = await x.call("POST", "/auth/v1/signin/nonce", { headers: { "x-forwarded-for": "9.9.9.9" } });
   assert.equal(nonce.status, 200);
   assert.match(nonce.json.nonce, /^[A-Za-z0-9_-]{22}$/);

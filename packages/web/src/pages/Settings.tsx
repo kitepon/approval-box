@@ -1,6 +1,7 @@
 import { t, days } from "../i18n.ts";
 import { useState } from "preact/hooks";
-import { api, setSession } from "../api";
+import { api, downloadExport, libraryLogin, setSession } from "../api";
+import { libraryClient } from "../librarylogin";
 import { navigate } from "../router";
 import { bump, loadMe, useResource } from "../store";
 import { CHECK_LABEL, clientLabel } from "../format";
@@ -27,9 +28,20 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   async function deleteAccount() {
     if (!confirm(t("アカウントと全データ（未決も含む）を削除します。元に戻せません。よろしいですか？"))) return;
     if (prompt(t("確認のため「削除」と入力してください")) !== t("削除")) return;
-    try { await api("DELETE", "/me"); setSession(null); onLogout(); } catch (e) { alert((e as Error).message); }
+    try { await api("DELETE", "/me"); setSession(null); } catch (e) { alert((e as Error).message); return; }
+    // 通行証のcookieが残ると、次に開いた時に空のアカウントを作り直すので、この端末の通行証も止める。止められなくても削除は済んでいる。
+    if (libraryLogin()) await libraryClient().signOut().catch(() => {});
+    onLogout();
+  }
+  async function exportCopy() {
+    try { await downloadExport(); } catch (e) { alert((e as Error).message); }
   }
   async function logout() {
+    if (libraryLogin()) {
+      try { await libraryClient().signOut(); } catch { alert(t("ログアウトできませんでした。通信を確かめてください。")); return; }
+      onLogout();
+      return;
+    }
     try { await api("POST", "/auth/logout"); } catch { /* 期限切れでも続ける */ }
     setSession(null);
     onLogout();
@@ -39,7 +51,7 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   return (
     <section>
       <h1>{t("設定")}</h1>
-      {m && <div class="panel"><h2>{t("ログイン")}</h2><p>{m.login === "google" ? t("Googleでログインしています。") : m.login === "apple" ? t("Appleでログインしています。") : t("AppleでもGoogleでもないログインで使っています（廃止した入口）。")}</p></div>}
+      {m && !libraryLogin() && <div class="panel"><h2>{t("ログイン")}</h2><p>{m.login === "google" ? t("Googleでログインしています。") : m.login === "apple" ? t("Appleでログインしています。") : t("AppleでもGoogleでもないログインで使っています（廃止した入口）。")}</p></div>}
       {m && (
         <div class="panel">
           <h2>{t("契約")}</h2>
@@ -82,6 +94,7 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         <h2>{t("アカウント")}</h2>
         <div class="row">
           <button class="ghost" onClick={logout}>{t("ログアウト")}</button>
+          <button class="ghost" onClick={exportCopy}>{t("保存されている情報の写しを受け取る")}</button>
           <button class="ghost danger" onClick={deleteAccount}>{t("アカウントと全データを削除")}</button>
         </div>
       </div>
