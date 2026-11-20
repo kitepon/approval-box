@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.46
+# Approval Box API（アプリ・Web版向け） v0.47
+
+2026-11-20 v0.47（追加のみ）: `GET /auth/config` に真偽値 `library_login` を足した。サーバーが共有ライブラリを `/auth/v1` に置いている時だけ `true`、置いていない時は `false`（古いサーバーでは項目が無い）。Web版は `true` の時だけライブラリのQRログインを出し、`false`・項目なしなら今までのApple・Googleのボタンのまま。Web版は、ライブラリのログインでは `Authorization` を付けずcookie（`lb_pass`）で `/v1` を呼ぶ。`GET /me/export` は設定の「保存されている情報の写しを受け取る」から取る。
 
 2026-11-20 v0.46（追加のみ・サーバーが共有ライブラリを使う設定の時だけ）: 共有の login & billing ライブラリ（[login-pass.md](architecture/login-pass.md)）を `/auth/v1` に置く（wire v1: signin/nonce・signin・receipt・handoff/start|approve|confirm|take・refuse・stop-all-others・signout。契約はライブラリの wire-v1）。`/v1` の `Authorization: Bearer` は、ライブラリの通行証（pass）か、今までのsessionのどちらでもよい（Webは cookie `lb_pass`）。通行証の更新は応答ヘッダー `Login-Billing-Pass`（cookieなら Set-Cookie）で返る。通行証で入った時は、申請の一覧・開く・答える・保留・消す・添付と `GET /events` に、月額の契約（または課金の対象外のアカウント）が要り、無ければ 402 `subscription_expired`。`/me`・`/me/settings`・`/me/export`・`DELETE /me`・端末・接続・ペアリング・セットアップ確認の申請そのもの（読む・答える）は契約なしで通る。通行証で入った `/me` は、`user_id` がライブラリのK、`plan` が契約から決まり、`purchase_mark`（購入に付ける印、Kと同じ）を足す。`GET /me/export` を足した（下）。接続トークンとBellTeamのsessionは、ライブラリが「契約なし」と覚えている間は402（BellTeamの `GET /me` は通す）。契約がなくなったと分かると、待っている申請（セットアップ確認以外）は取り下げられ、`cancel_reason` は `subscription_expired`。
 2026-11-20 v0.45（意味の変更・形は縮む）: クオの裁定でStripeを廃止した。課金はApp StoreとGoogle Playだけ。`GET /billing/stripe/offer`・`POST /billing/stripe/checkout`・`POST /billing/stripe/portal`・`POST /v1/stripe/webhook` を削除し、`/me` の `web_billing` と `store: "web"` を無くした（`store` は `app_store` か `google_play`）。Stripeの契約者は0人だった。`DELETE /me` はStripeの契約を止めない。アプリの呼ぶ経路（App Store・Google Playの検証）は変わらない。契約は[billing.md](billing.md)。
@@ -72,7 +74,7 @@ v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ�
   - `POST /auth/apple` `{ identity_token, nonce? }`: Appleの公開鍵で確かめる（aud はアプリの Bundle ID `dev.kitepon.approvalbox`、Web版は Services ID `dev.kitepon.approvalbox.web`）。
   - `POST /auth/google` `{ id_token, nonce? }`: Googleの公開鍵で確かめる（aud は Web・iOS・Android の OAuthクライアントID）。
   - nonce は送った時だけ照合する（生の値・SHA-256のどちらでもよい）。初めてのIDなら新しいアカウントを作る。
-  - `GET /auth/config`（Bearer不要）→ `{ google_client_id?, apple_services_id? }`。Web版のボタン用。無いものはボタンを出さない。
+  - `GET /auth/config`（Bearer不要）→ `{ google_client_id?, apple_services_id?, library_login }`。Web版のボタン用。無いものはボタンを出さない。`library_login`（v0.47）は、サーバーがライブラリを使う設定の時だけ `true`。`true` の時、Web版はApple・Googleのボタンを出さず、ライブラリのQRログイン（`/auth/v1`）だけを出す。項目が無い（古いサーバー）時は `false` と同じ。
   - `/me` の `login` は `"apple" | "google" | null`（null は廃止した入口で作った古いアカウント）。
   - サーバーが受け先を設定していなければ 400 `validation_failed`（自分で立てたサーバー）。
   - **ブラウザで始めるAppleとGoogleのログイン（AndroidのCustom Tabs・Linuxデスクトップ版のシステムのブラウザ）**。BearerもsessionもURLに載せない。`<provider>` は `apple` か `google`。
@@ -370,6 +372,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.47 2026-11-20 `GET /auth/config` に `library_login`（ライブラリのログインを使うサーバーだけ `true`）を追加。Web版がライブラリのQRログインへ切り替える目印。他は変わらない。
 - v0.46 2026-11-20 共有の login & billing ライブラリの導入（段階A、互換）: `/auth/v1`（ライブラリのwire v1）、`/v1` の通行証（Bearer・cookie）と応答ヘッダー `Login-Billing-Pass`、通行証での契約の関門（402 `subscription_expired`）、`/me` の `purchase_mark`、`GET /me/export`、契約がなくなった時の取り下げ（`cancel_reason: subscription_expired`）。旧いsessionと `/v1/auth/*` は今までどおり使える。ライブラリの鍵が無いサーバーは何も変わらない。
 - v0.45 2026-11-20 クオの裁定（Stripeを全アプリで廃止。課金はApp StoreとGoogle Playだけ）: `/billing/stripe/*`・`/stripe/webhook`・`/me.web_billing`・`store: "web"` を削除。`stripe_subscriptions` の表を落とす。アプリの呼ぶ経路は変えていない。
 - v0.44 2026-11-20 クオの規則（ストアの契約の状態はストアのサーバーから読み、通知は合図にとどめる）: App Storeも通知・verifyのあとAppleから読み直す。猶予期間は払い済み、課金の再試行・期限切れは未払い。期限切れを見た時は10分に1回までバックグラウンドで読み直す。アプリの形は変えていない。

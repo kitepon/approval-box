@@ -10,6 +10,12 @@ export function setSession(session: string | null) {
   try { session ? localStorage.setItem(SESSION_KEY, session) : localStorage.removeItem(SESSION_KEY); } catch { /* 保存できなくても今回は使える */ }
 }
 
+// ライブラリのログイン（サーバーが library_login を返した時）は、通行証のcookieだけで入る。Authorizationもsessionも使わない。
+let libraryMode = false;
+export const setLibraryLogin = (on: boolean) => { libraryMode = on; };
+export const libraryLogin = () => libraryMode;
+const bearerHeader = (): Record<string, string> => (libraryMode ? {} : { authorization: `Bearer ${getSession() ?? ""}` });
+
 export class ApiError extends Error {
   readonly status: number;
   readonly body: ApiErrorBody;
@@ -20,12 +26,21 @@ export class ApiError extends Error {
   }
 }
 
+/** 製品の { error: { code, message } } と、ライブラリの { error: "<code>" }（wire v1）の両方を読む。契約が無い402は、どの画面でも同じ案内にする。 */
+function errorBody(status: number, json: { error?: ApiErrorBody | string }): ApiErrorBody {
+  const error = json.error;
+  const code = typeof error === "string" ? error : error?.code;
+  if (status === 402 && (code === "subscription_expired" || code === "no_entitlement")) return { code: "subscription_expired", message: t("iPhone・Mac・Android のアプリで契約してください") };
+  if (typeof error === "string") return { code: error, message: `HTTP ${status}` };
+  return error ?? { code: "internal", message: `HTTP ${status}` };
+}
+
 let onUnauthorized: () => void = () => {};
 export const setUnauthorizedHandler = (fn: () => void) => { onUnauthorized = fn; };
 
 export async function api<T>(method: string, path: string, body?: unknown, options: { idempotent?: boolean } = {}): Promise<T> {
   const headers: Record<string, string> = { "content-type": "application/json", "accept-language": locale() };
-  const session = getSession();
+  const session = libraryMode ? null : getSession();
   if (session) headers.authorization = `Bearer ${session}`;
   if (options.idempotent ?? method !== "GET") headers["idempotency-key"] = crypto.randomUUID();
   const key = headers["idempotency-key"];
@@ -41,7 +56,7 @@ export async function api<T>(method: string, path: string, body?: unknown, optio
     const text = await response.text();
     const json = text ? JSON.parse(text) : {};
     if (response.ok) return json as T;
-    const err = (json.error ?? { code: "internal", message: `HTTP ${response.status}` }) as ApiErrorBody;
+    const err = errorBody(response.status, json);
     if (response.status === 401) { setSession(null); onUnauthorized(); }
     if (response.status >= 500 && attempt === 0 && key) continue;
     throw new ApiError(response.status, err);
@@ -51,7 +66,7 @@ export async function api<T>(method: string, path: string, body?: unknown, optio
 async function failure(response: Response): Promise<ApiError> {
   const json = await response.json().catch(() => ({}));
   if (response.status === 401) { setSession(null); onUnauthorized(); }
-  return new ApiError(response.status, (json.error ?? { code: "internal", message: `HTTP ${response.status}` }) as ApiErrorBody);
+  return new ApiError(response.status, errorBody(response.status, json));
 }
 
 /** 添付を1つ上げる（本文はファイルそのまま）。通信が切れたら同じ冪等キーで1回だけ送り直す。 */
@@ -61,7 +76,7 @@ export async function uploadAttachment(decisionId: string, file: Blob, name: str
     let response: Response;
     try {
       response = await fetch(`/v1/decisions/${encodeURIComponent(decisionId)}/attachments?name=${encodeURIComponent(name)}`, {
-        method: "POST", headers: { "accept-language": locale(), authorization: `Bearer ${getSession() ?? ""}`, "content-type": contentType, "idempotency-key": key }, body: file,
+        method: "POST", headers: { "accept-language": locale(), ...bearerHeader(), "content-type": contentType, "idempotency-key": key }, body: file,
       });
     } catch {
       if (attempt === 0) continue;
@@ -77,12 +92,29 @@ export async function uploadAttachment(decisionId: string, file: Blob, name: str
 export async function fetchAttachment(decisionId: string, attachmentId: string): Promise<Blob> {
   let response: Response;
   try {
-    response = await fetch(`/v1/decisions/${encodeURIComponent(decisionId)}/attachments/${encodeURIComponent(attachmentId)}`, { headers: { "accept-language": locale(), authorization: `Bearer ${getSession() ?? ""}` } });
+    response = await fetch(`/v1/decisions/${encodeURIComponent(decisionId)}/attachments/${encodeURIComponent(attachmentId)}`, { headers: { "accept-language": locale(), ...bearerHeader() } });
   } catch {
     throw new ApiError(0, { code: "network", message: t("サーバーにつながりません。通信を確かめてください。") });
   }
   if (!response.ok) throw await failure(response);
   return response.blob();
+}
+
+/** 保存している情報の写し（GET /me/export）を取り、JSONファイルとして保存する。フォームは無く、取れたらそのまま保存する。 */
+export async function downloadExport(): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch("/v1/me/export", { headers: { "accept-language": locale(), ...bearerHeader() } });
+  } catch {
+    throw new ApiError(0, { code: "network", message: t("サーバーにつながりません。通信を確かめてください。") });
+  }
+  if (!response.ok) throw await failure(response);
+  const name = /filename="?([^";]+)"?/.exec(response.headers.get("content-disposition") ?? "")?.[1] ?? "approval-box-export.json";
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url; link.download = name;
+  document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 /** /v1/events を読む。EventSourceはヘッダーを付けられないので fetch で読む。切れたら間隔を延ばして張り直す。 */
@@ -96,7 +128,7 @@ export function subscribeEvents(onEvent: (type: string, data: Record<string, unk
       try {
         controller = new AbortController();
         const response = await fetch("/v1/events", {
-          headers: { "accept-language": locale(), authorization: `Bearer ${getSession() ?? ""}`, accept: "text/event-stream", ...(lastId ? { "last-event-id": String(lastId) } : {}) },
+          headers: { "accept-language": locale(), ...bearerHeader(), accept: "text/event-stream", ...(lastId ? { "last-event-id": String(lastId) } : {}) },
           signal: controller.signal,
         });
         if (response.status === 401) { setSession(null); onUnauthorized(); return; }

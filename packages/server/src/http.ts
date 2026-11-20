@@ -177,8 +177,8 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     const id = await verifyIdToken(provider, token, { audiences, ...(input.nonce ? { nonce: input.nonce } : {}), ...(services.idKeys ? { keys: services.idKeys } : {}) });
     return c.json(await identify(provider, id.sub));
   };
-  // Web版のログインボタンに要る公開の値（秘密ではない）。設定が無ければ空で、Web版はボタンを出さない。
-  app.get("/v1/auth/config", (c) => c.json(services.webLogin ?? {}));
+  // Web版のログインボタンに要る公開の値（秘密ではない）。設定が無ければボタンは出ない。library_login はライブラリのQRログインを使うサーバーだけ true。
+  app.get("/v1/auth/config", (c) => c.json({ ...(services.webLogin ?? {}), library_login: !!library }));
   app.post("/v1/auth/apple", signIn("apple", services.appleAudiences ?? []));
 
   // ブラウザで始めるAppleとGoogleのログイン（AndroidのCustom Tabs・Linuxデスクトップ版のシステムのブラウザ）。

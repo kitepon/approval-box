@@ -4,7 +4,7 @@ import { systemMessage, t, locale, useLocale } from "./i18n.ts";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
 
-type Config = { google_client_id?: string; apple_services_id?: string };
+type Config = { google_client_id?: string; apple_services_id?: string; library_login?: boolean };
 type Result = { session: string };
 
 declare global {

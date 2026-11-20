@@ -46,5 +46,14 @@ export const en = {
   "「{name}」の許可を外します。{name}はApproval Boxを読めなくなります。": "Remove the permission for {name}? {name} will no longer be able to read Approval Box.",
   "利用規約": "Terms of Service",
   "特定商取引法に基づく表記": "Notation based on the Specified Commercial Transactions Act",
+  "QRコード": "QR code",
+  "コード": "Code",
+  "スマホの決裁箱アプリで読み取るか、コードを入力してください。表示される番号が {checkNumber} か確かめてください。": "Scan the QR code with the Approval Box app on your phone, or enter the code. Check that the number it shows is {checkNumber}.",
+  "契約がまだの方は、先にスマホで契約してください。": "If you have not subscribed yet, subscribe on your phone first.",
+  "コードの有効期限が切れました。": "The code has expired.",
+  "コードを出せませんでした。通信を確かめてください。": "Could not get a code. Check your connection.",
+  "新しいコードを出す": "Get a new code",
+  "保存されている情報の写しを受け取る": "Get a copy of the information we keep",
+  "ログアウトできませんでした。通信を確かめてください。": "Could not sign out. Check your connection.",
 } as const;
 export type MessageKey = keyof typeof en;
