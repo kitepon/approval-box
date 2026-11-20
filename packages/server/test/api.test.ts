@@ -54,6 +54,15 @@ async function submit(ctx: ReturnType<typeof setup>, token: string, body: Record
 
 const request = { title: "DBの移行をいま実行してよいか", context: "停止は30秒", options: [{ id: "a", label: "いま実行" }, { id: "b", label: "夜間" }], recommendation: "b", urgency: "high", session_label: "approval-box / server", client: "claude-code", route: { channel_id: "ch-1", harness: "claude" } };
 
+test("申請者の名前が無い申請は、確かめの段階で名前を入れるよう知らせる", async (t) => {
+  const ctx = setup(), token = await paired(ctx);
+  t.after(() => ctx.db.close());
+  const nameless = await ctx.call("POST", "/connector/v1/decisions", { token, body: request });
+  assert.match(nameless.json.error.message, /requester_name/);
+  const named = await ctx.call("POST", "/connector/v1/decisions", { token, body: { ...request, requester: "ヘンゼル" } });
+  assert.doesNotMatch(named.json.error.message, /requester_name/);
+});
+
 test("同じIdempotency-Keyの同時回答は同じ成功応答を返し、保存は1回に留める", async (t) => {
   const ctx = setup(), token = await paired(ctx);
   t.after(() => ctx.db.close());
