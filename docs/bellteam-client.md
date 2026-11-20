@@ -59,7 +59,7 @@ Not allowed: attachment upload/stage/delete, `DELETE /decisions`, `/connections`
 | Start | `pairings` (`client`, 15 min) | public POST → code, poll secret | expires; start again |
 | Consent | Web `/pair` page, `claim`/`reject` | signed-in user + `confirm_client` → session issued, stored in the pairing row until polled | 409 without confirm; expiry |
 | Hand-over | `pairings.token` | poll with the secret → session once, then cleared | `delivered`/`expired` |
-| Scoped access | `sessions.client`, `CLIENT_ROUTES` | bearer → user + client; allowlist | 401 expired/removed; 403 outside the list |
+| Scoped access | `sessions.client`, `CLIENT_ROUTES` | bearer → user + client; allowlist. In library mode ([login-pass.md](architecture/login-pass.md)) every allowed route except `GET /me` also answers 402 `subscription_expired` while the library remembers the account as having no contract (G2) | 401 expired/removed; 403 outside the list; 402 no contract |
 | Revoke | `connections()` / `revokeConnection` | user's DELETE → session deleted | 404 if already gone |
 
 Unchanged: login sessions, connector tokens, remote MCP, existing routes and shapes, billing. Errors added: 403 `forbidden`.

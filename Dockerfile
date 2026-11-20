@@ -23,6 +23,8 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/server/package.json packages/server/
 COPY packages/web/package.json packages/web/
 COPY packages/connector/package.json packages/connector/
+# 共有ライブラリ（login-billing）の配布物。npm ci が package-lock の integrity で確かめる。
+COPY vendor/ vendor/
 RUN npm ci --no-audit --no-fund
 COPY packages/server packages/server
 COPY packages/web packages/web
@@ -51,6 +53,7 @@ FROM verified-node AS checks
 WORKDIR /src
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/ packages/
+COPY vendor/ vendor/
 COPY tools/deploy/start-with-secrets.sh tools/deploy/start-with-secrets.sh
 RUN apt-get update && apt-get install -y --no-install-recommends openssl \
  && rm -rf /var/lib/apt/lists/*

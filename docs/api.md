@@ -1,5 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.45
+# Approval Box API（アプリ・Web版向け） v0.46
 
+2026-11-20 v0.46（追加のみ・サーバーが共有ライブラリを使う設定の時だけ）: 共有の login & billing ライブラリ（[login-pass.md](architecture/login-pass.md)）を `/auth/v1` に置く（wire v1: signin/nonce・signin・receipt・handoff/start|approve|confirm|take・refuse・stop-all-others・signout。契約はライブラリの wire-v1）。`/v1` の `Authorization: Bearer` は、ライブラリの通行証（pass）か、今までのsessionのどちらでもよい（Webは cookie `lb_pass`）。通行証の更新は応答ヘッダー `Login-Billing-Pass`（cookieなら Set-Cookie）で返る。通行証で入った時は、申請の一覧・開く・答える・保留・消す・添付と `GET /events` に、月額の契約（または課金の対象外のアカウント）が要り、無ければ 402 `subscription_expired`。`/me`・`/me/settings`・`/me/export`・`DELETE /me`・端末・接続・ペアリング・セットアップ確認の申請そのもの（読む・答える）は契約なしで通る。通行証で入った `/me` は、`user_id` がライブラリのK、`plan` が契約から決まり、`purchase_mark`（購入に付ける印、Kと同じ）を足す。`GET /me/export` を足した（下）。接続トークンとBellTeamのsessionは、ライブラリが「契約なし」と覚えている間は402（BellTeamの `GET /me` は通す）。契約がなくなったと分かると、待っている申請（セットアップ確認以外）は取り下げられ、`cancel_reason` は `subscription_expired`。
 2026-11-20 v0.45（意味の変更・形は縮む）: クオの裁定でStripeを廃止した。課金はApp StoreとGoogle Playだけ。`GET /billing/stripe/offer`・`POST /billing/stripe/checkout`・`POST /billing/stripe/portal`・`POST /v1/stripe/webhook` を削除し、`/me` の `web_billing` と `store: "web"` を無くした（`store` は `app_store` か `google_play`）。Stripeの契約者は0人だった。`DELETE /me` はStripeの契約を止めない。アプリの呼ぶ経路（App Store・Google Playの検証）は変わらない。契約は[billing.md](billing.md)。
 
 2026-11-20 v0.44（意味の変更・形は変わらない）: App Storeの契約の状態を、Appleのサーバー（App Store Server API）から読み直すようにした。通知（V2）と `POST /billing/appstore/verify` は、署名を確かめたあと、アプリが送った署名付きの取引や通知の本文ではなく、Appleが返す最新の状態で `plan`・`expires_at` を決める。更新の通知を取りこぼしても、期限が過ぎた契約を `/me` やAIの申請が見つけた時に、サーバーが10分に1回までAppleへ読みに行く。課金の猶予期間（Billing Grace Period）の間は `active` のままになる。Appleの鍵が無いサーバーは今までどおり（署名付きの取引だけで決める）。アプリのリクエスト・レスポンスは変わらない。契約は[billing.md](billing.md)。
@@ -301,6 +302,7 @@ setup: {
 | メソッド | パス | 内容 |
 |---|---|---|
 | GET | `/me` | `{ user_id (UUID、小文字), login: "apple" \| "google" \| null, setup, plan: "active" \| "expired", expires_at?, store?: "app_store" \| "google_play" }` |
+| GET | `/me/export` | このアカウントに保存している全ての写しを、JSONファイル1つで返す（`Content-Disposition: attachment; filename="approval-box-export-YYYYMMDD.json"`）。通行証でもsessionでも取れ、契約が切れていても取れる。接続トークンとBellTeamのsessionは使えない（403・401）。中身: `account`（設定・契約の欄）・`decisions`（履歴・答え）・`attachments`（メタ情報と中身のbase64）・`connections`（トークンのハッシュは無し）・`devices`（通知の宛先は無し）・`setup_checks`。他のアカウントと秘密は入らない |
 | DELETE | `/me` | アカウントと全データの削除（App Store・Google Playの審査で必須） |
 | DELETE | `/decisions?status=answered,cancelled` | 設定の「データ削除」。既決（answered・cancelled）だけを消す → `{ deleted: int }`。pending・heldは消さない（AIが答えを待っているため）。アカウント・接続・端末は残る |
 | GET | `/me/settings` | `{ retention_days: 7 \| 30 \| 90 \| 365 }`（既定30。既決をこの日数で自動削除） |
@@ -368,6 +370,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.46 2026-11-20 共有の login & billing ライブラリの導入（段階A、互換）: `/auth/v1`（ライブラリのwire v1）、`/v1` の通行証（Bearer・cookie）と応答ヘッダー `Login-Billing-Pass`、通行証での契約の関門（402 `subscription_expired`）、`/me` の `purchase_mark`、`GET /me/export`、契約がなくなった時の取り下げ（`cancel_reason: subscription_expired`）。旧いsessionと `/v1/auth/*` は今までどおり使える。ライブラリの鍵が無いサーバーは何も変わらない。
 - v0.45 2026-11-20 クオの裁定（Stripeを全アプリで廃止。課金はApp StoreとGoogle Playだけ）: `/billing/stripe/*`・`/stripe/webhook`・`/me.web_billing`・`store: "web"` を削除。`stripe_subscriptions` の表を落とす。アプリの呼ぶ経路は変えていない。
 - v0.44 2026-11-20 クオの規則（ストアの契約の状態はストアのサーバーから読み、通知は合図にとどめる）: App Storeも通知・verifyのあとAppleから読み直す。猶予期間は払い済み、課金の再試行・期限切れは未払い。期限切れを見た時は10分に1回までバックグラウンドで読み直す。アプリの形は変えていない。
 - v0.43 2026-11-20 Web版の契約前の確認画面（旦那の承認した文言）: `GET /billing/stripe/offer` を追加し、Checkoutに利用規約への同意（`consent_collection[terms_of_service]=required`）を付けた。

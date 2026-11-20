@@ -16,8 +16,12 @@ import type { EventHub, UserEvent } from "./events.ts";
 import { Decisions, amendSchema, answerSchema, createSchema, routeSchema } from "./decisions.ts";
 import { now } from "./ids.ts";
 import { type RemoteMcpOptions, remoteMcpHandler } from "./remote-mcp.ts";
+import { LoginBillingError, type Checked } from "@kitepon/login-billing/server";
+import { getConnInfo } from "@hono/node-server/conninfo";
+import { type Library, PRODUCT_ID } from "./lb.ts";
+import { exportAccount } from "./export.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal; library?: Library };
 
 /** 登録クライアント（BellTeamなど）のsessionが通れる `/v1` の経路。ここに無いものは403。 */
 const CLIENT_ROUTES: [string, RegExp][] = [
@@ -28,6 +32,18 @@ const CLIENT_ROUTES: [string, RegExp][] = [
   ["GET", /^\/events$/],
   ["GET", /^\/me$/],
 ];
+
+/** 共有ライブラリの通行証で、契約が要る経路（G1）。申請の一覧・開く・答える・保留・消す・添付、更新の知らせ。 */
+const PAID_ROUTES = [/^\/decisions(\/|$)/, /^\/events$/];
+/** 契約が無くても通す、セットアップ確認の申請を読む・答える経路。 */
+const SETUP_ROUTES: [string, RegExp][] = [["GET", /^\/decisions\/([^/]+)$/], ["POST", /^\/decisions\/([^/]+)\/answer$/]];
+
+/** 回数制限の単位（接続元）。前段の中継が付ける X-Forwarded-For の最後（中継が見た相手）か、直の接続元。メモリだけで使い、保存もログにも出さない。 */
+function clientKey(c: Context): string {
+  const forwarded = c.req.header("x-forwarded-for");
+  if (forwarded) return forwarded.split(",").at(-1)!.trim();
+  try { return getConnInfo(c).remote.address ?? ""; } catch { return ""; }
+}
 
 const STATUSES = ["pending", "held", "answered", "cancelled"] as const;
 /** アプリへ戻すURLのscheme（AndroidのCustom Tabsから戻る先）。 */
@@ -110,7 +126,9 @@ function fileResponse(c: Context, meta: Attachment, data: Buffer) {
 }
 
 export function createApp(services: Services, options: { staticHandler?: (c: Context) => Response | Promise<Response> } = {}) {
-  const { accounts, decisions, events } = services;
+  const { accounts, decisions, events, library } = services;
+  /** AppleかGoogleで入る。ライブラリを使う時は、新しいアカウントのIDをライブラリのKにする（旧い入口と新しい入口が同じアカウントに着く）。 */
+  const identify = async (provider: Provider, subject: string) => accounts.signInWithIdentity(provider, subject, library ? await library.lb.deriveK(provider, subject) : undefined);
   const files = () => {
     if (!services.attachments) throw new ApiError("not_found", "このサーバーでは添付を使えません。");
     return services.attachments;
@@ -136,6 +154,14 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(new ApiError("internal", "サーバーで問題が起きました。時間を置いて試してください。").body(locale), 500);
   });
 
+  // 共有ライブラリ（login-billing）の受け口。署名・QR・通行証の更新など、wire v1の経路は全部ここで答える。
+  if (library) {
+    app.use("/auth/v1/*", async (c, next) => {
+      if (!library.allow(c.req.path, clientKey(c))) return library.handler.errorResponse("rate_limited", c.req.raw);
+      return (await library.handler.handle(c.req.raw)) ?? next();
+    });
+  }
+
   const diagnostics = new Diagnostics(services.db);
   app.route("/api/admin",diagnosticsAdmin(diagnostics,services.diagnosticsAdminToken));
 
@@ -149,7 +175,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     const token = input.identity_token ?? input.id_token;
     if (!token) throw new ApiError("validation_failed", provider === "apple" ? "identity_token が要ります。" : "id_token が要ります。");
     const id = await verifyIdToken(provider, token, { audiences, ...(input.nonce ? { nonce: input.nonce } : {}), ...(services.idKeys ? { keys: services.idKeys } : {}) });
-    return c.json(accounts.signInWithIdentity(provider, id.sub));
+    return c.json(await identify(provider, id.sub));
   };
   // Web版のログインボタンに要る公開の値（秘密ではない）。設定が無ければ空で、Web版はボタンを出さない。
   app.get("/v1/auth/config", (c) => c.json(services.webLogin ?? {}));
@@ -187,7 +213,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
         const flow = accounts.takeAuthFlow(state, provider);
         if (typeof form.id_token !== "string") return back({ error: `${provider}_error` });
         const id = await verifyIdToken(provider, form.id_token, { audiences: [audience], nonce: flow.nonce, ...(services.idKeys ? { keys: services.idKeys } : {}) });
-        const signed = accounts.signInWithIdentity(provider, id.sub);
+        const signed = await identify(provider, id.sub);
         accounts.bindAuthFlow(state, signed.user.id);
         accounts.revokeSession(signed.session); // ここで作ったsessionは使わない。アプリには一度きりのコードを渡す
         return back({ code: accounts.createAppCode(signed.user.id, flow.code_challenge) });
@@ -217,12 +243,35 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(accounts.redeemAppCode(input.code, input.code_verifier));
   });
 
-  const v1 = new Hono<{ Variables: { userId: string; clientSessionId: string | undefined } }>();
+  const v1 = new Hono<{ Variables: { userId: string; clientSessionId: string | undefined; pass: Checked | undefined } }>();
   v1.use("*", async (c, next) => {
+    const path = c.req.path.slice("/v1".length);
+    // ライブラリを使う時は、先にライブラリの通行証（Bearerかcookie）として確かめる。通行証でなければ（pass_invalid）、今までのsessionとして扱う。
+    const pass = library ? await library.handler.authenticate(c.req.raw).catch((error: unknown) => {
+      if (!(error instanceof LoginBillingError)) throw error;
+      return error.code === "pass_invalid" ? undefined : library.handler.errorResponse(error.code, c.req.raw);
+    }) : undefined;
+    if (pass instanceof Response) return pass;
+    if (pass) {
+      accounts.ensureUser(pass.k);
+      // 更新された通行証（Login-Billing-Pass、cookieならSet-Cookie）を、この応答に付ける。
+      for (const [name, value] of pass.headers) if (name !== "set-cookie") c.header(name, value);
+      for (const cookie of pass.headers.getSetCookie()) c.header("set-cookie", cookie, { append: true });
+      // G1: 契約（またはexemptのK）が要る経路。セットアップ確認の申請を読む・答えるだけは契約なしで通す。
+      if (PAID_ROUTES.some((p) => p.test(path)) && !pass.entitlements.some((e) => e.productId === PRODUCT_ID)
+        && !SETUP_ROUTES.some(([method, p]) => method === c.req.method && get<{ test: number }>(services.db, "select test from decisions where id = ? and user_id = ?", p.exec(path)?.[1] ?? "", pass.k)?.test)) {
+        throw new ApiError("subscription_expired", "Approval Boxの契約がありません。iPhone・Mac・Android のアプリで契約してください。");
+      }
+      c.set("userId", pass.k);
+      c.set("pass", pass);
+      return next();
+    }
     const auth = accounts.authenticate(bearer(c));
-    // 登録クライアントのsessionが通れるのは許可表の経路だけ（docs/bellteam-client.md）。ログインのsessionは制限しない。
-    if (auth.client && !CLIENT_ROUTES.some(([method, path]) => method === c.req.method && path.test(c.req.path.slice("/v1".length)))) {
-      throw new ApiError("forbidden", "この許可では、このAPIは使えません。");
+    if (auth.client) {
+      // 登録クライアントのsessionが通れるのは許可表の経路だけ（docs/bellteam-client.md）。ログインのsessionは制限しない。
+      if (!CLIENT_ROUTES.some(([method, p]) => method === c.req.method && p.test(path))) throw new ApiError("forbidden", "この許可では、このAPIは使えません。");
+      // G2: ライブラリが「契約なし」と覚えているアカウントは、/me 以外を402にする。
+      if (path !== "/me") accounts.assertContract(auth.userId);
     }
     c.set("userId", auth.userId);
     c.set("clientSessionId", auth.sessionId);
@@ -334,7 +383,14 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   });
   v1.post("/pairing/:id/reject", (c) => idempotent(c, services, c.get("userId"), () => { accounts.rejectPairing(c.get("userId"), c.req.param("id")); return { ok: true }; }));
 
-  v1.get("/me", (c) => c.json(accounts.me(c.get("userId"))));
+  v1.get("/me", (c) => c.json(accounts.me(c.get("userId"), c.get("pass")?.entitlements)));
+  // 自分のアカウントに保存している全ての写し。どの端末でも（契約が切れていても）取れる。
+  v1.get("/me/export", (c) => {
+    const day = now().slice(0, 10).replaceAll("-", "");
+    return c.body(JSON.stringify(exportAccount(services, c.get("userId"))), 200, {
+      "content-type": "application/json", "content-disposition": `attachment; filename="approval-box-export-${day}.json"`, "cache-control": "private, no-store",
+    });
+  });
   v1.delete("/me", async (c) => {
     const userId = c.get("userId");
     const ids = services.attachments?.userFileIds(userId) ?? [];

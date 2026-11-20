@@ -389,6 +389,8 @@ const MIGRATIONS: ((db: Db) => void)[] = [
   (db) => { db.exec("update users set plan = 'expired' where plan = 'trial'"); },
   // 15: Stripeを廃止した（クオの裁定 2026-11-20。契約者は0人）。契約の表を落とす。
   (db) => { db.exec("drop table if exists stripe_subscriptions"); },
+  // 16: 共有ライブラリ（login-billing）の置き場 lb_kv。nonce・QRの枠・止めた通行証の印を期限つきで持ち、期限切れは定期の掃除で消す。
+  (db) => { db.exec("create table if not exists lb_kv (key text primary key, value text not null, expires_at integer not null)"); },
 ];
 
 function migrate(db: Db) {
