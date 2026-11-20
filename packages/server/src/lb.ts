@@ -1,4 +1,4 @@
-// 共有の login-billing ライブラリ（kitepon/login-billing 0.4.0、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
+// 共有の login-billing ライブラリ（kitepon/login-billing 0.4.1、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
 // ライブラリの内側は読まない。公開の入口（createLoginBilling・createHandler・Storage）だけを使う。
 import { createHandler, createLoginBilling, type AppleStoreConfig, type GoogleStoreConfig, type LoginBilling, type Storage } from "@kitepon/login-billing/server";
 import { type Db, get, run } from "./db.ts";
