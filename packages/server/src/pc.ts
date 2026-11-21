@@ -6,7 +6,7 @@ import { LoginBillingError } from "@kitepon/login-billing/server";
 import { createServerPart, SqliteMirrorStore, type Identity, type ServerPart } from "@kitepon/peer-channel/server";
 import type { Accounts } from "./accounts.ts";
 import { ApiError } from "./errors.ts";
-import type { Library } from "./lb.ts";
+import { type Library, PRODUCT_ID } from "./lb.ts";
 
 export type PeerChannelInput = {
   accounts: Accounts;
@@ -32,19 +32,27 @@ const bearer = (req: IncomingMessage) => /^Bearer\s+(\S+)$/i.exec(req.headers.au
 /**
  * 端末は共有ライブラリの通行証（Bearer）で、AI の接続（コネクタ）は接続トークンで入る（peer-channel 契約 6.1）。
  * 通行証でない（pass_invalid）時だけ接続トークンとして確かめる。どちらでもなければ null（401）、ライブラリが断った通行証はその名前で 403。
+ * 契約が無い時（/v1 の G1・/connector/v1 の G2 と同じ判定）は入れるが、端末の join と接続の wait.open だけをその符号で断る（契約 10.2）。
+ * 通行証が更新された時は、/v1 と同じく Login-Billing-Pass（cookie なら Set-Cookie）を /pc/v1 の HTTP の答えに付ける。
  */
 export function authenticate(accounts: Accounts, library: Library, publicUrl: string) {
   return async (req: IncomingMessage): Promise<Identity | { refused: string } | null> => {
     try {
       const pass = await library.handler.authenticate(asRequest(req, publicUrl));
-      return { k: pass.k, kind: "device", endpoint_ref: pass.passId, pass_kind: pass.kind };
+      const headers: Record<string, string | string[]> = {};
+      for (const [name, value] of pass.headers) if (name !== "set-cookie") headers[name] = value;
+      if (pass.headers.getSetCookie().length) headers["set-cookie"] = pass.headers.getSetCookie();
+      const paid = pass.entitlements.some((e) => e.productId === PRODUCT_ID); // G1 と同じ（exempt の K もライブラリが権利として返す）
+      return { k: pass.k, kind: "device", endpoint_ref: pass.passId, pass_kind: pass.kind, ...(paid ? {} : { not_entitled: "no_entitlement" }), response_headers: headers };
     } catch (error) {
       if (!(error instanceof LoginBillingError)) throw error;
       if (error.code !== "pass_invalid") return { refused: error.code };
     }
     try {
       const conn = accounts.connectionByToken(bearer(req));
-      return { k: conn.user_id, kind: "connector", endpoint_ref: conn.id };
+      let notEntitled: string | undefined;
+      try { accounts.assertCanUse(conn.user_id); } catch (error) { if (!(error instanceof ApiError)) throw error; notEntitled = error.code; } // G2: /connector/v1 が申請の前に見るのと同じ
+      return { k: conn.user_id, kind: "connector", endpoint_ref: conn.id, ...(notEntitled ? { not_entitled: notEntitled } : {}) };
     } catch (error) {
       if (error instanceof ApiError) return null;
       throw error;

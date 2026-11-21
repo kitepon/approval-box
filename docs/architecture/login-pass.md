@@ -71,6 +71,10 @@ flowchart LR
 - Test environment: a second server `approval-box-test` on main-server with its own database and keys, at https://approval-box-test.kitepon.dev, App Store sandbox and Play internal track. t14 closes when the server and every app run there.
 - Google id-only test preparation (README list): dedicated Google Cloud OAuth web client (consent scope openid only) + Android OAuth client in the same project; web client secret through Sakura into signIn.googleCode; Android switch for the id-only route; two test Google accounts (fresh, and one that granted e-mail first).
 
+## Web sign-in returns and app links (c8b2, test server first)
+- The library's web sign-in (contract 1.20, `websignin/start` → provider → `GET websignin/callback` → `websignin/take`) returns to the app in one of three ways: a loopback address (Linux and desktop clients listening on 127.0.0.1), the custom scheme `approvalbox-websignin` (the library's `sessionScheme`, for in-app browser sessions such as ASWebAuthenticationSession), or the verified link `https://<origin>/app/websignin` (Android App Links, Apple Universal Links). Approval Box serves nothing at `/app/websignin` itself beyond the Web app; the apps claim that path.
+- `/.well-known/assetlinks.json` and `/.well-known/apple-app-site-association` are built only from the settings (server/applinks.ts): `AB_ANDROID_APP_LINKS` = `<package>=<SHA-256 fingerprint>[,<fingerprint>…]`, apps separated by `;` (fingerprints as Play Console shows them, 32 hex pairs joined by `:`); `AB_APPLE_APP_IDS` = `<TeamID>.<bundleId>`, comma-separated. Served as `application/json` with no redirect; Apple's file declares `applinks` for `/app/websignin` only (no `webcredentials`); Android's path is narrowed by the app's manifest. Unset → 404; a malformed entry is left out with one startup line naming the entry (no values). The members send the values; the coordinator sets them on the test server.
+
 ## Not changed
 - Connection tokens and BellTeam client tokens stay valid; only their owner key becomes K. Nobody pairs again.
 - Diagnostics stay unlinked to accounts.

@@ -15,6 +15,8 @@ import { Decisions } from "../src/decisions.ts";
 import { EventHub } from "../src/events.ts";
 import { createApp } from "../src/http.ts";
 import { createLibrary } from "../src/lb.ts";
+import { deriveKWith } from "@kitepon/login-billing/server";
+import { type AppLinks, parseAppLinks } from "../src/applinks.ts";
 import { resetKeyCache } from "../src/oidc.ts";
 import { authenticate, createPeerChannel } from "../src/pc.ts";
 import { Waker } from "../src/push.ts";
@@ -35,16 +37,20 @@ const keysOnly = (async (input: string | URL | Request) =>
   String(input) === "https://appleid.apple.com/auth/keys" ? Response.json({ keys: [jwk] }) : new Response("", { status: 404 })) as typeof fetch;
 
 /** ライブラリ・アプリ・peer-channel を、本番と同じ serve の createServer で立てる。起こしは記録するだけ。 */
-async function setup() {
+async function setup(opts: { billing?: "off" | "store"; exemptSubs?: string[]; offset?: { value: number }; appLinks?: AppLinks } = {}) {
   resetKeyCache();
   const db = openDb(":memory:");
   const events = new EventHub(db);
-  const accounts = new Accounts(db, events, "off", new Set());
+  const kKey = randomBytes(32).toString("base64url");
+  const exempt = await Promise.all((opts.exemptSubs ?? []).map((sub) => deriveKWith(Buffer.from(kKey, "base64url"), "apple", sub)));
+  const billing = opts.billing ?? "off";
+  const accounts = new Accounts(db, events, billing, new Set(exempt));
   const decisions = new Decisions(db, events);
-  const library = createLibrary({ db, publicUrl: ORIGIN, billing: "off", kKey: randomBytes(32).toString("base64url"), passKey: { id: "p1", key: randomBytes(32).toString("base64url") }, appleAudiences: [BUNDLE], googleAudiences: [], exemptK: [], fetch: keysOnly });
+  const offset = opts.offset ?? { value: 0 };
+  const library = createLibrary({ db, publicUrl: ORIGIN, billing, kKey, passKey: { id: "p1", key: randomBytes(32).toString("base64url") }, appleAudiences: [BUNDLE], googleAudiences: [], exemptK: exempt, fetch: keysOnly, now: () => Date.now() + offset.value });
   const wakes: { k: string; alert: boolean }[] = [];
   const pc = createPeerChannel({ accounts, library, publicUrl: ORIGIN, mirrorPath: join(dir, `m-${randomBytes(4).toString("hex")}.db`), wake: (k, alert) => { wakes.push({ k, alert }); } });
-  const app = createApp({ db, accounts, decisions, events, publicUrl: ORIGIN, library, peerChannel: pc.part, appleAudiences: [BUNDLE] });
+  const app = createApp({ db, accounts, decisions, events, publicUrl: ORIGIN, library, peerChannel: pc.part, appleAudiences: [BUNDLE], ...(opts.appLinks ? { appLinks: opts.appLinks } : {}) });
   const server = await new Promise<ReturnType<typeof serve>>((ok) => { const s = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1", createServer: pc.createServer }, () => ok(s)); });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const call = (method: string, path: string, token?: string, body?: unknown) =>
@@ -157,4 +163,85 @@ test("a wake carries no content: fixed APNs and FCM payloads, no title, requeste
     { via: "fcm", token: "tok-android", data: { pc: "1", a: "0" }, priority: "normal" },
   ]);
   assert.doesNotMatch(JSON.stringify(sent), /secret|dec1|badge|title|body/);
+});
+
+/** A socket on /pc/v1/signal and the next message it receives. */
+async function socket(base: string, token: string) {
+  const ws = new WebSocket(`${base.replace("http", "ws")}/pc/v1/signal`, { headers: { authorization: `Bearer ${token}` } } as never);
+  const inbox: any[] = [];
+  ws.onmessage = (e) => inbox.push(JSON.parse(String(e.data)));
+  await new Promise((ok, fail) => { ws.onopen = ok; ws.onerror = fail; });
+  const next = async () => { for (let i = 0; i < 100 && !inbox.length; i++) await new Promise((r) => setTimeout(r, 20)); return inbox.shift(); };
+  return { ws, next, send: (m: object) => ws.send(JSON.stringify(m)) };
+}
+
+test("contract 10.2: a device pass without the subscription is refused at join (no_entitlement); an exempt account joins", async () => {
+  const x = await setup({ billing: "store", exemptSubs: ["owner"] });
+  try {
+    const unpaid = await x.signIn("frank");
+    const owner = await x.signIn("owner");
+    const auth = authenticate(x.accounts, x.library, ORIGIN);
+    const id = await auth(req(`Bearer ${unpaid.pass}`));
+    assert.equal(id && !("refused" in id) && id.not_entitled, "no_entitlement");
+    const a = await socket(x.base, unpaid.pass);
+    a.send({ type: "join" });
+    assert.deepEqual(await a.next(), { type: "error", code: "no_entitlement", of: "join" });
+    assert.equal((await x.call("GET", "/pc/v1/registry", unpaid.pass)).status, 200); // the mirror stays readable (admission needs it)
+    const b = await socket(x.base, owner.pass);
+    b.send({ type: "join" });
+    assert.deepEqual(await b.next(), { type: "waits", waits: [] });
+    a.ws.close(); b.ws.close();
+  } finally { await x.close(); }
+});
+
+test("G2 on /pc/v1: a connector of an account without a contract may connect but not open a wait (subscription_expired), as on /connector/v1", async () => {
+  const x = await setup({ billing: "store", exemptSubs: ["owner"] });
+  try {
+    const unpaid = await x.signIn("gina");
+    const owner = await x.signIn("owner");
+    for (const k of [unpaid.k, owner.k]) x.accounts.ensureUser(k);
+    const c1 = await socket(x.base, x.accounts.createConnection(unpaid.k, "pc", "linux", []).token);
+    c1.send({ type: "wait.open", wait_id: b64url(randomBytes(16)), alert: true });
+    assert.deepEqual(await c1.next(), { type: "error", code: "subscription_expired", of: "wait.open" });
+    const c2 = await socket(x.base, x.accounts.createConnection(owner.k, "pc", "linux", []).token);
+    c2.send({ type: "wait.open", wait_id: b64url(randomBytes(16)), alert: true });
+    for (let i = 0; i < 50 && !x.wakes.length; i++) await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(x.wakes, [{ k: owner.k, alert: true }]);
+    c1.ws.close(); c2.ws.close();
+  } finally { await x.close(); }
+});
+
+test("a renewed pass comes back in Login-Billing-Pass on /pc/v1 HTTP answers, as on /v1", async () => {
+  const offset = { value: 0 };
+  const x = await setup({ offset });
+  try {
+    const { pass } = await x.signIn("hana");
+    assert.equal((await x.call("GET", "/pc/v1/registry", pass)).headers.get("login-billing-pass"), null);
+    offset.value = 25 * 3600_000;
+    const renewed = (await x.call("GET", "/pc/v1/registry", pass)).headers.get("login-billing-pass");
+    assert.ok(renewed && renewed !== pass);
+    assert.equal((await x.call("GET", "/pc/v1/registry", renewed)).status, 200);
+  } finally { await x.close(); }
+});
+
+test("/.well-known app links: served from the settings as JSON without redirect, 404 when unset, malformed entries left out", async () => {
+  const fp = Array.from({ length: 32 }, (_, i) => (i * 7 % 256).toString(16).padStart(2, "0")).join(":");
+  const parsed = parseAppLinks(`dev.kitepon.approvalbox=${fp};bad package=XX`, "ABCDE12345.dev.kitepon.approvalbox,notanid");
+  assert.deepEqual(parsed.problems, ["AB_ANDROID_APP_LINKS entry 2", "AB_APPLE_APP_IDS entry 2"]);
+  const x = await setup({ appLinks: parsed.links });
+  try {
+    const android = await x.call("GET", "/.well-known/assetlinks.json");
+    assert.equal(android.status, 200);
+    assert.equal(android.headers.get("content-type"), "application/json");
+    assert.deepEqual(await android.json(), [{ relation: ["delegate_permission/common.handle_all_urls"], target: { namespace: "android_app", package_name: "dev.kitepon.approvalbox", sha256_cert_fingerprints: [fp.toUpperCase()] } }]);
+    const apple = await fetch(`${x.base}/.well-known/apple-app-site-association`, { redirect: "manual" });
+    assert.equal(apple.status, 200);
+    assert.equal(apple.headers.get("content-type"), "application/json");
+    assert.deepEqual(await apple.json(), { applinks: { details: [{ appIDs: ["ABCDE12345.dev.kitepon.approvalbox"], components: [{ "/": "/app/websignin", comment: "web sign-in return (login-billing 1.20)" }] }] } });
+  } finally { await x.close(); }
+  const y = await setup();
+  try {
+    assert.equal((await y.call("GET", "/.well-known/assetlinks.json")).status, 404);
+    assert.equal((await y.call("GET", "/.well-known/apple-app-site-association")).status, 404);
+  } finally { await y.close(); }
 });

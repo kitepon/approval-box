@@ -18,6 +18,7 @@ import { CallBridgeDeliverer, callBridgeSender, readHeaderFile } from "./callbri
 import { type Library, createLibrary } from "./lb.ts";
 import { purgeLegacy, rekeyToK } from "./rekey.ts";
 import { type PeerChannel, createPeerChannel } from "./pc.ts";
+import { parseAppLinks } from "./applinks.ts";
 
 const env = process.env;
 const dataDir = resolve(env.APPROVAL_BOX_DATA ?? "data");
@@ -184,10 +185,13 @@ if (library) {
   peerChannel = createPeerChannel({ accounts, library, publicUrl, mirrorPath: join(dataDir, "pc-mirror.db"), wake: waker.wake, ...(turnSecret && turnUrls.length ? { turn: { secret: turnSecret, urls: turnUrls } } : {}) });
   console.log(`approval-box-server: peer-channel を /pc/v1 に置きます（TURN ${turnSecret && turnUrls.length ? turnUrls.length : "なし"}）`);
 }
+// アプリのリンク（/.well-known）。AB_ANDROID_APP_LINKS・AB_APPLE_APP_IDS が無ければ 404 で答える。
+const appLinks = parseAppLinks(env.AB_ANDROID_APP_LINKS, env.AB_APPLE_APP_IDS);
+for (const problem of appLinks.problems) console.error(`approval-box-server: アプリのリンクの設定の形が違うので外しました（${problem}）`);
 const diagnosticsAdminToken = env.DIAGNOSTICS_ADMIN_KEY_FILE ? readFileSync(env.DIAGNOSTICS_ADMIN_KEY_FILE,"utf8").trim() : env.DIAGNOSTICS_ADMIN_KEY;
 // 停止の合図。開いたままの更新の知らせ（SSE）を正しく閉じてから終える。
 const shutdown = new AbortController();
-const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) }, ...(library ? { library } : {}), ...(peerChannel ? { peerChannel: peerChannel.part } : {}) }, { staticHandler });
+const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) }, ...(library ? { library } : {}), ...(peerChannel ? { peerChannel: peerChannel.part } : {}), appLinks: appLinks.links }, { staticHandler });
 
 setInterval(() => {
   new Diagnostics(db).prune();
