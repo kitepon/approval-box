@@ -456,3 +456,15 @@ test("写し: 自分の保存を全部、秘密と他のアカウントを除い
   assert.equal((await x.call("GET", "/v1/me/export", { token: conn.token })).status, 401);
   assert.equal((await x.call("GET", "/v1/me/export")).status, 401);
 });
+
+test("webSignIn: unset means the provider is unknown to websignin/start; set means it is known (old handoff stays on)", async () => {
+  const start = (library: Ctx["library"]) => library.handler.handle(new Request(`${ORIGIN}/auth/v1/websignin/start`, { method: "POST", headers: { "content-type": "application/json", origin: ORIGIN }, body: JSON.stringify({ provider: "google" }) }));
+  const off = setup();
+  assert.deepEqual(await ((await start(off.library))!).json(), { error: "provider_unknown" });
+  assert.equal((await off.call("POST", "/auth/v1/handoff/start", { body: { deviceLabel: "Chrome" } })).status, 200);
+  const on = createLibrary({
+    db: openDb(":memory:"), publicUrl: ORIGIN, billing: "off", kKey: K_KEY, passKey: { id: "p1", key: PASS_KEY }, appleAudiences: [BUNDLE], googleAudiences: [GOOGLE_ID], exemptK: [],
+    webSignIn: { google: { clientId: "web-client", clientSecret: "s" } },
+  });
+  assert.notEqual(((await ((await start(on))!).json()) as { error?: string }).error, "provider_unknown");
+});

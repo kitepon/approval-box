@@ -17,6 +17,7 @@ import { createApp } from "./http.ts";
 import { CallBridgeDeliverer, callBridgeSender, readHeaderFile } from "./callbridge.ts";
 import { type Library, createLibrary } from "./lb.ts";
 import { purgeLegacy, rekeyToK } from "./rekey.ts";
+import { parseAppLinks } from "./applinks.ts";
 
 const env = process.env;
 const dataDir = resolve(env.APPROVAL_BOX_DATA ?? "data");
@@ -149,6 +150,13 @@ if (lbMissing.length === 3) {
       ...(previousKey && previousId ? { passKeyPrevious: { id: previousId, key: previousKey } } : {}),
       appleAudiences, googleAudiences, exemptK: [...freeAccountIds],
       ...(env.LB_GOOGLE_CODE_CLIENT_ID && secretValue("LB_GOOGLE_CODE_CLIENT_SECRET") ? { googleCode: { clientId: env.LB_GOOGLE_CODE_CLIENT_ID.trim(), clientSecret: secretValue("LB_GOOGLE_CODE_CLIENT_SECRET") } } : {}),
+      ...(() => {
+        // Web サインイン（契約1.20）。Google は Web 種のクライアント、Apple は Services ID と Sign in with Apple の鍵。そろった方だけ使う。
+        const google = env.LB_WEB_GOOGLE_CLIENT_ID && secretValue("LB_WEB_GOOGLE_CLIENT_SECRET") ? { clientId: env.LB_WEB_GOOGLE_CLIENT_ID.trim(), clientSecret: secretValue("LB_WEB_GOOGLE_CLIENT_SECRET") } : undefined;
+        const appleKey = secretValue("LB_WEB_APPLE_PRIVATE_KEY").replace(/\\n/g, "\n");
+        const apple = env.LB_WEB_APPLE_SERVICES_ID && env.LB_WEB_APPLE_TEAM_ID && env.LB_WEB_APPLE_KEY_ID && appleKey ? { servicesId: env.LB_WEB_APPLE_SERVICES_ID.trim(), teamId: env.LB_WEB_APPLE_TEAM_ID.trim(), keyId: env.LB_WEB_APPLE_KEY_ID.trim(), privateKey: appleKey } : undefined;
+        return google || apple ? { webSignIn: { ...(google ? { google } : {}), ...(apple ? { apple } : {}) } } : {};
+      })(),
       ...(appStoreApiOn ? { apple: { bundleId: env.APPSTORE_BUNDLE_ID || "dev.kitepon.approvalbox", issuerId: appStoreApi.issuerId, keyId: appStoreApi.keyId, privateKey: appStoreApi.privateKey } } : {}),
       ...(playServiceAccount ? { google: { packageName: env.PLAY_PACKAGE_NAME?.trim() || "dev.kitepon.approvalbox", serviceAccount: playServiceAccount } } : {}),
     });
@@ -173,10 +181,13 @@ if (library) {
     else console.log(`approval-box-server: 旧いログインと契約の行（一度だけ消した数）: ${Object.entries(purged).map(([table, n]) => `${table} ${n}`).join("、")}`);
   }
 }
+// アプリのリンク（/.well-known）。AB_ANDROID_APP_LINKS・AB_APPLE_APP_IDS が無ければ 404 で答える。
+const appLinks = parseAppLinks(env.AB_ANDROID_APP_LINKS, env.AB_APPLE_APP_IDS);
+for (const problem of appLinks.problems) console.error(`approval-box-server: アプリのリンクの設定の形が違うので外しました（${problem}）`);
 const diagnosticsAdminToken = env.DIAGNOSTICS_ADMIN_KEY_FILE ? readFileSync(env.DIAGNOSTICS_ADMIN_KEY_FILE,"utf8").trim() : env.DIAGNOSTICS_ADMIN_KEY;
 // 停止の合図。開いたままの更新の知らせ（SSE）を正しく閉じてから終える。
 const shutdown = new AbortController();
-const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) }, ...(library ? { library } : {}) }, { staticHandler });
+const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) }, ...(library ? { library } : {}), appLinks: appLinks.links }, { staticHandler });
 
 setInterval(() => {
   new Diagnostics(db).prune();
