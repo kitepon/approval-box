@@ -6,7 +6,8 @@ import { pathToFileURL } from "node:url";
 import { createInterface } from "node:readline/promises";
 import QRCode from "qrcode";
 import { Api, ServerError } from "./api.ts";
-import { OFFICIAL_SERVER, readConfig, renameWithRetry, requireConfig, writeConfig } from "./config.ts";
+import { OFFICIAL_SERVER, readConfig, renameWithRetry, requireConfig, writeConfig, writeJsonFile } from "./config.ts";
+import { admissionFile, serverOffersPeerChannel } from "./pc-mode.ts";
 import { daemonStatus, ensureDaemon, runDaemon } from "./daemon.ts";
 import { exportConnection } from "./connection-export.ts";
 import { CLIENT, HARNESSES, LABEL, type Target, detect, filesOf, harnessEntries, instructionsFileOf, register, registered, unregister } from "./harness.ts";
@@ -70,24 +71,56 @@ function selectedTargets(): Target[] {
   return HARNESSES.filter(detect);
 }
 
+/**
+ * peer-channel の鍵の結び付け（契約 5.4、c8c）。サーバーが peer_channel を出している時だけ、ペアリングの前に鍵と秘密を作り、
+ * QRを PC1PAIR の形（アプリの読み取り口だけが読む。URLでない）にし、入力用の16文字を出す。答えの後に、アプリと pc1-join → pc1-admit を交わす。
+ */
+async function peerChannelBinding(server: string) {
+  let offered: boolean;
+  try { offered = await serverOffersPeerChannel(server); }
+  catch (error) { out(`（peer-channel を使えるかサーバーに確かめられませんでした: ${(error as Error).message}。今の道でつなぎます）`); return null; }
+  if (!offered) return null;
+  const [{ loadOrCreateKeys }, { startPairingBinding }] = await Promise.all([import("./pc-keys.ts"), import("@kitepon/peer-channel/pairing")]);
+  return startPairingBinding(await loadOrCreateKeys());
+}
+
 async function pair(server: string, targets: Target[]): Promise<{ token: string; connection_id: string }> {
   const api = new Api({ server });
   const deviceName = option("name") ?? hostname();
+  const binding = await peerChannelBinding(server);
   const started = await api.call<{ pairing_id: string; code: string; qr_url: string; poll_secret: string; expires_at: string }>("POST", "/pairing", {
     device_name: deviceName, os: osName(), clients: targets.map((t) => CLIENT[t]),
   });
   out("\nこの端末をApproval Boxのアカウントに結びます。");
   out("アプリ（またはWeb版）の「端末を追加」で、次のQRコードを読むか、コードを入力してください。\n");
-  out(await QRCode.toString(started.qr_url, { type: "terminal", small: true }));
+  out(await QRCode.toString(binding ? binding.qrText(started.code) : started.qr_url, { type: "terminal", small: true }));
   out(`  コード: ${started.code}`);
-  out(`  URL:    ${started.qr_url}`);
+  if (binding) out(`  確かめの文字（コードと一緒にアプリへ入力）: ${binding.typedCode}`);
+  else out(`  URL:    ${started.qr_url}`);
   out(`  （期限: ${new Date(started.expires_at).toLocaleString()}）\n`);
   for (;;) {
     const result = await api.call<{ status: string; token?: string; connection_id?: string }>("GET", `/pairing/${started.pairing_id}`, undefined, { "x-poll-secret": started.poll_secret });
-    if (result.status === "claimed" && result.token) return { token: result.token, connection_id: result.connection_id! };
+    if (result.status === "claimed" && result.token) {
+      if (binding) await finishBinding(server, result.token, binding);
+      return { token: result.token, connection_id: result.connection_id! };
+    }
     if (result.status === "rejected") throw new Error("アプリで「心当たりがない」が押されました。もう一度 npx approval-box setup を実行してください。");
     if (result.status === "expired" || result.status === "delivered") throw new Error("ペアリングの期限が切れました。もう一度 npx approval-box setup を実行してください。");
     await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+}
+
+/** ペアリングの答えの後、アプリと鍵を結ぶ。結べなければ名前付きで伝え、今の道のまま使える（peer-channel の道は、結べた時だけ）。 */
+async function finishBinding(server: string, token: string, binding: NonNullable<Awaited<ReturnType<typeof peerChannelBinding>>>) {
+  out("アプリと、この端末の鍵を結んでいます（最大5分）…");
+  try {
+    const info = await new Api({ server, token }).call<{ connection_id: string; me: { user_id: string } }>("GET", "/connection");
+    const admission = await binding.complete({ server: { url: server, headers: { authorization: `Bearer ${token}` } }, account: info.me.user_id, connectionId: info.connection_id });
+    writeJsonFile(admissionFile(), admission);
+    out("鍵を結びました。申請と答えは、サーバーを通らずにこの端末とアプリの間で運ばれます。");
+  } catch (error) {
+    const code = (error as { code?: string }).code ?? "binding_failed";
+    out(`鍵を結べませんでした（${code}: ${(error as Error).message}）。この端末は今までの道で使えます。`);
   }
 }
 

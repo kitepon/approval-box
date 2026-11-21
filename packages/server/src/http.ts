@@ -193,7 +193,8 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(accounts.signInWithIdentity(provider, id.sub));
   };
   // Web版のログインボタンに要る公開の値（秘密ではない）。設定が無ければボタンは出ない。library_login はライブラリのQRログインを使うサーバーだけ true。
-  app.get("/v1/auth/config", (c) => c.json({ ...(services.webLogin ?? {}), library_login: !!library }));
+  // peer_channel: /pc/v1 が置かれている（コネクタは、これと鍵の登録がそろった時だけ peer-channel の道を使う。c8c）。
+  app.get("/v1/auth/config", (c) => c.json({ ...(services.webLogin ?? {}), library_login: !!library, peer_channel: !!services.peerChannel }));
   app.post("/v1/auth/apple", signIn("apple", services.appleAudiences ?? []));
 
   // ブラウザで始めるAppleとGoogleのログイン（AndroidのCustom Tabs・Linuxデスクトップ版のシステムのブラウザ）。

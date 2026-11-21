@@ -4,7 +4,7 @@ import { sendChannelAnswer, channelAnswerState } from "./channel-delivery.ts";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Api, ServerError } from "./api.ts";
-import { pcPrepared } from "./pc-mode.ts";
+import { admissionFile, modeFile, pcPrepared, readMode, serverOffersPeerChannel } from "./pc-mode.ts";
 import type { DaemonApi, PeerChannelRuntime } from "./pc-daemon.ts";
 import { type Wakes, queueWake, sendWake, wakeMessage } from "./bellteam-wake.ts";
 import { type AttachmentMeta, pruneAttachments, saveAll } from "./attachments.ts";
@@ -102,6 +102,50 @@ export function abandoned(entry: Entry, receiver: Receiver, now = Date.now()): b
   return now - Date.parse(entry.orphaned_at) >= ORPHAN_GRACE_MS;
 }
 
+/**
+ * MCPが peer-channel の道を使うか。鍵と登録が無ければ今の道。あれば、いま動いているデーモンが書いた道（state/pc/mode.json）に従う。
+ * デーモンが起きて道を決めるまで（10秒まで）は待つ。決まらなければ peer-channel の道として扱い、ソケットにつながらなければ daemon_unreachable の名前で失敗する。
+ */
+export async function useLocalApi(wait = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<boolean> {
+  if (!pcPrepared()) return false;
+  for (let i = 0; i < 50; i++) {
+    const mode = readMode();
+    const status = daemonStatus();
+    if (mode && status.running && mode.pid === status.pid) return mode.mode === "pc";
+    await wait(200);
+  }
+  return true;
+}
+
+/**
+ * peer-channel の道（c8c）: サーバーが peer_channel を出していて、鍵とペアリングの登録がある時だけ、申請と配送の記録を手元で持ち、
+ * 答えは端末から直接受ける。どちらの道にしたかは名前付きの1行と state/pc/mode.json に出し、MCPはそれに従う（道を決めるのはデーモンだけ）。
+ * 確かめられない・起こせない間は、今の道へ黙って戻らない。名前付きの行を出して時間を空けて試し直す（その間MCPは daemon_unreachable で待つ）。
+ */
+export async function startDaemonPeerChannel(config: { server: string; token: string }, log: (message: string) => void, pause: (ms: number) => Promise<unknown> = sleep): Promise<PeerChannelRuntime | undefined> {
+  if (!pcPrepared()) return undefined;
+  const setMode = (mode: "pc" | "server", reason: string) => writeJsonFile(modeFile(), { mode, reason, pid: process.pid, at: new Date().toISOString() });
+  for (let wait = 5000; ; wait = Math.min(wait * 2, 60_000)) {
+    try {
+      if (!(await serverOffersPeerChannel(config.server))) {
+        log("peer-channel の鍵と登録はありますが、サーバーが peer_channel を出していないので、今の道で動きます");
+        setMode("server", "server_flag_off");
+        return undefined;
+      }
+      const info = await new Api(config).call<{ connection_id: string; me: { user_id: string } }>("GET", "/connection");
+      const { startPeerChannel } = await import("./pc-daemon.ts"); // ネイティブのモジュール（node-datachannel）はこの道でだけ読む
+      const admission = existsSync(admissionFile()) ? JSON.parse(readFileSync(admissionFile(), "utf8")) : undefined;
+      const pc = await startPeerChannel({ server: config.server, token: config.token, connectionId: info.connection_id, account: info.me.user_id, ...(admission ? { admission } : {}), log });
+      setMode("pc", "server_flag_on_and_admitted");
+      log("peer-channel の道で動きます");
+      return pc;
+    } catch (error) {
+      log(`peer-channel の道を確かめられません・起こせません（${(error as Error).message}）。${wait / 1000}秒後に試し直します`);
+      await pause(wait);
+    }
+  }
+}
+
 /** 配送デーモンが動いていなければ起動する。利用者ごとに1つ。 */
 export function ensureDaemon() {
   try {
@@ -131,22 +175,7 @@ export async function runDaemon() {
   writeJsonFile(lockFile(), { pid: process.pid, entry: runtimeEntry("cli"), started_at: new Date().toISOString() });
   const log = (message: string) => process.stderr.write(`${new Date().toISOString()} ${message}\n`);
   const config = requireConfig();
-  // peer-channel の道（c8c）: 鍵とペアリングの登録がある時は、申請と配送の記録を手元で持ち、答えは端末から直接受ける。
-  // 起こせない間は今の道へ黙って戻らない（MCPは同じソケットを見るので、daemon_unreachable の名前で失敗する）。名前付きの行を出して時間を空けて試し直す。
-  let pc: PeerChannelRuntime | undefined;
-  if (pcPrepared()) {
-    for (let wait = 5000; !pc; wait = Math.min(wait * 2, 60_000)) {
-      try {
-        const info = await new Api(config).call<{ connection_id: string; me: { user_id: string } }>("GET", "/connection");
-        const { startPeerChannel } = await import("./pc-daemon.ts"); // ネイティブのモジュール（node-datachannel）はこの道でだけ読む
-        pc = await startPeerChannel({ server: config.server, token: config.token, connectionId: info.connection_id, account: info.me.user_id, log });
-        log("peer-channel の道で動きます");
-      } catch (error) {
-        log(`peer-channel を起こせません（${(error as Error).message}）。${wait / 1000}秒後に試し直します`);
-        await sleep(wait);
-      }
-    }
-  }
+  const pc = await startDaemonPeerChannel(config, log);
   const api: DaemonApi = pc ? pc.api : new Api(config);
   let journal: Journal = existsSync(journalFile()) ? (JSON.parse(readFileSync(journalFile(), "utf8")) as Journal) : {};
   const save = () => writeJsonFile(journalFile(), journal);

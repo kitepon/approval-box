@@ -136,7 +136,7 @@ test("ライブラリを使わない時は今までどおり: /auth/v1 は無く
   const userId = accounts.createUser();
   const { session } = accounts.issueSession(userId, "test");
   assert.equal((await app.request("/auth/v1/signin/nonce", { method: "POST" })).status, 404);
-  assert.deepEqual(await (await app.request("/v1/auth/config")).json(), { library_login: false });
+  assert.deepEqual(await (await app.request("/v1/auth/config")).json(), { library_login: false, peer_channel: false });
   const me = await app.request("/v1/me", { headers: { authorization: `Bearer ${session}` } });
   assert.equal(me.status, 200);
   const body = await me.json() as Record<string, unknown>;

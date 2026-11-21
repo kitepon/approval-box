@@ -115,6 +115,17 @@ test("mirror round trip through /pc/v1/registry; a sign-out frees the pass's slo
   } finally { await x.close(); }
 });
 
+test("/v1/auth/config says peer_channel when /pc/v1 is mounted (the connector's switch, c8c)", async () => {
+  const x = await setup();
+  try {
+    assert.equal(((await (await x.call("GET", "/v1/auth/config")).json()) as { peer_channel: boolean }).peer_channel, true);
+  } finally { await x.close(); }
+  const db = openDb(":memory:");
+  const events = new EventHub(db);
+  const app = createApp({ db, accounts: new Accounts(db, events, "off", new Set()), decisions: new Decisions(db, events), events, publicUrl: ORIGIN });
+  assert.equal(((await (await app.request("/v1/auth/config")).json()) as { peer_channel: boolean }).peer_channel, false);
+});
+
 test("TURN without settings answers an empty list", async () => {
   const x = await setup();
   try {

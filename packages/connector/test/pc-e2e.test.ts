@@ -11,7 +11,7 @@ import { after, before, test } from "node:test";
 import nodeDataChannel from "node-datachannel";
 import * as steer from "aiterm-steer-delivery";
 import { serve } from "@hono/node-server";
-import { b64url, generateSealKey, generateSigningKey, hex, signSnapshot, snapshotHash, toJson, type ConnectorEntry, type DeviceEntry, type SnapshotBody } from "@kitepon/peer-channel";
+import { b64url, generateSealKey, generateSigningKey, signSnapshot, snapshotHash, toJson, type DeviceEntry, type SnapshotBody } from "@kitepon/peer-channel";
 import { TestDevice } from "@kitepon/peer-channel/testing";
 import { Accounts } from "../../server/src/accounts.ts";
 import { openDb } from "../../server/src/db.ts";
@@ -23,7 +23,11 @@ import { createPeerChannel } from "../../server/src/pc.ts";
 import { ServerError } from "../src/api.ts";
 import { sendChannelAnswer } from "../src/channel-delivery.ts";
 import { LocalApi } from "../src/local-api.ts";
-import { startPeerChannel, type PeerChannelRuntime } from "../src/pc-daemon.ts";
+import type { PeerChannelRuntime } from "../src/pc-daemon.ts";
+import { startDaemonPeerChannel, useLocalApi } from "../src/daemon.ts";
+import { admissionFile, pcPrepared, readMode, serverOffersPeerChannel } from "../src/pc-mode.ts";
+import { writeJsonFile } from "../src/config.ts";
+import { startPairingBinding } from "@kitepon/peer-channel/pairing";
 import { loadOrCreateKeys } from "../src/pc-keys.ts";
 import { PROFILE } from "../src/profile.ts";
 
@@ -68,22 +72,40 @@ before(async () => {
   accounts.ensureUser(k);
   const conn = accounts.createConnection(k, "PC", "linux", ["claude-code"]);
 
-  // --- the phone: genesis, then (pairing, contract 5.4) a snapshot that adds the connector's keys ---
+  // --- the phone: genesis in the mirror ---
   const devSign = generateSigningKey();
   const devSeal = await generateSealKey();
-  const keys = await loadOrCreateKeys(join(dir, "home", "state", "pc", "keys.json"));
   const now = Date.now();
   const me: DeviceEntry = { key_id: b64url(devSign.id), sig_pub: b64url(devSign.pub), seal_pub: b64url(devSeal.pub), platform: "ios", protection: "hardware", added_at: now - 1000, added_by: b64url(devSign.id) };
-  const connEntry: ConnectorEntry = { key_id: b64url(keys.sign.id), sig_pub: b64url(keys.sign.pub), seal_pub: b64url(keys.seal.pub), connection_id: conn.id, added_at: now, added_by: me.key_id };
-  const body = (version: number, connectors: ConnectorEntry[], prev: string[]): SnapshotBody => ({ v: "pc1-registry", account: k, version, prev, created_at: now, devices: [me], connectors, removed: [] });
-  const genesis = signSnapshot(body(1, [], []), devSign);
-  const v2 = signSnapshot(body(2, [connEntry], [b64url(snapshotHash(genesis))]), devSign);
-  for (const s of [genesis, v2]) assert.equal((await call("PUT", "/pc/v1/registry", signed.pass, toJson(s))).status, 204);
+  const genesisBody: SnapshotBody = { v: "pc1-registry", account: k, version: 1, prev: [], created_at: now, devices: [me], connectors: [], removed: [] };
+  const genesis = signSnapshot(genesisBody, devSign);
+  assert.equal((await call("PUT", "/pc/v1/registry", signed.pass, toJson(genesis))).status, 204);
+  const phoneAccess = { url: base, headers: { authorization: `Bearer ${signed.pass}` } };
+  const approver = new TestDevice(phoneAccess, devSign, devSeal, { key_id: "", sig_pub: "", seal_pub: "", connection_id: "", added_at: 0, added_by: "" });
+  await approver.open();
 
-  // --- the connector daemon's peer-channel pieces, and the MCP side over the local socket ---
-  pc = await startPeerChannel({ server: base, token: conn.token, connectionId: conn.id, account: k, admission: { snapshot: toJson(v2), hash: hex(snapshotHash(v2)) } });
+  // --- setup's pairing (contract 5.4): the server offers peer_channel, the connector shows PC1PAIR, the phone approves it ---
+  assert.equal(await serverOffersPeerChannel(base), true);
+  const binding = startPairingBinding(await loadOrCreateKeys());
+  const [admission] = await Promise.all([
+    binding.complete({ server: { url: base, headers: { authorization: `Bearer ${conn.token}` } }, account: k, connectionId: conn.id }),
+    approver.approveConnector({ text: binding.qrText("ABCD-EFGH"), registry: { body: genesisBody, hash: snapshotHash(genesis) } }),
+  ]);
+  approver.close();
+  writeJsonFile(admissionFile(), admission); // what setup's finishBinding writes
+  assert.equal(pcPrepared(), true);
+
+  // --- the daemon decides the mode (flag on + admitted) and starts the endpoint; MCP follows the daemon's mode ---
+  const lines: string[] = [];
+  pc = (await startDaemonPeerChannel({ server: base, token: conn.token }, (l) => lines.push(l)))!;
+  assert.ok(pc, lines.join("\n"));
+  assert.equal(readMode()?.mode, "pc");
+  writeJsonFile(join(dir, "home", "state", "daemon.json"), { pid: process.pid, entry: "test" }); // this process plays the daemon for useLocalApi
+  assert.equal(await useLocalApi(), true);
   mcp = new LocalApi();
-  device = new TestDevice({ url: base, headers: { authorization: `Bearer ${signed.pass}` } }, devSign, devSeal, connEntry, { product: ["approval-box/decision@1"], answerSchema: "approval-box/answer@1" });
+  const connEntry = (JSON.parse(Buffer.from(admission.snapshot.body, "base64url").toString("utf8")) as SnapshotBody).connectors[0]!;
+  assert.equal(connEntry.connection_id, conn.id);
+  device = new TestDevice(phoneAccess, devSign, devSeal, connEntry, { product: ["approval-box/decision@1"], answerSchema: "approval-box/answer@1" });
 });
 
 after(async () => {
@@ -152,4 +174,22 @@ test("request → device answer → the AI's channel; the server keeps no title,
   assert.ok(readFileSync(local, "utf8").includes(SECRET.title));
   if (process.platform !== "win32") assert.equal(statSync(local).mode & 0o777, 0o600);
   steer.closeChannel(PROFILE, channel.channel_id);
+});
+
+test("a server without /pc/v1 says peer_channel false; the daemon picks today's path with a named line", { timeout: 30_000 }, async () => {
+  const db = openDb(":memory:");
+  const events = new EventHub(db);
+  const app = createApp({ db, accounts: new Accounts(db, events, "off", new Set()), decisions: new Decisions(db, events), events, publicUrl: ORIGIN });
+  const plain = await new Promise<ReturnType<typeof serve>>((ok) => { const s = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" }, () => ok(s)); });
+  try {
+    const url = `http://127.0.0.1:${(plain.address() as AddressInfo).port}`;
+    assert.equal(await serverOffersPeerChannel(url), false);
+    const lines: string[] = [];
+    assert.equal(await startDaemonPeerChannel({ server: url, token: "t" }, (l) => lines.push(l)), undefined);
+    assert.equal(readMode()?.mode, "server");
+    assert.match(lines.join("\n"), /サーバーが peer_channel を出していないので、今の道で動きます/);
+    assert.equal(await useLocalApi(), false);
+  } finally {
+    await new Promise<void>((ok) => plain.close(() => ok()));
+  }
 });
