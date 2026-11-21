@@ -118,7 +118,9 @@ test("an already signed-in browser skips the login; settings sections, export an
   await page.goto("/settings");
   await expect(page.getByText("Subscribed (App Store)")).toBeVisible();
   const headings = await page.getByRole("heading", { level: 2 }).allTextContents();
-  expect(headings).toEqual(["Account", "Subscription", "Other devices", "Language", "History storage", "Help", "Account management"]);
+  expect(headings).toEqual(["Account", "Subscription", "Other devices", "Notifications", "Language", "History storage", "Help", "Account management"]);
+  await expect(page.getByText("The browser version has no notifications. You can receive notifications in the phone and PC apps.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Expires: 12/21/2026")).toBeVisible();
   await expect(page.getByText("Signed in with phone approval", { exact: true })).toBeVisible();
   await expect(page.getByText("Subscribed (App Store)")).toBeVisible();
   await expect(page.getByRole("button", { name: "Delete account and all data" })).toBeVisible();

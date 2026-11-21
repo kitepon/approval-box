@@ -45,6 +45,7 @@ a { color: var(--accent); }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
 h1 { font-size: 1.4rem; margin: 0.4rem 0 0.8rem; line-height: 1.35; }
 h2 { font-size: 1.05rem; margin: 1.2rem 0 0.6rem; }
+.guide h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; }
 .panel h2 { margin-top: 0; }
 
 .shell { max-width: 760px; margin: 0 auto; padding: 0 16px calc(var(--nav-h) + 24px + env(safe-area-inset-bottom)); }
@@ -115,6 +116,7 @@ input, textarea, select {
 .code-input { flex: 1; min-width: 0; font-family: ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
 
 .decision h1 { margin-top: 6px; }
+.request-title { font-size: 1.4rem; margin: 0.4rem 0 0.8rem; line-height: 1.35; }
 .context { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 12px 0; }
 .amended { background: var(--amend-bg); border-radius: 10px; padding: 10px 12px; margin: 10px 0; font-size: 0.92rem; }
 .answer { margin: 12px 0; }

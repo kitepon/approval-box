@@ -28,7 +28,7 @@ export function History() {
       {data && data.length > 0 && (
         <>
           <ListFilters chips={[["all", t("すべて")], ["answered", t("回答済み")], ["cancelled", t("取り下げ")]]} value={filter} onValue={setFilter} query={query} onQuery={setQuery} />
-          {!shown.length && <p class="muted">{t("一致する相談はありません。")}</p>}
+          {!shown.length && <p class="muted">{t("この条件の相談はありません")}</p>}
         </>
       )}
       <div class="cards">
@@ -41,8 +41,9 @@ export function History() {
             <div class="card-title">{d.title}</div>
             <div class="card-tags">
               {d.status === "cancelled"
-                ? <span class="tag">{t("AIが取り下げ")}{d.cancel_reason ? `: ${d.cancel_reason}` : ""}</span>
+                ? <><span class="tag">{t("取り下げ")}</span>{d.cancel_reason && <span class="tag">{d.cancel_reason}</span>}</>
                 : <>
+                    <span class="tag">{t("回答済み")}</span>
                     <span class="tag">{d.answer?.option_id ? d.options.find((o) => o.id === d.answer!.option_id)?.label : t("文で回答")}</span>
                     <span class={`tag delivery-${d.delivery}`}>{DELIVERY_LABEL[d.delivery ?? ""] ?? d.delivery}</span>
                   </>}

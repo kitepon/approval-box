@@ -14,7 +14,7 @@ function checkLine(check: Check) {
     <li key={`${check.connection_id}-${check.client}`} class={`check check-${check.status}`}>
       <span>{clientLabel(check.client)}</span>
       <span>{CHECK_LABEL[check.status] ?? check.status}{check.tested_at ? `（${dateTime(check.tested_at)}）` : ""}</span>
-      {check.status === "waiting_answer" && check.decision_id && <a class="button-link" {...linkProps(`/d/${check.decision_id}`)}>{t("テストの申請を開く")}</a>}
+      {check.status === "waiting_answer" && check.decision_id && <a class="button-link" {...linkProps(`/d/${check.decision_id}`)}>{t("接続テストの申請を開く")}</a>}
       {check.status === "failed" && check.failed_step && <div class="muted">{FAILED_STEP[check.failed_step]}{check.detail ? `（${check.detail}）` : ""}</div>}
     </li>
   );
@@ -45,7 +45,34 @@ function Tokens() {
   );
 }
 
-/** S6 接続: AIをつなぐ / つないだAI / 接続テスト / 画面のない端末を登録。「AIごとの登録手順」はWebにまだ中身が無いので出さない。 */
+type Guide = { client: string; title: string; steps: { text: string; copy?: string }[] };
+
+/** AIごとの登録手順（S6 4番目）。文面はアプリと同じく、サーバーの GET /onboarding から取る。 */
+function Guides() {
+  const guides = useResource(() => api<Guide[]>("GET", "/onboarding"));
+  const [copied, setCopied] = useState<string | null>(null);
+  async function copy(key: string, text: string) {
+    try { await navigator.clipboard.writeText(text); setCopied(key); setTimeout(() => setCopied(null), 2000); } catch { prompt(t("コピーしてください"), text); }
+  }
+  return (
+    <div class="panel">
+      <h2>{t("AIごとの登録手順")}</h2>
+      {guides.data?.map((g) => (
+        <div class="guide" key={g.client}>
+          <h3>{g.title}</h3>
+          {g.steps.map((s, i) => (
+            <div key={i}>
+              <p>{s.text}</p>
+              {s.copy && <button class="ghost small" onClick={() => copy(`${g.client}-${i}`, s.copy!)}>{copied === `${g.client}-${i}` ? t("コピーしました") : t("登録手順をコピー")}</button>}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** S6 接続: AIをつなぐ / つないだAI / 接続テスト / AIごとの登録手順 / 画面のない端末を登録。 */
 export function Connections() {
   const me = useResource(loadMe);
   const conns = useResource(() => api<Connection[]>("GET", "/connections"));
@@ -64,9 +91,8 @@ export function Connections() {
       <h1>{t("接続")}</h1>
       <div class="panel">
         <h2>{t("AIをつなぐ")}</h2>
-        <p>{t("AI（Claude Code・Codex・Cursor・Grok）を使っているPCで、次を実行してください。")}</p>
+        <p>{t("PCでコマンドを実行すると、8文字のコードとQRが出ます。そのコードを下の欄に入れるか、QRを読みます。")}</p>
         <CopyLine text={INSTALL} />
-        <p class="muted">{t("画面にコードが出たら、下の欄に入力します。")}</p>
         <form class="row" onSubmit={(e) => { e.preventDefault(); if (code.trim()) navigate(`/pair?c=${encodeURIComponent(code.trim())}`); }}>
           <input class="code-input" value={code} onInput={(e) => setCode((e.target as HTMLInputElement).value)} placeholder="ABCD-EFGH" aria-label="ABCD-EFGH" autocomplete="off" autocapitalize="characters" />
           <button class="primary" type="submit">{t("コードを確認")}</button>
@@ -107,6 +133,7 @@ export function Connections() {
         })}
       </div>
 
+      <Guides />
       <Tokens />
     </section>
   );

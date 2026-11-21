@@ -23,6 +23,7 @@ async function fixture(page: Page, onSettings?: (route: import("@playwright/test
     if (d) return json([pend, held, done, cancelled].find((x) => x.id === d[1]));
     if (p.endsWith("/attachments")) return json({ items: [] });
     if (p === "/v1/connections") return json([]);
+    if (p === "/v1/onboarding") return json([{ client: "codex", title: "Set up Codex", steps: [{ text: "Run this command.", copy: "npx -y approval-box@latest setup" }, { text: "Restart Codex." }] }]);
     return json({});
   });
 }
@@ -41,7 +42,7 @@ test("S3: heading, chips and search filter the inbox; held shows under the 保�
   await expect(page.getByText("Deploy the release")).toHaveCount(0);
   await expect(page.getByText("Change the invoice")).toBeVisible();
   await page.getByRole("searchbox", { name: "Search requests" }).fill("zzz");
-  await expect(page.getByText("No matching requests.")).toBeVisible();
+  await expect(page.getByText("No requests match these conditions")).toBeVisible();
 });
 
 test("S4: chips filter the history, there is no delete button, and a request opened from History keeps History highlighted and Back returns there", async ({ page }) => {
@@ -67,7 +68,9 @@ test("S5: sections in order, the answer is chosen then sent, and the app stays o
   await page.getByText("Deploy the release").click();
   await expect(page.getByRole("link", { name: "Inbox" })).toHaveClass(/active/);
   const headings = await page.getByRole("heading").allTextContents();
-  expect(headings.slice(0, 3)).toEqual(["Deploy the release", "Context", "How should we proceed?"]);
+  expect(headings.slice(0, 4)).toEqual(["Request", "Deploy the release", "Context", "How should we proceed?"]);
+  await expect(page.getByText("Attach images or documents", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("Add file", { exact: true })).toHaveCount(0);
   const send = page.getByRole("button", { name: "Send answer", exact: true });
   await expect(send).toBeDisabled();
   await page.getByRole("radio", { name: "Go ahead" }).click();
@@ -85,4 +88,14 @@ test("S9: a failed operation opens an alert titled 確認してください (Ple
   const alert = page.getByRole("alertdialog");
   await expect(alert.getByRole("heading", { name: "Please check" })).toBeVisible();
   await expect(alert.getByText("Could not save.")).toBeVisible();
+});
+
+test("S6: AIをつなぐ text is the spec's, and the guide for each AI is shown with its copy button", async ({ page }) => {
+  await fixture(page);
+  await page.goto("/connections");
+  await expect(page.getByText("Run the command on your PC and an 8-character code and a QR code appear. Enter the code in the field below, or scan the QR code.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Setup guides by AI", level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Set up Codex" })).toBeVisible();
+  await expect(page.getByText("Restart Codex.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy setup steps" })).toBeVisible();
 });
