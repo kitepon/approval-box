@@ -147,11 +147,12 @@ export function DecisionView({ id }: { id: string }) {
       }}>
       <button class="back" onClick={() => history.length > 1 ? history.back() : navigate(listPath())}>{t("戻る")}</button>
       {notice && <p class="notice">{systemMessage(notice)}</p>}
+      <h1>{t("相談")}</h1>
       <div class="card-meta">
         <Source source={d.source} />
         <span class="time">{ago(d.created_at)}</span>
       </div>
-      <h1>{d.title}</h1>
+      <h2 class="request-title">{d.title}</h2>
       <div class="card-tags">
         <span class={`tag ${d.urgency === "high" ? "tag-high" : ""}`}>{URGENCY_LABEL[d.urgency] ?? d.urgency}</span>
         {d.deadline && <span class="tag">{deadlineText(d.deadline)}</span>}
@@ -186,12 +187,11 @@ export function DecisionView({ id }: { id: string }) {
             <textarea rows={3} value={text} onInput={(e) => setText((e.target as HTMLTextAreaElement).value)} placeholder={t("選択肢を選ばずに、文だけで指示し直すこともできます")} />
           </label>
           <div class="field">
-            <span>{t("画像・書類を添付")}</span>
             <AttachmentList decisionId={d.id} items={drafts.items} onRemove={drafts.remove} />
             {drafts.uploading > 0 && <p class="muted">{t("アップロード中…")}</p>}
             {drafts.error && <p class="error">{systemMessage(drafts.error)}</p>}
             {drafts.items.length < MAX_COUNT && (
-              <label class="file-pick">{t("ファイルを追加")} <input type="file" multiple accept={ACCEPT} disabled={busy} onChange={(e) => { const input = e.target as HTMLInputElement; void drafts.add(input.files).then(() => { input.value = ""; }); }} />
+              <label class="file-pick">{t("画像・書類を添付")} <input type="file" multiple accept={ACCEPT} disabled={busy} onChange={(e) => { const input = e.target as HTMLInputElement; void drafts.add(input.files).then(() => { input.value = ""; }); }} />
               </label>
             )}
             <span class="muted">{t("添付は合計50MBまでです。")}</span>

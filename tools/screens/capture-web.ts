@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { onboarding } from "../../packages/server/src/onboarding.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const outDir = join(root, "docs", "screenshots", "web");
@@ -35,7 +36,7 @@ const answeredText = decision({ id: "K-AN5WR2", title: "ログの保存先を変
 const cancelled = decision({ id: "K-CANC31", title: "この申請は要らなくなりました", status: "cancelled", cancel_reason: "別の方法で解決しました", updated_at: iso(-26 * HOUR), deadline: undefined });
 const detail: Record<string, Json> = Object.fromEntries([pending, second, testReq, held, amended, answered, answeredText, cancelled].map((d) => [d.id, d]));
 
-const me = (o: Json = {}): Json => ({ user_id: "k-demo", login: "google", plan: "active", store: "app_store", billing: "store", setup: { verified: true, checks: [] }, ...o });
+const me = (o: Json = {}): Json => ({ user_id: "k-demo", login: "google", plan: "active", store: "app_store", billing: "store", setup: { verified: true, checks: [] }, ...(o.plan && o.plan !== "active" ? {} : { expires_at: iso(30 * 24 * HOUR) }), ...o });
 const device: Json = { id: "c-pc", kind: "device", label: "開発PC", os: "linux", clients: ["claude-code", "codex"], created_at: iso(-72 * HOUR), last_seen_at: iso(-4 * MIN) };
 const clientConn: Json = { id: "c-bt", kind: "client", label: "BellTeam", clients: [], created_at: iso(-48 * HOUR), last_seen_at: iso(-1 * HOUR) };
 const checks = [{ connection_id: "c-pc", client: "claude-code", status: "passed", tested_at: iso(-70 * HOUR) }, { connection_id: "c-pc", client: "codex", status: "failed", failed_step: "delivery", tested_at: iso(-60 * MIN) }];
@@ -76,6 +77,7 @@ async function install(context: BrowserContext, o: Opts): Promise<Stub> {
     if (d && m === "GET") return detail[d[1]!] ? json(route, 200, detail[d[1]!]) : json(route, 404, { error: { code: "not_found", message: "項目が見つかりません。" } });
     if (d && m === "POST" && d[2] === "answer") { s.answers.push(d[1]!); return json(route, 200, { ...detail[d[1]!], status: "answered", delivery: "waiting", answer: { option_id: "go", answered_at: iso(0) }, version: 2 }); }
     if (d && m === "POST" && (d[2] === "hold" || d[2] === "unhold")) return json(route, 200, { ...detail[d[1]!], status: d[2] === "hold" ? "held" : "pending", version: 2 });
+    if (p === "/v1/onboarding") return json(route, 200, onboarding("https://approval-box.example", "ja"));
     if (p === "/v1/tokens" && m === "POST") { s.tokens++; return json(route, 200, { id: "c-tk", token: "abx_capture_only", setup_command: "npx -y approval-box@latest setup --server https://approval-box.example --token abx_capture_only" }); }
     if (p === "/v1/connections" && m === "GET") return json(route, 200, o.connections ?? []);
     if (p === "/v1/pairing/lookup") return o.pairing && "error" in o.pairing ? json(route, 404, { error: { code: "not_found", message: o.pairing.error } }) : json(route, 200, o.pairing ?? {});
@@ -119,7 +121,7 @@ const scenarios: Scenario[] = [
   // signed out: S1 / S1b / S2
   { id: "boot", opts: { stallConfig: true }, ready: (p) => p.locator("main.shell").waitFor() },
   { id: "login-id", opts: { config: both }, ready: (p) => text(p, "GoogleとAppleは別のアカウントになります") },
-  { id: "login-id-apple-error", opts: { config: apple }, act: async (p) => { await p.getByRole("button", { name: "Appleでログイン" }).click(); }, ready: (p) => text(p, "Appleのログインができませんでした。") },
+  { id: "login-id-apple-error", opts: { config: apple }, act: async (p) => { await p.getByRole("button", { name: "Appleでサインイン" }).click(); }, ready: (p) => text(p, "Appleのログインができませんでした。") },
   { id: "login-none", opts: { config: {} }, ready: (p) => text(p, "このサーバーにはログインの設定がありません") },
   { id: "login-library", opts: { library: true }, ready: (p) => p.getByRole("button", { name: "スマホの承認でログイン" }).waitFor() },
   { id: "login-library-first-time", opts: { library: true }, act: async (p) => { await p.getByText("はじめての方へ").click(); }, ready: (p) => text(p, "コマンドをコピー") },
@@ -134,7 +136,7 @@ const scenarios: Scenario[] = [
   // signed in: S3 inbox
   { id: "inbox", opts: { ...signedIn, open: [testReq, pending, second, held, amended] }, ready: (p) => text(p, "古いログを消してよいですか？") },
   { id: "inbox-held", opts: { ...signedIn, open: [testReq, pending, second, held, amended] }, act: async (p) => { await text(p, "古いログを消してよいですか？"); await p.getByRole("button", { name: "保留", exact: true }).click(); }, ready: (p) => text(p, "請求書の送り先を変えてよいですか？") },
-  { id: "inbox-search-none", opts: { ...signedIn, open: [pending, second] }, act: async (p) => { await text(p, "古いログを消してよいですか？"); await p.getByRole("searchbox", { name: "相談を検索" }).fill("zzz"); }, ready: (p) => text(p, "一致する相談はありません。") },
+  { id: "inbox-search-none", opts: { ...signedIn, open: [pending, second] }, act: async (p) => { await text(p, "古いログを消してよいですか？"); await p.getByRole("searchbox", { name: "相談を検索" }).fill("zzz"); }, ready: (p) => text(p, "この条件の相談はありません") },
   { id: "inbox-empty", opts: { ...signedIn, open: [] }, ready: (p) => text(p, "いま決めることはありません") },
   // S7 in place of the lists on 402
   { id: "inbox-402", opts: { ...lib, paid402: true, me: me({ login: null, plan: "expired", store: undefined }) }, ready: (p) => text(p, NOT_HERE) },
@@ -153,8 +155,8 @@ const scenarios: Scenario[] = [
   { id: "history-empty", path: "/history", opts: { ...signedIn, closed: [] }, ready: (p) => text(p, "まだ履歴はありません") },
   { id: "history-402", path: "/history", opts: { ...lib, paid402: true, me: me({ login: null, plan: "expired", store: undefined }) }, ready: (p) => text(p, NOT_HERE) },
   // S6 connections / pairing
-  { id: "connections-empty", path: "/connections", opts: { ...signedIn, connections: [] }, ready: (p) => text(p, "まだつないだAIはありません。") },
-  { id: "connections", path: "/connections", opts: conns, ready: (p) => text(p, "開発PC") },
+  { id: "connections-empty", path: "/connections", opts: { ...signedIn, connections: [] }, ready: async (p) => { await text(p, "まだつないだAIはありません。"); await text(p, "Claude Codeを登録する"); } },
+  { id: "connections", path: "/connections", opts: conns, ready: async (p) => { await text(p, "開発PC"); await text(p, "Claude Codeを登録する"); } },
   { id: "connections-test-hint", path: "/connections", opts: conns, act: async (p) => { await p.getByRole("button", { name: "テストする" }).first().click(); }, ready: (p) => text(p, "Approval Boxのsetup_testを実行して") },
   { id: "connections-token", path: "/connections", opts: signedIn, act: async (p) => { await p.getByText("画面のない端末を登録").click(); await p.getByPlaceholder("端末名").fill("自宅サーバー"); await p.getByRole("button", { name: "トークンを作る" }).click(); }, ready: (p) => text(p, "この1回しか表示されません") },
   { id: "pair-device", path: "/pair?c=ABCD-EFGH", opts: { ...signedIn, pairing: pc }, ready: (p) => text(p, "このAIをつなぎますか？") },
@@ -226,6 +228,11 @@ const checkList: Check[] = [
     await p.getByRole("button", { name: "つなぐ" }).click(); await p.getByRole("button", { name: "接続へ" }).click(); await urlIs(p, "/connections"); } },
   { name: "接続: 画面のない端末を登録 creates a token and shows the command once", opts: { ...signedIn, connections: [] }, path: "/connections", run: async (p, s) => {
     await p.getByText("画面のない端末を登録").click(); await p.getByPlaceholder("端末名").fill("自宅サーバー"); await p.getByRole("button", { name: "トークンを作る" }).click(); await text(p, "--token abx_capture_only"); if (s.tokens !== 1) throw new Error("no token"); } },
+  { name: "接続: AIごとの登録手順 lists the server's guides with 登録手順をコピー; AIをつなぐ has the spec text", opts: { ...signedIn, connections: [] }, path: "/connections", run: async (p) => {
+    await heading(p, "AIごとの登録手順"); await text(p, "Codexを登録する"); await p.getByRole("button", { name: "登録手順をコピー" }).first().waitFor();
+    await text(p, "PCでコマンドを実行すると、8文字のコードとQRが出ます。そのコードを下の欄に入れるか、QRを読みます。"); } },
+  { name: "設定: 通知 says the browser has none; 契約 shows 期限", opts: signedIn, path: "/settings", run: async (p) => {
+    await heading(p, "通知"); await text(p, "ブラウザ版には通知がありません。通知はスマホとPCのアプリで受け取れます。"); await text(p, "期限:"); } },
   { name: "library: ログアウト calls signout and shows S1 at /", opts: { ...lib, open: [] }, path: "/settings", run: async (p, s) => {
     await p.getByRole("button", { name: "ログアウト" }).click(); await p.getByRole("button", { name: SIGN_IN }).waitFor(); await urlIs(p, "/"); if (s.signouts !== 1) throw new Error("no signout"); } },
   { name: "library: アカウントと全データを削除 (confirm, then 削除 typed) -> DELETE /me, signout, S1", opts: { ...lib, open: [] }, path: "/settings", run: async (p, s) => {

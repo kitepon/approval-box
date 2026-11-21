@@ -20,7 +20,7 @@ export function DecisionCard({ d }: { d: Decision }) {
       <div class="card-tags">
         {d.urgency === "high" && <span class="tag tag-high">{URGENCY_LABEL.high}</span>}
         {d.deadline && <span class="tag">{deadlineText(d.deadline)}</span>}
-        {d.status === "held" && <span class="tag">{t("保留中")}</span>}
+        <span class="tag">{d.status === "held" ? t("保留") : t("未回答")}</span>
         {amended && <span class="tag tag-amended">{t("修正あり")}</span>}
         {d.source.test && <span class="tag tag-test">{t("テスト")}</span>}
       </div>
@@ -50,7 +50,7 @@ export function Inbox() {
       {data && data.length > 0 && (
         <>
           <ListFilters chips={[["all", t("すべて")], ["pending", t("未回答")], ["held", t("保留")]]} value={filter} onValue={setFilter} query={query} onQuery={setQuery} />
-          {!shown.length && <p class="muted">{t("一致する相談はありません。")}</p>}
+          {!shown.length && <p class="muted">{t("この条件の相談はありません")}</p>}
           <div class="cards">{shown.map((d) => <DecisionCard key={d.id} d={d} />)}</div>
         </>
       )}

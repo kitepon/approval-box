@@ -1,5 +1,5 @@
 import { systemMessage, t, locale, useLocale } from "./i18n.ts";
-// 「Googleでログイン」「Appleでログイン」のボタン。サーバーの /auth/config に値がある時だけ出す。
+// 「Googleでログイン」「Appleでサインイン」のボタン。サーバーの /auth/config に値がある時だけ出す。
 // Bearer付き（ログイン済み）で呼べば、IDの無い既存アカウントにそのIDを結ぶ（最初の1回だけ）。
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError } from "./api";
@@ -65,7 +65,7 @@ export function IdLogin({ onDone, skip = [] }: { onDone: (r: Result) => void; sk
   return (
     <div class="idlogin">
       {google && <div ref={googleRef} class="google-button" />}
-      {appleOn && <button class="apple-button" onClick={apple}>{t("Appleでログイン")}</button>}
+      {appleOn && <button class="apple-button" onClick={apple}>{t("Appleでサインイン")}</button>}
       {error && <p class="error">{systemMessage(error)}</p>}
     </div>
   );

@@ -11,7 +11,7 @@ Scope: `packages/web/src` only (a Preact single-page app). This map describes wh
 
 - **No language picker at the top.** The picker (`言語`, drop-down `システムに合わせる` / `日本語` / `English` / `한국어` / `简体中文` / `繁體中文`, language.tsx) is on S1 (last line) and in S8 `言語`. Nowhere else.
 - **Menu** (signed in only, main.tsx `Nav`): four links in this order: `受信` (with a count badge of pending requests), `履歴`, `接続`, `設定`. Phone width (< 720px): tab bar fixed to the bottom. Desktop: a bar at the top (style.css).
-- **Page heading = menu label**: `受信`, `履歴`, `接続`, `設定`.
+- **Page heading = menu label**: `受信`, `履歴`, `接続`, `設定` (the request screen S5 has the heading `相談`).
 - **Highlight follows the page you came from.** `受信` is active on `/` and on `/d/...` opened from 受信; `履歴` on `/history` and on `/d/...` opened from 履歴 (the origin travels in `history.state.from`, router.ts `navigate`/`linkProps`/`listPath`); `接続` on `/connections` and `/pair`; `設定` on `/settings` and `/plan`. An unknown path shows the inbox with `受信` not highlighted.
 - Browser tab title: `(n) Approval Box` when n requests are pending.
 - Error alert (S9, dialog.tsx `AlertHost`/`showAlert`): a modal with title `確認してください`, the message, and `閉じる`. It replaces the browser's untitled `alert()`. Native `confirm`/`prompt` remain for destructive actions (deleting history, removing a connection, deleting the account).
@@ -50,7 +50,7 @@ Both modes share one S1 (login.tsx `Login`). Differences are marked L (phone app
 
 **S1 `ログイン`** (L) login.tsx `Login`. In order: `Approval Box`; `AIの相談に、スマホやPCから答えます。`; the main button `スマホの承認でログイン` (nothing starts until it is pressed); disclosure `はじめての方へ` with the three steps (step 1 store sign-in and subscribe; step 2 `PCでコマンドを実行して、AIとつなぎます。` + `npx -y approval-box@latest setup` + `コマンドをコピー`; step 3 the other-device path); links `利用規約` (`/terms.html`) `プライバシーポリシー` (`/privacy.html`) `サポート` (`/support.html`); the language picker. Shots: [390](screenshots/web/login-library-390.png) [1280](screenshots/web/login-library-1280.png); disclosure open: [390](screenshots/web/login-library-first-time-390.png) [1280](screenshots/web/login-library-first-time-1280.png)
 
-**S1** (I; Google and/or Apple configured) same structure with Google's button and `Appleでログイン` in place of the phone-approval button, the note `GoogleとAppleは別のアカウントになります。いつも同じ方でログインしてください。`, the disclosure with steps 1-2 only (step 3 names a button that does not exist in this mode), links, language picker. Shots: `login-id` [390](screenshots/web/login-id-390.png) [1280](screenshots/web/login-id-1280.png); Apple failure `Appleのログインができませんでした。`: `login-id-apple-error` [390](screenshots/web/login-id-apple-error-390.png) [1280](screenshots/web/login-id-apple-error-1280.png); no provider configured (the note `このサーバーにはログインの設定がありません。…`): `login-none` [390](screenshots/web/login-none-390.png) [1280](screenshots/web/login-none-1280.png)
+**S1** (I; Google and/or Apple configured) same structure with Google's button and `Appleでサインイン` (Apple's own button text) in place of the phone-approval button, the note `GoogleとAppleは別のアカウントになります。いつも同じ方でログインしてください。`, the disclosure with steps 1-2 only (step 3 names a button that does not exist in this mode), links, language picker. Shots: `login-id` [390](screenshots/web/login-id-390.png) [1280](screenshots/web/login-id-1280.png); Apple failure `Appleのログインができませんでした。`: `login-id-apple-error` [390](screenshots/web/login-id-apple-error-390.png) [1280](screenshots/web/login-id-apple-error-1280.png); no provider configured (the note `このサーバーにはログインの設定がありません。…`): `login-none` [390](screenshots/web/login-none-390.png) [1280](screenshots/web/login-none-1280.png)
 
 **S1b** banner on S1, only after a signed-in browser got a 401 (a first visit shows no banner). The text follows the library error code of the 401 (api.ts `errorBody` -> `onUnauthorized(code)` -> login.tsx `Reason`):
 - `pass_refused` (stopped from the phone, or "stop all other devices"): `この端末のログインは、承認したスマホから止められました。もう一度ログインしてください。` [390](screenshots/web/login-library-banner-stopped-390.png) [1280](screenshots/web/login-library-banner-stopped-1280.png)
@@ -64,18 +64,18 @@ Both modes share one S1 (login.tsx `Login`). Differences are marked L (phone app
 
 ### Signed in
 
-**S3 `受信`** `/` pages/Inbox.tsx. Shell; `h1` `受信`; chips `すべて` `未回答` `保留` (default `すべて`; pending first, held after); search field `相談を検索` (client-side, on title and `申請者 / 作業名`); one card per request: client chip, requester + work name, age, title, tags (`急ぎ`, deadline, `保留中`, `修正あり`, `テスト`). Nothing pending: `いま決めることはありません` / `相談が届いたら、お知らせします。`. Search with no hit: `一致する相談はありません。`. A card opens S5. Shots: `inbox` [390](screenshots/web/inbox-390.png) [1280](screenshots/web/inbox-1280.png); `inbox-held` (chip `保留`) [390](screenshots/web/inbox-held-390.png) [1280](screenshots/web/inbox-held-1280.png); `inbox-search-none` [390](screenshots/web/inbox-search-none-390.png) [1280](screenshots/web/inbox-search-none-1280.png); `inbox-empty` [390](screenshots/web/inbox-empty-390.png) [1280](screenshots/web/inbox-empty-1280.png)
+**S3 `受信`** `/` pages/Inbox.tsx. Shell; `h1` `受信`; chips `すべて` `未回答` `保留` (default `すべて`; pending first, held after); search field `相談を検索` (client-side, on title and `申請者 / 作業名`); one card per request: client chip, requester + work name, age, title, tags (`急ぎ`, deadline, `保留中`, `修正あり`, `テスト`). Nothing pending: `いま決めることはありません` / `相談が届いたら、お知らせします。`. Search with no hit: `この条件の相談はありません`. Each card carries its status word as the first tag: `未回答` or `保留`. A card opens S5. Shots: `inbox` [390](screenshots/web/inbox-390.png) [1280](screenshots/web/inbox-1280.png); `inbox-held` (chip `保留`) [390](screenshots/web/inbox-held-390.png) [1280](screenshots/web/inbox-held-1280.png); `inbox-search-none` [390](screenshots/web/inbox-search-none-390.png) [1280](screenshots/web/inbox-search-none-1280.png); `inbox-empty` [390](screenshots/web/inbox-empty-390.png) [1280](screenshots/web/inbox-empty-1280.png)
 
-**S4 `履歴`** `/history` pages/History.tsx. `h1` `履歴`; chips `すべて` `回答済み` `取り下げ`; search `相談を検索`; cards (date, title, the chosen option or `文で回答`, a delivery tag, or `AIが取り下げ` + reason). Empty: `まだ履歴はありません` / `あなたの回答が、ここに残ります。`. Cards open S5 with `from: history`. **No delete button here**; deleting history is only in S8. Shots: `history` [390](screenshots/web/history-390.png) [1280](screenshots/web/history-1280.png); `history-empty` [390](screenshots/web/history-empty-390.png) [1280](screenshots/web/history-empty-1280.png)
+**S4 `履歴`** `/history` pages/History.tsx. `h1` `履歴`; chips `すべて` `回答済み` `取り下げ`; search `相談を検索`; cards (date, title, then the tags `回答済み` + the chosen option or `文で回答` + a delivery tag, or `取り下げ` + the reason). No match for a chip or search: `この条件の相談はありません`. Empty: `まだ履歴はありません` / `あなたの回答が、ここに残ります。`. Cards open S5 with `from: history`. **No delete button here**; deleting history is only in S8. Shots: `history` [390](screenshots/web/history-390.png) [1280](screenshots/web/history-1280.png); `history-empty` [390](screenshots/web/history-empty-390.png) [1280](screenshots/web/history-empty-1280.png)
 
-**S5 `相談`** `/d/<id>` pages/DecisionView.tsx. Shell (highlight per section 1); `戻る`; client chip, requester / work, age; `h1` the title; tags (urgency, deadline, `テスト`, `接続: <name>`, the id); optional boxes `AIが修正しました` and `似た申請と別件である理由`; `背景` + the context; `AIの添付画像`. Answerable (pending or held), in this order: `どう進める？` (options as radio buttons, `AIの推奨` badge on the recommendation; nothing is preselected); `補足・別の指示`; `画像・書類を添付` (+ `ファイルを追加`, 50MB note); then one row with `保留する` / `保留を解除` and `回答を送信` (enabled once an option is chosen, or text or an attachment is present). Answered: `あなたの回答` (option label or text, attachments), the delivery state (`AIへの配送待ち` / `AIへ届いた` / `届いたか不明` / `AIが受け取った`, with the explanation for unknown), and `再開の一言をコピー`. Cancelled: `AIが取り下げました` + reason. A collapsed `履歴` (timeline) is at the bottom. Banners (grey, above the chip): `AIがこの申請を取り下げました。`, `AIが内容を直しました。内容を確かめてから答えてください。`, or the server's message when hold/answer fails.
+**S5 `相談`** `/d/<id>` pages/DecisionView.tsx. Shell (highlight per section 1); `戻る`; client chip, requester / work, age; `h1` `相談`; the title as an `h2` (same size as the old title); tags (urgency, deadline, `テスト`, `接続: <name>`, the id); optional boxes `AIが修正しました` and `似た申請と別件である理由`; `背景` + the context; `AIの添付画像`. Answerable (pending or held), in this order: `どう進める？` (options as radio buttons, `AIの推奨` badge on the recommendation; nothing is preselected); `補足・別の指示`; one button `画像・書類を添付` (opens the browser's file picker; the attached files are listed above it; 50MB note below); then one row with `保留する` / `保留を解除` and `回答を送信` (enabled once an option is chosen, or text or an attachment is present). Answered: `あなたの回答` (option label or text, attachments), the delivery state (`AIへの配送待ち` / `AIへ届いた` / `届いたか不明` / `AIが受け取った`, with the explanation for unknown), and `再開の一言をコピー`. Cancelled: `AIが取り下げました` + reason. A collapsed `履歴` (timeline) is at the bottom. Banners (grey, above the chip): `AIがこの申請を取り下げました。`, `AIが内容を直しました。内容を確かめてから答えてください。`, or the server's message when hold/answer fails.
 Shots: `decision-open` [390](screenshots/web/decision-open-390.png) [1280](screenshots/web/decision-open-1280.png); option chosen [390](screenshots/web/decision-open-chosen-390.png) [1280](screenshots/web/decision-open-chosen-1280.png); amended [390](screenshots/web/decision-open-amended-390.png) [1280](screenshots/web/decision-open-amended-1280.png); held [390](screenshots/web/decision-held-390.png) [1280](screenshots/web/decision-held-1280.png); answered [390](screenshots/web/decision-answered-390.png) [1280](screenshots/web/decision-answered-1280.png); answered, delivery unknown [390](screenshots/web/decision-answered-unknown-390.png) [1280](screenshots/web/decision-answered-unknown-1280.png); cancelled [390](screenshots/web/decision-cancelled-390.png) [1280](screenshots/web/decision-cancelled-1280.png); load error (red message + `受信一覧へ`) [390](screenshots/web/decision-error-390.png) [1280](screenshots/web/decision-error-1280.png)
 
 **S6 `接続`** `/connections` pages/Connections.tsx. `h1` `接続`; sections in the spec's order:
-1. `AIをつなぐ`: the PC command with `コマンドをコピー`; `画面にコードが出たら、下の欄に入力します。`; field `ABCD-EFGH` + `コードを確認` (-> `/pair?c=`). No `QRコードを読む` (section 9).
+1. `AIをつなぐ`: the PC command with `コマンドをコピー`; `PCでコマンドを実行すると、8文字のコードとQRが出ます。そのコードを下の欄に入れるか、QRを読みます。` (before the command); field `ABCD-EFGH` + `コードを確認` (-> `/pair?c=`). No `QRコードを読む` (section 9).
 2. `つないだAI`: one row per connection (name, OS, last seen) with `外す` (native confirm). Empty: `まだつないだAIはありません。`
-3. `接続テスト`: per device `テストする` (shows the hint to tell the AI `Approval Boxのsetup_testを実行して`) and the state line per AI client (`未テスト` / `答え待ち` / `AIへ配送中` / `確認済み` / `失敗` with the reason). When a check is `答え待ち` and the server gave its request id, `テストの申請を開く` opens S5 directly. Empty: `AIをつなぐと、ここでテストできます。`
-4. (`AIごとの登録手順`: not on the Web, section 9.)
+3. `接続テスト`: per device `テストする` (shows the hint to tell the AI `Approval Boxのsetup_testを実行して`) and the state line per AI client (`未テスト` / `答え待ち` / `AIへ配送中` / `確認済み` / `失敗` with the reason). When a check is `答え待ち` and the server gave its request id, `接続テストの申請を開く` opens S5 directly. Empty: `AIをつなぐと、ここでテストできます。`
+4. `AIごとの登録手順`: one block per AI (Claude Code, Codex, Cursor, Grok) with its title and steps, taken from the server's `GET /onboarding` (the same endpoint, hence the same texts, the Android app uses; the server picks the language from `Accept-Language`). A step that has a command to copy gets the button `登録手順をコピー` (copies the command; `コピーしました` for 2s). Source: Connections.tsx `Guides`.
 5. `画面のない端末を登録` (disclosure): a name field + `トークンを作る` (`POST /tokens`); the command with the token is shown once with `コマンドをコピー`. The new connection then appears under `つないだAI`.
 Shots: `connections-empty` [390](screenshots/web/connections-empty-390.png) [1280](screenshots/web/connections-empty-1280.png); `connections` [390](screenshots/web/connections-390.png) [1280](screenshots/web/connections-1280.png); test hint [390](screenshots/web/connections-test-hint-390.png) [1280](screenshots/web/connections-test-hint-1280.png); token [390](screenshots/web/connections-token-390.png) [1280](screenshots/web/connections-token-1280.png)
 
@@ -90,12 +90,12 @@ Shots: no contract (also what `/`, `/history` and a request show on 402) `inbox-
 
 **S8 `設定`** `/settings` pages/Settings.tsx. `h1` `設定`; panels in the spec's order:
 1. `アカウント`: `スマホの承認でログインしています` (L) / `Appleでログインしています` / `Googleでログインしています` (I).
-2. `契約`: the status line (same as S7) + `契約について` -> S7.
+2. `契約`: the status line (same as S7), `期限: YYYY/MM/DD` when active (same as S7), + `契約について` -> S7.
 3. `ほかの端末`: `この端末は、ほかの端末をログインさせられません。止めるときは、承認したスマホの 設定 → ほかの端末 から止めます。` (the Web never has a store pass).
-4. (`通知`: omitted, the Web has no notification setting.)
+4. `通知`: `ブラウザ版には通知がありません。通知はスマホとPCのアプリで受け取れます。`
 5. `言語`: the picker.
 6. `履歴の保存`: `保存期間` (7 / 30 / 90 / 365 days, saves at once), `履歴を削除` (confirm, then `N件消しました。` on the page).
-7. `ヘルプ`: `使い方・お問い合わせ` (`/support.html`), `利用規約`, `プライバシーポリシー`; below them the Linux app note and `ダウンロード（GitHub）` (kept from the old `Linux版アプリ` panel, which is not a spec section).
+7. `ヘルプ`: `使い方・お問い合わせ` (`/support.html`), `利用規約`, `プライバシーポリシー`, nothing else. The Linux app note and the GitHub download link are on the support page (`/support.html`, ja and en, section `Linux版アプリ` / `Linux app`).
 8. `アカウント管理`: `保存されている情報の写しを受け取る`, `ログアウト`, `アカウントと全データを削除`.
 Shots: `settings-subscribed` (I, App Store) [390](screenshots/web/settings-subscribed-390.png) [1280](screenshots/web/settings-subscribed-1280.png); expired [390](screenshots/web/settings-expired-390.png) [1280](screenshots/web/settings-expired-1280.png); no contract (L) [390](screenshots/web/settings-no-contract-390.png) [1280](screenshots/web/settings-no-contract-1280.png); self-hosted [390](screenshots/web/settings-selfhost-390.png) [1280](screenshots/web/settings-selfhost-1280.png); L, Google Play [390](screenshots/web/settings-library-390.png) [1280](screenshots/web/settings-library-1280.png); a failed `履歴を削除` showing S9 [390](screenshots/web/settings-alert-390.png) [1280](screenshots/web/settings-alert-1280.png)
 
@@ -127,7 +127,7 @@ All rows were checked by `tools/screens/capture-web.ts` or `packages/web/test/br
 | S2 | other error | S2 with `コードを出せませんでした。…` | librarylogin.tsx |
 | S2 (expired / error) | `新しいコードを出す` | S2 (new code) | librarylogin.tsx |
 | S1 (I) | Google's button -> `POST /auth/google` ok | S3 | idlogin.tsx |
-| S1 (I) | `Appleでログイン` -> pop-up -> `POST /auth/apple` ok | S3 | idlogin.tsx |
+| S1 (I) | `Appleでサインイン` -> pop-up -> `POST /auth/apple` ok | S3 | idlogin.tsx |
 | S1 (I) | Apple pop-up fails | S1 with the red `Appleのログインができませんでした。` | idlogin.tsx |
 
 ### 5.2 Menu and links (signed in)
@@ -145,7 +145,7 @@ All rows were checked by `tools/screens/capture-web.ts` or `packages/web/test/br
 | S5 error | `受信一覧へ` | S3 | DecisionView.tsx |
 | S6 | code + `コードを確認` | pair `/pair?c=<code>` (empty field: nothing) | Connections.tsx |
 | S6 | `テストする` | same screen, hint shown | Connections.tsx |
-| S6 | `テストの申請を開く` (check is `答え待ち` with a request id) | S5 of that request (works without a contract; code only: the id comes from the server) | Connections.tsx `checkLine` |
+| S6 | `接続テストの申請を開く` (check is `答え待ち` with a request id) | S5 of that request (works without a contract; code only: the id comes from the server) | Connections.tsx `checkLine` |
 | S6 | `外す` | native confirm; yes -> row removed, same screen | Connections.tsx |
 | S6 | `画面のない端末を登録` -> `トークンを作る` | same screen, command shown once | Connections.tsx `Tokens` |
 | pair | `つなぐ` / `許可する`, `心当たりがない` / `許可しない` | pair-done | Connections.tsx `Pair` |
@@ -184,9 +184,9 @@ All rows were checked by `tools/screens/capture-web.ts` or `packages/web/test/br
 | Signed in by phone approval (L) | `アカウント`: `スマホの承認でログインしています`; sign out = library sign-out | Settings.tsx |
 | Signed in by Google/Apple (I) | `アカウント`: `Googleでログインしています` / `Appleでログインしています` | Settings.tsx |
 | Pass stopped from the phone / expired | next call 401 -> S1 + S1b banner | api.ts, login.tsx |
-| No contract (402) | S3, S4 and S5 show S7; S6, S8, export, sign-out and account deletion keep working. Exception on the server: a test request opened by id passes the gate, so the `テストの申請を開く` link works | server/http.ts |
+| No contract (402) | S3, S4 and S5 show S7; S6, S8, export, sign-out and account deletion keep working. Exception on the server: a test request opened by id passes the gate, so the `接続テストの申請を開く` link works | server/http.ts |
 | Contract expired / none (L) | status `未契約` (the store of a lapsed pass is unknown, so `期限切れ` appears only when `GET /me` has `expires_at`) | format.ts, server/accounts.ts |
-| Contract active | `契約中（App Store）` / `契約中（Google Play）` / `契約中` (no store known) + `期限:` | format.ts |
+| Contract active | `契約中（App Store）` / `契約中（Google Play）` / `契約中` (no store known) + `期限:` (S7 and S8) | format.ts |
 | Self-hosted (`billing: off`) | the free sentence in S7 and S8; no cannot-buy block | format.ts, Plan.tsx |
 
 Where things live:
@@ -243,19 +243,18 @@ stateDiagram-v2
 
 ## 8. Labels and additions
 
-Section 9 lists what the Web leaves out. Nothing in the spec was relabelled: every label, heading and guidance text is the spec's. The Web adds only a few lines the spec does not list, each marked there: `一致する相談はありません。` (a search with no hit), `まだつないだAIはありません。` and `AIをつなぐと、ここでテストできます。` (empty S6 sections), the Linux app note in `ヘルプ`.
+Section 9 lists what the Web leaves out. Nothing in the spec was relabelled: every label, heading and guidance text is the spec's. The Web adds only a few lines the spec does not list: `AIをつなぐと、ここでテストできます。` (the empty `接続テスト` section) and the self-hosted sentence in S7/S8.
 
 ## 9. Not on the Web, and why
 
 | Spec item | Web | Why |
 |---|---|---|
-| S1 native button `Appleでログイン` / `Googleでログイン` | present only in ID-login mode | the contract: a Web browser is logged in by a phone's approval (L); the ID buttons exist only for servers without the library login |
+| S1 native button `Appleでサインイン` / `Googleでログイン` | present only in ID-login mode | the contract: a Web browser is logged in by a phone's approval (L); the ID buttons exist only for servers without the library login |
 | S2 `QRコードを読む` / camera (S6 and S8 where a camera exists) | not provided | the Web has no QR scanner; the code field is always there |
-| S6 `AIごとの登録手順` | omitted | the Web has no guide content and the spec says no server feature is to be invented; needs the guide texts from the app side |
 | S6 `接続テスト` creating the test request | the AI creates it (`setup_test`); the Web shows the hint and, when the server reports a request id, opens it | no API creates a test request from the user's side |
 | S7 buy block, `購入を復元`, `…で契約を管理` | never shown | the Web cannot buy (contract section 3); the cannot-buy block is shown instead |
 | S8 `ほかの端末` controls (`ほかの端末をログインさせる`, `ログインさせた端末`, `停止`) | explanatory text only | the Web never has a store pass, so it cannot approve or stop other devices |
-| S8 `通知` | section omitted | the Web has no notification setting |
+| S8 `通知` | the section exists but only says there are no notifications in the browser | the Web has no notification setting (the spec's wording) |
 | Native confirmations in S8 | native `confirm` / `prompt` | unchanged behaviour; the texts are the shared ones |
 
 ## 10. How the shots were made

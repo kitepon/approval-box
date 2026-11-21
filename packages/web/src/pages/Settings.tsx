@@ -7,9 +7,9 @@ import { LanguagePicker } from "../language";
 import { libraryClient } from "../librarylogin";
 import { linkProps } from "../router";
 import { bump, loadMe, useResource } from "../store";
-import { planStatus } from "../format";
+import { dateOnly, planStatus } from "../format";
 
-/** S8 設定。節の順は docs/architecture/screens.md のとおり。「通知」はWebに通知の設定が無いので出さない。 */
+/** S8 設定。節の順は docs/architecture/screens.md のとおり。Webには通知が無いので、「通知」の節はその旨だけを言う。 */
 export function Settings() {
   const me = useResource(loadMe);
   const settings = useResource(() => api<{ retention_days: number }>("GET", "/me/settings"));
@@ -51,12 +51,17 @@ export function Settings() {
         <div class="panel">
           <h2>{t("契約")}</h2>
           <p>{planStatus(m)}</p>
+          {m.plan === "active" && m.expires_at && m.billing !== "off" && <p>{t("期限: {date}", { date: dateOnly(m.expires_at) })}</p>}
           <a class="button-link" {...linkProps("/plan")}>{t("契約について")}</a>
         </div>
       )}
       <div class="panel">
         <h2>{t("ほかの端末")}</h2>
         <p class="muted">{t("この端末は、ほかの端末をログインさせられません。止めるときは、承認したスマホの 設定 → ほかの端末 から止めます。")}</p>
+      </div>
+      <div class="panel">
+        <h2>{t("通知")}</h2>
+        <p class="muted">{t("ブラウザ版には通知がありません。通知はスマホとPCのアプリで受け取れます。")}</p>
       </div>
       <div class="panel">
         <h2>{t("言語")}</h2>
@@ -80,9 +85,6 @@ export function Settings() {
           <li><a href="/terms.html" target="_blank" rel="noopener">{t("利用規約")}</a></li>
           <li><a href="/privacy.html" target="_blank" rel="noopener">{t("プライバシーポリシー")}</a></li>
         </ul>
-        <p class="muted">{t("Linux版アプリ")}: {t("Ubuntu 24.04以降・Debian 13以降（amd64）向けの.debです。自動更新はないので、新しい版は入れ直してください。")}</p>
-        {/* shortcut: releases/latest assumes every release in this repo is the Linux app, change it if other releases are added */}
-        <a href="https://github.com/kitepon/approval-box/releases/latest" target="_blank" rel="noopener">{t("ダウンロード（GitHub）")}</a>
       </div>
       <div class="panel">
         <h2>{t("アカウント管理")}</h2>

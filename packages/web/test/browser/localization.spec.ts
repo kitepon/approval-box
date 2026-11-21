@@ -14,7 +14,7 @@ async function fixture(page: Page, signedIn=true) {
     else if(url.pathname==="/v1/decisions")data={items:url.search.includes("answered")?[{...pending,id:"K-DONE01",status:"answered",delivery:"delivered",answer:{text:"回答の原文"}}]:[pending]};
     else if(url.pathname==="/v1/decisions/K-TEST01")data=pending;
     else if(url.pathname.endsWith("/attachments"))data={items:[]};
-    else if(url.pathname==="/v1/connections")data=[];
+    else if(url.pathname==="/v1/connections"||url.pathname==="/v1/onboarding")data=[];
     else if(url.pathname==="/v1/events")return route.fulfill({status:200,contentType:"text/event-stream",body:""});
     return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(data)});
   });
