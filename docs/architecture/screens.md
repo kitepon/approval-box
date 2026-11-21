@@ -117,7 +117,7 @@ Same on every app. The Mac gains `外す`, `テストする`, the guides and the
    - **Can buy here** (store pass on iPhone/iPad/Mac/Android):
      - before setup is verified: `契約の前に、AIとつながっているか確かめます。` → `1. 接続テストの申請に答える` (button `接続テストの申請を開く` → S5) → `2. 契約する`
      - then the price and the button `1か月無料で試す（その後 ¥… / 月）` or `¥… / 月で契約する`, `購入を復元`, and when active `App Storeで契約を管理` / `Google Playで契約を管理`
-   - **Cannot buy here** (handoff pass, Linux, Web), the same text everywhere: `この端末では契約できません。契約は、iPhone・iPad・Mac または Android の決裁箱で、設定 → 契約 から行います。` When active: `この端末は、契約しているスマホの承認でログインしています。` with no buy, restore or manage controls.
+   - **Cannot buy here** (signed or handoff pass, Linux, Web), the same text everywhere: `この端末では契約できません。契約は、iPhone・iPad・Mac または Android の決裁箱で、設定 → 契約 から行います。` When active: `この端末は、契約しているスマホの承認でログインしています。` with no buy, restore or manage controls.
 3. `1か月ごとの自動更新。解約は、契約したストアの管理画面から行えます。` + `利用規約` (/terms.html) `プライバシーポリシー` (/privacy.html) `特定商取引法に基づく表記` (https://kitepon.dev/specified-commercial-transactions/#approval-box).
 4. On no contract, also `ログアウト` (so a wrong account is never a dead end).
 5. **A purchase of another account** (login-billing contract 1.13 section 2, `otherAccount` / `otherAccountProducts`; ruling 2026-11-21): the store account of this device holds a purchase that belongs to another Approval Box account. It stays a failure; the app never finishes, hides or deletes it.
@@ -131,13 +131,16 @@ Same on every app. The Mac gains `外す`, `テストする`, the guides and the
    - When one attempt gives several answers (a restore of several purchases), one alert: `otherAccount` first, then `invalid`, then `notConfirmed`.
 
 ### S8 `設定` (same sections, same order, everywhere)
-1. `アカウント`: `Appleでログインしています` / `Googleでログインしています` / `スマホの承認でログインしています`
+1. `アカウント`: `Appleでログインしています` / `Googleでログインしています` / `スマホの承認でログインしています` (handoff pass only). A signed pass shows the provider line too.
+   - Web sign-in that never returns to this device (1.20 return_not_received): S9 `サインインの結果がこの端末に戻りませんでした。この端末のブラウザでサインインしてください。`
 2. `契約`: status line (as S7, including `期限: …` when active) + `契約について` → S7
 3. `ほかの端末`:
    - store pass: `ほかの端末をログインさせる` (→ code field + QR where a camera exists → confirm, see below); `ログインさせた端末` (rows `停止`, `ほかの端末をすべて停止`)
    - `ほかの端末をすべて停止` (login-billing 0.7.1, contract 1.15): first the S9 confirm `ほかの端末をすべて停止しますか？確かめるため、もう一度 Apple でサインインします。` (iPhone/iPad/Mac; Android says `Google`) with `停止する` / `やめる`; then the store's sign-in sheet once (the same account). Done → `ほかの端末をすべて停止しました。`; the sheet cancelled → nothing is stopped and nothing is shown; a sign-in of another account → with login-billing 0.7.1 the S9 alert `別のアカウントでサインインしたため、この端末はそのアカウントに切り替わりました。そのアカウントのほかの端末は止まりました。もとのアカウントの端末は止めていません。` (what 0.7.1 really does; Mint contract 1.16). From 0.7.2 the server refuses it (account_mismatch, nothing changes) and the alert becomes `ログインしているアカウントとは別のアカウントでした。止めていません。`
    - The confirm screen (login-billing contract 1.14, product duty for the QR confirm; ruling 2026-11-21), in this order: heading `この端末をログインさせますか？`; `確認番号` `NN`; `端末が名乗った名前` + the device label (the name that device gave itself, never shown as a checked fact); the warning `自分で始めたログインで、目の前の端末に同じ確認番号が出ている時だけ許可してください。メールやメッセージで頼まれたログインや、心当たりのないログインは許可しないでください。`; buttons `許可する` / `許可しない`. Why: a phishing page can relay a real QR and its number; the number only stops a mix-up of two codes. After a mistake the way out is `ログインさせた端末` → `停止`, kept one step from S8.
-   - otherwise, the same section with the text: `この端末は、ほかの端末をログインさせられません。止めるときは、承認したスマホの 設定 → ほかの端末 から止めます。`
+   - signed pass (login-billing 1.20, 'Every device signs in': a device that signed in itself by the web way, e.g. Linux or an Android with an Apple account): `ほかの端末をすべて停止` (same confirm and texts as above, with that device's provider) and the text `この端末は、ほかの端末をログインさせられません。止めるときは、契約したスマホの 設定 → ほかの端末 から止めます。`; no device list, no approve.
+   - handoff pass (old flow, until oldHandoff is off): the text `この端末は、ほかの端末をログインさせられません。止めるときは、承認したスマホの 設定 → ほかの端末 から止めます。`
+   - approve answers (1.20): another account -> S9 `このコードは、ログインしているアカウントとは別のアカウントのものです。許可していません。`; already entitled (an account that is exempt) -> S9 `この端末は、もう使える状態です。許可はいりません。` (not an error).
 4. `通知` (where the app cannot notify, e.g. the Web, the same section reads `ブラウザ版には通知がありません。通知はスマホとPCのアプリで受け取れます。`)
 5. `言語` (the heading `言語` is always shown next to the picker, on S1 too)
 6. `履歴の保存` (`保存期間`, `履歴を削除`)
