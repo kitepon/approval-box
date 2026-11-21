@@ -49,7 +49,7 @@ In this order:
 1. `Approval Box` / `AIの相談に、スマホやPCから答えます。`
 2. The native button where the contract has one: Apple's `Appleでサインイン` or Google's `Googleでログイン`.
 3. `スマホの承認でログイン`. This is the main button on Linux/Web, and the second button where a native sign-in exists.
-4. Disclosure `はじめての方へ` (the same 3 steps everywhere):
+4. Disclosure `はじめての方へ` (the same 3 steps everywhere, shown with the numbers `1.` `2.` `3.`):
    1. `iPhone・iPad・Mac または Android の決裁箱で、Apple または Google でログインし、設定 → 契約 から契約します。`
    2. `PCでコマンドを実行して、AIとつなぎます。` + command + `コマンドをコピー`
    3. `ほかの端末（Linux・ブラウザ・もう一方のスマホ）は、この画面の「スマホの承認でログイン」を押し、契約したスマホの 設定 → ほかの端末をログインさせる で承認します。`
@@ -74,36 +74,37 @@ Mapping: library code `pass_refused` → stopped, `pass_expired` → expired, an
 Edges:
 - The phone approves → `受信`.
 - `やめる` → S1.
-- The code expires → stay on S2 with `コードの期限が切れました。` and button `新しいコードを出す`. No error dialog, no bounce to S1.
+- The code expires → stay on S2; the QR, the code, the check number and the validity line are removed, and only `コードの期限が切れました。` and the button `新しいコードを出す` remain (with `やめる`). No error dialog, no bounce to S1.
 - A native sign-in finishes meanwhile → `受信` (the native sign-in wins, contract 1.11).
 
 ### S3 `受信` / S4 `履歴` (lists)
-- The same filter chips everywhere: `受信`: `すべて` `未回答` `保留`; `履歴`: `すべて` `回答済み` `取り下げ`.
-- The same search field `相談を検索` everywhere.
+- In this order at the top of the list: the filter chips, then the search field `相談を検索`. No count line.
+- The same filter chips everywhere: `受信`: `すべて` `未回答` `保留`; `履歴`: `すべて` `回答済み` `取り下げ`. A row's status word uses the same words (`未回答`, `保留`, `回答済み`, `取り下げ`).
 - The same empty texts: `いま決めることはありません` / `相談が届いたら、お知らせします。` and `まだ履歴はありません` / `あなたの回答が、ここに残ります。`.
-- A row opens S5.
+- No match for a filter or search: `この条件の相談はありません` (one line).
+- A row opens S5. In a split view, the empty detail pane reads `相談を選んでください` (one line), and switching between `受信` and `履歴` clears the selection.
 - When there is no contract, both lists are replaced by S7 (not a red line, not a dead end).
 
 ### S5 `相談` (one request)
-Header, `背景`, `AIの添付画像`. When answerable, in this order:
+Page heading `相談` on every app. Header, `背景`, `AIの添付画像`. When answerable, in this order:
 1. `どう進める？` (options, `AIの推奨`)
 2. `補足・別の指示`
-3. `画像・書類を添付`
+3. One button `画像・書類を添付` (where the platform separates photos from files, the button opens a choice `写真` / `ファイル`)
 4. `保留する` / `保留を解除`
-5. `回答を送信`
+5. `回答を送信` (always this label; disabled until an option is chosen or text is written)
 When answered: `あなたの回答`, delivery state, `再開の一言をコピー`. `戻る` returns to the list it came from (`閉じる` in a split view). After `回答を送信` the app stays on the answered request; it does not jump.
 
 ### S6 `接続` (AI and PC)
 In this order:
-1. `AIをつなぐ` (PC command + `コマンドをコピー`; field `ABCD-EFGH` + `コードを確認`; `QRコードを読む` where a camera exists → confirm `このAIをつなぎますか？` `つなぐ` / `心当たりがない`)
-2. `つないだAI` (rows, `外す` with confirmation)
-3. `接続テスト` (`テストする`; the request to answer opens S5 directly)
-4. `AIごとの登録手順`
+1. `AIをつなぐ`: the text `PCでコマンドを実行すると、8文字のコードとQRが出ます。そのコードを下の欄に入れるか、QRを読みます。` then (PC command + `コマンドをコピー`; field `ABCD-EFGH` + `コードを確認`; below it `QRコードを読む` where a camera exists → confirm `このAIをつなぎますか？` `つなぐ` / `心当たりがない`)
+2. `つないだAI` (rows, `外す` with confirmation; empty: `まだつないだAIはありません。`)
+3. `接続テスト` (`テストする`; the request to answer opens S5 directly with `接続テストの申請を開く`)
+4. `AIごとの登録手順` (the same guide texts on every app, Web included)
 5. Disclosure `画面のない端末を登録` (tokens)
 Same on every app. The Mac gains `外す`, `テストする`, the guides and the tokens.
 
 ### S7 `契約` (screen; opened from `設定 → 契約について`, and shown by itself on no contract / 402)
-1. Status line: `契約中（App Store）` / `契約中（Google Play）` / `未契約` / `期限切れ（YYYY/MM/DD）`, plus `期限: …` when active. The status always comes from the server (`GET /me`), so every device of the account shows the same.
+1. Status line: `契約中（App Store）` / `契約中（Google Play）` / `未契約` / `期限切れ（YYYY/MM/DD）`, plus `期限: …` when active. A self-hosted server with billing off shows `このサーバーは自分で立てたもので、料金はかかりません。` instead. The status always comes from the server (`GET /me`), so every device of the account shows the same.
 2. One of these blocks:
    - **Can buy here** (store pass on iPhone/iPad/Mac/Android):
      - before setup is verified: `契約の前に、AIとつながっているか確かめます。` → `1. 接続テストの申請に答える` (button `接続テストの申請を開く` → S5) → `2. 契約する`
@@ -114,14 +115,14 @@ Same on every app. The Mac gains `外す`, `テストする`, the guides and the
 
 ### S8 `設定` (same sections, same order, everywhere)
 1. `アカウント`: `Appleでログインしています` / `Googleでログインしています` / `スマホの承認でログインしています`
-2. `契約`: status line (as S7) + `契約について` → S7
+2. `契約`: status line (as S7, including `期限: …` when active) + `契約について` → S7
 3. `ほかの端末`:
    - store pass: `ほかの端末をログインさせる` (→ code field + QR where a camera exists → confirm `この端末をログインさせますか？` `許可する` / `許可しない`); `ログインさせた端末` (rows `停止`, `ほかの端末をすべて停止`)
    - otherwise, the same section with the text: `この端末は、ほかの端末をログインさせられません。止めるときは、承認したスマホの 設定 → ほかの端末 から止めます。`
-4. `通知`
-5. `言語`
+4. `通知` (where the app cannot notify, e.g. the Web, the same section reads `ブラウザ版には通知がありません。通知はスマホとPCのアプリで受け取れます。`)
+5. `言語` (the heading `言語` is always shown next to the picker, on S1 too)
 6. `履歴の保存` (`保存期間`, `履歴を削除`)
-7. `ヘルプ` (`使い方・お問い合わせ`, `利用規約`, `プライバシーポリシー`)
+7. `ヘルプ` (`使い方・お問い合わせ`, `利用規約`, `プライバシーポリシー`; nothing else. The Linux app download lives on the support page.)
 8. `アカウント管理` (`保存されている情報の写しを受け取る`, `ログアウト`, `アカウントと全データを削除`). Every destructive action asks once, with the same texts on every app.
 
 ### S9 Errors
