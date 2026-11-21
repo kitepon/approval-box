@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { api } from "./api";
+import { api, isNoContract } from "./api";
 import type { Decision, Me } from "./types";
 
 type Listener = () => void;
@@ -24,10 +24,10 @@ export function useBump(): number {
 
 export function useResource<T>(load: () => Promise<T>, deps: unknown[] = []) {
   const tick = useBump();
-  const [state, setState] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: true });
+  const [state, setState] = useState<{ data?: T; error?: string; noContract?: boolean; loading: boolean }>({ loading: true });
   useEffect(() => {
     let alive = true;
-    load().then((data) => alive && setState({ data, loading: false })).catch((error: Error) => alive && setState({ error: error.message, loading: false }));
+    load().then((data) => alive && setState({ data, loading: false })).catch((error: Error) => alive && setState({ error: error.message, noContract: isNoContract(error), loading: false }));
     return () => { alive = false; };
   }, [tick, ...deps]);
   return state;

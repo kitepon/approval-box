@@ -1,32 +1,39 @@
-import { systemMessage, t } from "../i18n.ts";
 import { useState } from "preact/hooks";
-import { api } from "../api";
+import { systemMessage, t } from "../i18n.ts";
 import { linkProps } from "../router";
-import { bump, loadClosed, useResource } from "../store";
+import { loadClosed, useResource } from "../store";
 import { dateTime, DELIVERY_LABEL } from "../format";
+import { ListFilters, matches } from "./ListFilters";
+import { Plan } from "./Plan";
 import { Source } from "./Source";
 
+/** S4 履歴。履歴の削除は設定（S8 履歴の保存）だけにある。 */
 export function History() {
-  const { data, error, loading } = useResource(loadClosed);
-  const [busy, setBusy] = useState(false);
-
-  async function deleteAll() {
-    if (!confirm(t("答え済みの履歴を全部消します。未決は残ります。よろしいですか？"))) return;
-    setBusy(true);
-    try { await api("DELETE", "/decisions?status=answered,cancelled"); bump(); }
-    catch (e) { alert((e as Error).message); }
-    finally { setBusy(false); }
-  }
-
+  const { data, error, loading, noContract } = useResource(loadClosed);
+  const [filter, setFilter] = useState<"all" | "answered" | "cancelled">("all");
+  const [query, setQuery] = useState("");
+  if (noContract) return <Plan />;
+  const shown = (data ?? []).filter((d) => (filter === "all" || d.status === filter) && matches(d, query));
   return (
     <section>
-      <h1>{t("既決")}</h1>
+      <h1>{t("履歴")}</h1>
       {error && <p class="error">{systemMessage(error)}</p>}
       {loading && !data && <p class="muted">{t("読み込み中…")}</p>}
-      {data && !data.length && <p class="muted">{t("まだ答えた申請はありません。")}</p>}
+      {data && !data.length && (
+        <div class="empty">
+          <p>{t("まだ履歴はありません")}</p>
+          <p class="muted">{t("あなたの回答が、ここに残ります。")}</p>
+        </div>
+      )}
+      {data && data.length > 0 && (
+        <>
+          <ListFilters chips={[["all", t("すべて")], ["answered", t("回答済み")], ["cancelled", t("取り下げ")]]} value={filter} onValue={setFilter} query={query} onQuery={setQuery} />
+          {!shown.length && <p class="muted">{t("一致する相談はありません。")}</p>}
+        </>
+      )}
       <div class="cards">
-        {data?.map((d) => (
-          <a key={d.id} class="card closed" {...linkProps(`/d/${d.id}`)}>
+        {shown.map((d) => (
+          <a key={d.id} class="card closed" {...linkProps(`/d/${d.id}`, { from: "history" })}>
             <div class="card-meta">
               <Source source={d.source} />
               <span class="time">{dateTime(d.updated_at)}</span>
@@ -44,7 +51,6 @@ export function History() {
           </a>
         ))}
       </div>
-      {data && data.length > 0 && <button class="ghost danger" disabled={busy} onClick={deleteAll}>{t("既決の履歴を削除")}</button>}
     </section>
   );
 }

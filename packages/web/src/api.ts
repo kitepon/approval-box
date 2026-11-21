@@ -26,17 +26,19 @@ export class ApiError extends Error {
   }
 }
 
-/** 製品の { error: { code, message } } と、ライブラリの { error: "<code>" }（wire v1）の両方を読む。契約が無い402は、どの画面でも同じ案内にする。 */
+/** 製品の { error: { code, message } } と、ライブラリの { error: "<code>" }（wire v1）の両方を読む。契約が無い402は、どの画面でも同じコード（subscription_expired）にする。 */
 function errorBody(status: number, json: { error?: ApiErrorBody | string }): ApiErrorBody {
   const error = json.error;
   const code = typeof error === "string" ? error : error?.code;
-  if (status === 402 && (code === "subscription_expired" || code === "no_entitlement")) return { code: "subscription_expired", message: t("iPhone・Mac・Android のアプリで契約してください") };
+  if (status === 402 && (code === "subscription_expired" || code === "no_entitlement")) return { code: "subscription_expired", message: t("この端末では契約できません。契約は、iPhone・iPad・Mac または Android の決裁箱で、設定 → 契約 から行います。") };
   if (typeof error === "string") return { code: error, message: `HTTP ${status}` };
   return error ?? { code: "internal", message: `HTTP ${status}` };
 }
 
-let onUnauthorized: () => void = () => {};
-export const setUnauthorizedHandler = (fn: () => void) => { onUnauthorized = fn; };
+/** 401の理由はライブラリのpass_*コード（止められた／使われず期限切れ／その他）。画面の案内文は main.tsx が選ぶ。 */
+let onUnauthorized: (code?: string) => void = () => {};
+export const setUnauthorizedHandler = (fn: (code?: string) => void) => { onUnauthorized = fn; };
+export const isNoContract = (error: unknown) => error instanceof ApiError && error.status === 402 && error.body.code === "subscription_expired";
 
 export async function api<T>(method: string, path: string, body?: unknown, options: { idempotent?: boolean } = {}): Promise<T> {
   const headers: Record<string, string> = { "content-type": "application/json", "accept-language": locale() };
@@ -57,16 +59,16 @@ export async function api<T>(method: string, path: string, body?: unknown, optio
     const json = text ? JSON.parse(text) : {};
     if (response.ok) return json as T;
     const err = errorBody(response.status, json);
-    if (response.status === 401) { setSession(null); onUnauthorized(); }
+    if (response.status === 401) { setSession(null); onUnauthorized(err.code); }
     if (response.status >= 500 && attempt === 0 && key) continue;
     throw new ApiError(response.status, err);
   }
 }
 
 async function failure(response: Response): Promise<ApiError> {
-  const json = await response.json().catch(() => ({}));
-  if (response.status === 401) { setSession(null); onUnauthorized(); }
-  return new ApiError(response.status, errorBody(response.status, json));
+  const err = errorBody(response.status, await response.json().catch(() => ({})));
+  if (response.status === 401) { setSession(null); onUnauthorized(err.code); }
+  return new ApiError(response.status, err);
 }
 
 /** 添付を1つ上げる（本文はファイルそのまま）。通信が切れたら同じ冪等キーで1回だけ送り直す。 */
@@ -117,8 +119,8 @@ export async function downloadExport(): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-/** /v1/events を読む。EventSourceはヘッダーを付けられないので fetch で読む。切れたら間隔を延ばして張り直す。 */
-export function subscribeEvents(onEvent: (type: string, data: Record<string, unknown>) => void): () => void {
+/** /v1/events を読む。EventSourceはヘッダーを付けられないので fetch で読む。切れたら間隔を延ばして張り直す。401は理由つきで知らせて止め、402は止めて知らせる。 */
+export function subscribeEvents(onEvent: (type: string, data: Record<string, unknown>) => void, onNoContract: () => void = () => {}): () => void {
   let stopped = false;
   let controller: AbortController | null = null;
   let lastId = 0;
@@ -131,7 +133,9 @@ export function subscribeEvents(onEvent: (type: string, data: Record<string, unk
           headers: { "accept-language": locale(), ...bearerHeader(), accept: "text/event-stream", ...(lastId ? { "last-event-id": String(lastId) } : {}) },
           signal: controller.signal,
         });
-        if (response.status === 401) { setSession(null); onUnauthorized(); return; }
+        if (response.status === 401) { setSession(null); onUnauthorized(errorBody(401, await response.json().catch(() => ({}))).code); return; }
+        // 契約が無い間は流れを張り直さない。契約の画面（S7）が出ていて、戻った時に main.tsx が張り直す。
+        if (response.status === 402) { onNoContract(); return; }
         if (!response.ok || !response.body) throw new Error(String(response.status));
         backoff = 1000;
         const reader = response.body.getReader();
