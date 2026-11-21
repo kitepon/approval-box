@@ -4,6 +4,8 @@ import { sendChannelAnswer, channelAnswerState } from "./channel-delivery.ts";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Api, ServerError } from "./api.ts";
+import { pcPrepared } from "./pc-mode.ts";
+import type { DaemonApi, PeerChannelRuntime } from "./pc-daemon.ts";
 import { type Wakes, queueWake, sendWake, wakeMessage } from "./bellteam-wake.ts";
 import { type AttachmentMeta, pruneAttachments, saveAll } from "./attachments.ts";
 import { readConfig, requireConfig, writeJsonFile } from "./config.ts";
@@ -127,13 +129,30 @@ export async function runDaemon() {
   const status = daemonStatus();
   if (status.running && status.pid !== process.pid) return;
   writeJsonFile(lockFile(), { pid: process.pid, entry: runtimeEntry("cli"), started_at: new Date().toISOString() });
-  const api = new Api(requireConfig());
+  const log = (message: string) => process.stderr.write(`${new Date().toISOString()} ${message}\n`);
+  const config = requireConfig();
+  // peer-channel の道（c8c）: 鍵とペアリングの登録がある時は、申請と配送の記録を手元で持ち、答えは端末から直接受ける。
+  // 起こせない間は今の道へ黙って戻らない（MCPは同じソケットを見るので、daemon_unreachable の名前で失敗する）。名前付きの行を出して時間を空けて試し直す。
+  let pc: PeerChannelRuntime | undefined;
+  if (pcPrepared()) {
+    for (let wait = 5000; !pc; wait = Math.min(wait * 2, 60_000)) {
+      try {
+        const info = await new Api(config).call<{ connection_id: string; me: { user_id: string } }>("GET", "/connection");
+        const { startPeerChannel } = await import("./pc-daemon.ts"); // ネイティブのモジュール（node-datachannel）はこの道でだけ読む
+        pc = await startPeerChannel({ server: config.server, token: config.token, connectionId: info.connection_id, account: info.me.user_id, log });
+        log("peer-channel の道で動きます");
+      } catch (error) {
+        log(`peer-channel を起こせません（${(error as Error).message}）。${wait / 1000}秒後に試し直します`);
+        await sleep(wait);
+      }
+    }
+  }
+  const api: DaemonApi = pc ? pc.api : new Api(config);
   let journal: Journal = existsSync(journalFile()) ? (JSON.parse(readFileSync(journalFile(), "utf8")) as Journal) : {};
   const save = () => writeJsonFile(journalFile(), journal);
   let wakes: Wakes = {};
   try { if (existsSync(wakesFile())) wakes = JSON.parse(readFileSync(wakesFile(), "utf8")) as Wakes; } catch { /* 読めなければ空から */ }
   const saveWakes = () => writeJsonFile(wakesFile(), wakes);
-  const log = (message: string) => process.stderr.write(`${new Date().toISOString()} ${message}\n`);
 
   // 送信の途中で止まった起こし知らせは、届いたか分からない。再送しない。
   for (const [id, wake] of Object.entries(wakes)) {
@@ -315,7 +334,7 @@ export async function runDaemon() {
   };
   // 止められたら、すぐ席（lock）を空ける。終わるまでの数秒の間に起こされた次のデーモン（待たない古い版も含む）が、
   // 「もう動いている」と見て終わってしまわないように。
-  const stop = () => { stopping = true; releaseLock(); controller.abort(); };
+  const stop = () => { stopping = true; releaseLock(); controller.abort(); void pc?.stop(); };
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
 

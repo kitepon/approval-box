@@ -19,6 +19,8 @@ const result = await build({
   splitting: true,
   format: "esm",
   platform: "node",
+  // shortcut: peer-channel の道（c8c）が読む node-datachannel はネイティブのモジュールで、束ねられない。runtime へ載せる方法は adoption 7 の残り。
+  external: ["node-datachannel"],
   target: "node20",
   chunkNames: "chunks/[name]-[hash]",
   banner: { js: "import { createRequire as __kbCreateRequire } from 'node:module'; const require = __kbCreateRequire(import.meta.url);" },
