@@ -80,7 +80,7 @@ Edges:
 
 ### S3 `受信` / S4 `履歴` (lists)
 - In this order at the top of the list: the filter chips, then the search field `相談を検索`. No count line.
-- The same filter chips everywhere: `受信`: `すべて` `未回答` `保留`; `履歴`: `すべて` `回答済み` `取り下げ`. Every row shows its status word, pending rows included, with the same words (`未回答`, `保留`, `回答済み`, `取り下げ`) (ruling 2026-11-21 r2).
+- The same filter chips everywhere: `受信`: `すべて` `未回答` `保留`; `履歴`: `すべて` `回答済み` `取り下げ`. Every row shows its status word, pending rows included, with the same words (`未回答`, `保留`, `回答済み`, `取り下げ`) (ruling 2026-11-21 r2). Next to the status word (never instead of it) a row shows `急ぎ` when the request is urgent and `修正あり` when the AI amended it (ruling 2026-11-21 r3).
 - The same empty texts: `いま決めることはありません` / `相談が届いたら、お知らせします。` and `まだ履歴はありません` / `あなたの回答が、ここに残ります。`.
 - No match for a filter or search: `この条件の相談はありません` (one line).
 - A row opens S5. In a split view, the empty detail pane reads `相談を選んでください` (one line), and switching between `受信` and `履歴` clears the selection.
