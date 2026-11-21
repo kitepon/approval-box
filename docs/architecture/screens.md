@@ -1,6 +1,6 @@
 # Approval Box screens: the one state machine every app implements
 
-Status: **proposal for the Owner's decision** (approval-box/ui-redesign-20261121/u4). Until he approves it, the apps keep their current screens, which are described in the per-app maps:
+Status: **approved by the Owner on 2026-11-21** (Approval Box K-5V9T4F: go ahead, and the production switch waits for the redesign). Until each app implements it, the app keeps its current screens, which the per-app maps describe:
 - Web: `docs/screen-transitions-web.md` (this repo)
 - Apple: `docs/screen-transitions-apple.md` (approval-box-apps)
 - Android and Linux: `docs/screen-transitions-android.md` and `docs/screen-transitions-linux.md` (approval-box-apps, PR #48)
