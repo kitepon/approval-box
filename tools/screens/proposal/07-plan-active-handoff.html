@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>07-plan-active-handoff</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Hiragino Sans","Noto Sans CJK JP","Noto Sans JP","IPAGothic","IPAPGothic",system-ui,sans-serif;color:#1c1c1e;background:#f2f2f7;font-size:15px;line-height:1.55}
+.app{min-height:100vh;display:flex;flex-direction:column}
+.page{flex:1;padding:20px 18px 24px;display:flex;flex-direction:column;gap:14px}
+h1{font-size:26px;font-weight:700;letter-spacing:.01em}
+h2{font-size:13px;font-weight:600;color:#6c6c70;margin:10px 4px 6px}
+.sub{color:#48484a}
+.btn{display:block;width:100%;text-align:center;border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;border:1px solid transparent}
+.btn.primary{background:#0a6cff;color:#fff}
+.btn.apple{background:#000;color:#fff}
+.btn.second{background:#fff;color:#0a6cff;border-color:#c7c7cc}
+.btn.small{display:inline-block;width:auto;padding:9px 16px;font-size:14px}
+.btn.disabled{background:#d1d1d6;color:#8e8e93}
+.btn.ghost{background:transparent;color:#0a6cff;border-color:transparent}
+.btn.danger{background:#fff;color:#d70015;border-color:#c7c7cc}
+.note{font-size:12px;color:#6c6c70;text-align:center}
+.card{background:#fff;border-radius:14px;padding:14px 16px}
+.list{background:#fff;border-radius:14px;overflow:hidden}
+.row{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-top:1px solid #e5e5ea;gap:10px}
+.row:first-child{border-top:0}
+.row .chev{color:#c7c7cc;font-size:18px}
+.row.red{color:#d70015}
+.row .val{color:#6c6c70}
+.row .act{color:#0a6cff;font-size:14px}
+.row .act.red{color:#d70015}
+.sw{width:46px;height:28px;border-radius:14px;background:#34c759;position:relative;flex:none}
+.sw::after{content:"";position:absolute;right:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff}
+.sel{border:1px solid #c7c7cc;border-radius:8px;padding:5px 12px;background:#fff;color:#1c1c1e;font-size:14px}
+details{background:#fff;border-radius:14px;padding:14px 16px}
+summary{font-weight:600;list-style:none;display:flex;justify-content:space-between}
+summary::after{content:"\2304";color:#6c6c70}
+details[open] summary::after{content:"\2303"}
+details ol{margin:12px 0 0 0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:12px;font-size:14px}
+details ol li{display:flex;gap:8px}
+details ol li b{flex:none;width:20px;color:#0a6cff}
+.cmd{margin:8px 0;background:#1c1c1e;color:#e5e5ea;font-family:ui-monospace,"DejaVu Sans Mono",monospace;font-size:12px;border-radius:8px;padding:10px 12px}
+.links{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:13px;color:#0a6cff}
+.banner{background:#fff4e5;border:1px solid #ffcc80;color:#7a4b00;border-radius:12px;padding:12px 14px;font-size:14px}
+.chips{display:flex;gap:8px}
+.chip{padding:6px 16px;border-radius:16px;background:#e5e5ea;font-size:14px}
+.chip.on{background:#0a6cff;color:#fff}
+.search{background:#e5e5ea;border-radius:10px;padding:9px 14px;color:#8e8e93}
+.qr{width:200px;height:200px;margin:4px auto;background:#c7c7cc;color:#fff;font-size:34px;font-weight:700;display:flex;align-items:center;justify-content:center;border-radius:10px}
+.code{font-family:ui-monospace,"DejaVu Sans Mono",monospace;font-size:28px;font-weight:700;letter-spacing:.06em}
+.kv{text-align:center}
+.kv small{display:block;font-size:12px;color:#6c6c70}
+.status{font-size:17px;font-weight:600}
+.status small{display:block;font-size:14px;font-weight:400;color:#48484a;margin-top:2px}
+.tabbar{display:flex;background:#fff;border-top:1px solid #d1d1d6;padding:8px 4px 22px}
+.tab{flex:1;text-align:center;font-size:12px;color:#8e8e93;padding-top:6px;position:relative}
+.tab::before{content:"";display:block;width:22px;height:4px;border-radius:2px;margin:0 auto 5px;background:transparent}
+.tab.on{color:#0a6cff;font-weight:600}
+.tab.on::before{background:#0a6cff}
+.badge{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:#ff3b30;color:#fff;font-size:11px;line-height:18px;margin-left:3px;vertical-align:1px}
+.wide{display:flex;min-height:100vh}
+.side{width:220px;background:#fff;border-right:1px solid #d1d1d6;padding:24px 12px;display:flex;flex-direction:column;gap:4px}
+.side .item{padding:10px 14px;border-radius:10px;color:#3a3a3c;font-size:15px}
+.side .item.on{background:#e6f0ff;color:#0a6cff;font-weight:600}
+.side .brand{font-weight:700;font-size:16px;padding:0 14px 16px}
+.main{flex:1;padding:24px 40px;overflow:hidden}
+.main .page{max-width:620px;padding:0 0 24px}
+</style></head><body><div class="app"><main class="page"><h1>契約</h1><div class="card status">契約中（Google Play）<small>期限: 2026/12/21</small></div><div class="card"><p>この端末は、契約しているスマホの承認でログインしています。</p></div><p class="note">1か月ごとの自動更新。解約は、契約したストアの管理画面から行えます。</p><div class="links"><span>利用規約</span><span>プライバシーポリシー</span><span>特定商取引法に基づく表記</span></div></main><nav class="tabbar"><div class="tab">受信</div><div class="tab">履歴</div><div class="tab">接続</div><div class="tab on">設定</div></nav></div></body></html>
