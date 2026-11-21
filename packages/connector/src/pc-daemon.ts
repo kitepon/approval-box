@@ -20,6 +20,8 @@ export type PcOptions = {
   /** ペアリング（契約 5.4）で受け取った、接続を加えた登録の写しとその hash。保存した状態が無い時だけ使う。 */
   admission?: { snapshot: SignedSnapshotJson; hash: string };
   root?: string; socket?: string;
+  /** GET /status の答え（c8h）。 */
+  status?: () => import("./local-api.ts").DaemonStatusReply;
   log?: (message: string) => void;
 };
 
@@ -55,7 +57,7 @@ export async function startPeerChannel(o: PcOptions) {
   connector.start();
   const path = o.socket ?? socketPath();
   if (process.platform !== "win32") rmSync(path, { force: true }); // 前のデーモンが残した印（席の lock を持つのはこのデーモンだけ）
-  const server: Server = await serveLocal(box, path);
+  const server: Server = await serveLocal(box, path, o.status);
 
   const api: DaemonApi = {
     call: async <T>(method: string, route: string, body?: unknown) => box.route(method, route, body) as T,

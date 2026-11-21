@@ -105,12 +105,14 @@ before(async () => {
 
   // --- the daemon decides the mode (flag on + admitted) and starts the endpoint; MCP follows the daemon's mode ---
   const lines: string[] = [];
-  pc = (await startDaemonPeerChannel({ server: base, token: conn.token }, (l) => lines.push(l)))!;
+  const self = { schema: "approval-box.daemon-status.v1" as const, mode: "pc" as const, paired: true, reason: "running", version: "test", pid: process.pid };
+  pc = (await startDaemonPeerChannel({ server: base, token: conn.token }, (l) => lines.push(l), undefined, undefined, () => self))!;
   assert.ok(pc, lines.join("\n"));
   assert.equal(readMode()?.mode, "pc");
   writeJsonFile(join(dir, "home", "state", "daemon.json"), { pid: process.pid, entry: "test" }); // this process plays the daemon for useLocalApi
   assert.equal(await useLocalApi(), true);
   mcp = new LocalApi();
+  assert.deepEqual(await mcp.call("GET", "/status"), self); // c8h: the running endpoint answers GET /status on the same socket
   const connEntry = (JSON.parse(Buffer.from(admission.snapshot.body, "base64url").toString("utf8")) as SnapshotBody).connectors[0]!;
   assert.equal(connEntry.connection_id, conn.id);
   device = new TestDevice(phoneAccess, devSign, devSeal, connEntry, { product: ["approval-box/decision@1"], answerSchema: "approval-box/answer@1" });

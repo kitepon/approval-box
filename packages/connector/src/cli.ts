@@ -8,7 +8,7 @@ import QRCode from "qrcode";
 import { Api, ServerError } from "./api.ts";
 import { OFFICIAL_SERVER, readConfig, renameWithRetry, requireConfig, writeConfig, writeJsonFile } from "./config.ts";
 import { renameSync } from "node:fs";
-import { admissionFile, serverOffersPeerChannel } from "./pc-mode.ts";
+import { admissionFile, pcPrepared, serverOffersPeerChannel } from "./pc-mode.ts";
 import { daemonStatus, ensureDaemon, runDaemon } from "./daemon.ts";
 import { exportConnection } from "./connection-export.ts";
 import { CLIENT, HARNESSES, LABEL, type Target, detect, filesOf, harnessEntries, instructionsFileOf, register, registered, unregister } from "./harness.ts";
@@ -124,6 +124,55 @@ async function finishBinding(server: string, token: string, binding: NonNullable
   } catch (error) {
     const code = (error as { code?: string }).code ?? "binding_failed";
     out(`鍵を結べませんでした（${code}: ${(error as Error).message}）。この端末は今までの道で使えます。`);
+  }
+}
+
+/**
+ * pair --json（c8h）: 画面を見ない監督役のためのペアリング。状態ごとに1行のJSON（approval-box.pair.v1）を出し、bound の時だけ 0 で終わる。
+ * 設定は claimed で保存（接続はそこから在る）、登録は bound で保存。結べなければ同じ接続を --rebind で結び直す。
+ */
+async function pairJson() {
+  const emit = (state: string, fields: Record<string, unknown> = {}) => { out(JSON.stringify({ schema: "approval-box.pair.v1", state, ...fields })); };
+  const fail = (code: string, message: string) => { emit("failed", { code, message }); process.exitCode = 1; };
+  if (argv[1] === "status") {
+    const config = readConfig();
+    out(JSON.stringify({ schema: "approval-box.pair-status.v1", paired: Boolean(config?.token && pcPrepared()), ...(config?.connection_id ? { connection_id: config.connection_id } : {}), ...(config?.server ? { server: config.server } : {}) }));
+    return;
+  }
+  if (flag("rebind")) {
+    const config = readConfig();
+    if (!config?.token) return fail("not_paired", "保存した接続がありません。approval-box pair --json でつないでください。");
+    const { rebindKeys } = await import("./pc-rebind.ts");
+    try {
+      await rebindKeys({ server: config.server, token: config.token }, {
+        show: (qrText, typedCode) => emit("waiting", { typed_secret: typedCode, qr_text: qrText, expires_at: new Date(Date.now() + 5 * 60_000).toISOString() }),
+        restart: async () => { const st = daemonStatus(); if (st.running && st.pid) { try { process.kill(st.pid, "SIGTERM"); } catch { /* 既に終わっている */ } } }, // 監督役が起こし直す
+      });
+      emit("bound", { ...(config.connection_id ? { connection_id: config.connection_id } : {}) });
+    } catch (error) { fail((error as { code?: string }).code ?? "binding_failed", (error as Error).message); }
+    return;
+  }
+  const server = (option("server") ?? readConfig()?.server ?? process.env.APPROVAL_BOX_SERVER ?? OFFICIAL_SERVER).replace(/\/$/, "");
+  const binding = await peerChannelBinding(server).catch(() => null);
+  if (!binding) return fail("server_flag_off", "このサーバーは peer-channel を出していないか、確かめられません。");
+  const api = new Api({ server });
+  const deviceName = option("name") ?? hostname();
+  const started = await api.call<{ pairing_id: string; code: string; poll_secret: string; expires_at: string }>("POST", "/pairing", { device_name: deviceName, os: osName(), clients: [] });
+  emit("waiting", { pairing_id: started.pairing_id, code: started.code, typed_secret: binding.typedCode, qr_text: binding.qrText(started.code), expires_at: started.expires_at });
+  for (;;) {
+    const result = await api.call<{ status: string; token?: string; connection_id?: string }>("GET", `/pairing/${started.pairing_id}`, undefined, { "x-poll-secret": started.poll_secret });
+    if (result.status === "claimed" && result.token) {
+      writeConfig({ server, token: result.token, ...(result.connection_id ? { connection_id: result.connection_id } : {}), device_name: deviceName });
+      emit("claimed", { ...(result.connection_id ? { connection_id: result.connection_id } : {}) });
+      try {
+        const info = await new Api({ server, token: result.token }).call<{ connection_id: string; me: { user_id: string } }>("GET", "/connection");
+        writeJsonFile(admissionFile(), await binding.complete({ server: { url: server, headers: { authorization: `Bearer ${result.token}` } }, account: info.me.user_id, connectionId: info.connection_id }));
+        return emit("bound", { connection_id: info.connection_id });
+      } catch (error) { return fail((error as { code?: string }).code ?? "binding_failed", `${(error as Error).message}（approval-box pair --json --rebind で同じ接続を結び直せます）`); }
+    }
+    if (result.status === "rejected") return fail("rejected", "アプリで「心当たりがない」が押されました。");
+    if (result.status === "expired" || result.status === "delivered") return fail("expired", "ペアリングの期限が切れました。");
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
 }
 
@@ -364,7 +413,8 @@ const commands: Record<string, () => Promise<void> | void> = {
   register: registerTargets,
   "cursor-context": cursorContext,
   mcp: runMcp,
-  daemon: runDaemon,
+  daemon: () => runDaemon({ hosted: flag("hosted") }),
+  pair: () => { if (!flag("json")) throw new Error("Usage: approval-box pair --json [--server URL] [--name NAME] | pair --json --rebind | pair status --json"); return pairJson(); },
   version: () => {
     if (argv.length === 2 && argv[1] === "--json") {
       out(JSON.stringify({ schema: "approval-box.version.v1", version: VERSION, capabilities: ["bellteam-requester-wake"] }));

@@ -15,8 +15,14 @@ export const socketPath = (root = stateRoot()) => process.platform === "win32"
 
 type Reply = { ok: true; result: unknown } | { ok: false; status: number; code: string; message: string; body: Record<string, unknown> };
 
-/** デーモン側: LocalBox の経路を、ソケット越しに答える。 */
-export function serveLocal(box: LocalBox, path = socketPath()): Promise<Server> {
+/** デーモンの今の状態（GET /status、c8h）。秘密もIDの中身も載せない。 */
+export type DaemonStatusReply = { schema: "approval-box.daemon-status.v1"; mode: "pc" | "not_paired" | "starting"; paired: boolean; reason: string; connection_id?: string; server?: string; version: string; pid: number };
+
+/**
+ * デーモン側: LocalBox の経路を、ソケット越しに答える。`GET /status` は status() が答える。
+ * box が無い間（--hosted で、まだつながっていない・起動中）は、申請の経路に 503 と status の reason の名前で答える（今の道へ黙って回さない）。
+ */
+export function serveLocal(box: Pick<LocalBox, "route"> | null, path = socketPath(), status?: () => DaemonStatusReply): Promise<Server> {
   const server = createServer((socket) => {
     let buffer = "";
     socket.setEncoding("utf8");
@@ -28,7 +34,9 @@ export function serveLocal(box: LocalBox, path = socketPath()): Promise<Server> 
       let reply: Reply;
       try {
         const { method, path: route, body } = JSON.parse(buffer.slice(0, end)) as { method: string; path: string; body?: unknown };
-        reply = { ok: true, result: box.route(method, route, body) };
+        if (method === "GET" && route === "/status" && status) reply = { ok: true, result: status() };
+        else if (!box) { const st = status?.(); throw new ServerError(503, st?.mode === "starting" ? "starting" : "not_paired", `Approval Box の接続はまだ使えません（${st?.reason ?? "not_paired"}）。`, {}); }
+        else reply = { ok: true, result: box.route(method, route, body) };
       } catch (error) {
         const e = error instanceof ServerError ? error : new ServerError(500, "internal", (error as Error).message, {});
         reply = { ok: false, status: e.status, code: e.code, message: e.message, body: e.body };
