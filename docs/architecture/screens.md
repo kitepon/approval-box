@@ -55,10 +55,18 @@ In this order:
    3. `ほかの端末（Linux・ブラウザ・もう一方のスマホ）は、この画面の「スマホの承認でログイン」を押し、契約したスマホの 設定 → ほかの端末をログインさせる で承認します。`
 5. Links `利用規約` `プライバシーポリシー` `サポート`, then the language picker `言語`.
 - Banner (only after an automatic sign-out, see S1b): the reason in one line.
+- Reading 3 (login-billing 1.20, builds with `oldHandoff: "off"`; ruling 2026-11-22): every device signs in itself. Item 2 becomes the sign-in buttons of this device, item 3 (`スマホの承認でログイン`) goes:
+  - iPhone/iPad/Mac: `Appleでサインイン` (native), then `Googleでログイン` (web sign-in in the system's auth session).
+  - Android: `Googleでログイン` (native), then `Appleでサインイン` (web sign-in in the Auth Tab).
+  - Linux: `Appleでサインイン`, then `Googleでログイン` (both web sign-in in the system browser), and under them `ブラウザが開きます。サインインが終わると、この画面に戻ります。`
+  - After a web sign-in the device is signed in (pass kind signed). If it has no contract, S7 offers `スマホの契約をこの端末で使う` (the handoff under the account rule: QR, code and check number as in S2, approved on the phone with the same account). An exempt account needs nothing and goes straight to `受信`.
+  - Disclosure step 3 becomes `ほかの端末（Linux・もう一方のスマホ）も、同じ Apple または Google のアカウントでサインインします。契約はスマホから受け取ります。`
+  - Web sign-in return: the app's own auth session with the scheme `approvalbox-websignin` (iOS/Mac ASWebAuthenticationSession, Android Auth Tab; never declared as an OS-opened URL scheme), Linux the loopback `127.0.0.1` with a random path. A verified https link (Universal Link / App Link) is not used yet.
 - Self-hosted server in ID-login mode (Web only, never production): Google's sign-in box and `Appleでサインイン` take the place of item 2, followed by `GoogleとAppleは別のアカウントになります。いつも同じ方でログインしてください。`.
 
 Edges:
 - the native button → store sign-in → `受信`. On cancel, stay. On failure, the S9 alert.
+- a web sign-in button → the provider's page in the browser → back to the app → `受信` (or S7 with no contract). Cancelled (`signin_cancelled`): stay, nothing shown. Failed (`signin_failed`): S9 `サインインできませんでした。もう一度お試しください。` The result did not come back (`return_not_received`): S9 `サインインの結果がこの端末に戻りませんでした。この端末のブラウザでサインインしてください。`
 - `スマホの承認でログイン` → S2.
 
 ### S1b Signed out by the server (banner on S1)
