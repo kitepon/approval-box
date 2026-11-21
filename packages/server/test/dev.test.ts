@@ -30,3 +30,25 @@ test("a device signs in with a fake id token, gets a pass, and passes the paid g
     assert.match(lines.join("\n"), /listening on http:\/\/127\.0\.0\.1:/);
   } finally { await s.close(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("a non-exempt person gets a store pass from /dev/store-purchase through the library's receipt route (google and apple)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ab-dev-"));
+  const s = await startDevServer({ port: 0, dataDir: dir, log: () => {} });
+  try {
+    const post = (path: string, body: unknown, token?: string) => fetch(`${s.url}${path}`, { method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
+    for (const provider of ["google", "apple"] as const) {
+      const sub = `dev-buyer-${provider}`;
+      const { nonce } = await (await post("/auth/v1/signin/nonce", {})).json() as { nonce: string };
+      const { id_token } = await (await post("/dev/id-token", { provider, sub, nonce })).json() as { id_token: string };
+      const signed = await (await post("/auth/v1/signin", { provider, idToken: id_token, nonce })).json() as { pass: string; k: string };
+      assert.equal((await fetch(`${s.url}/v1/decisions`, { headers: { authorization: `Bearer ${signed.pass}` } })).status, 402); // not exempt: no store pass yet
+      const bought = await (await post("/dev/store-purchase", { provider, k: signed.k })).json() as { route: string; receipts: unknown[] };
+      assert.equal(bought.route, "/auth/v1/receipt");
+      const got = await (await post(bought.route, { receipts: bought.receipts }, signed.pass)).json() as { pass: string; entitlements: unknown[]; receiptResults: { result: string }[] };
+      assert.equal(got.receiptResults[0]?.result, "attached", provider);
+      assert.ok(got.entitlements.length > 0, provider);
+      assert.equal((await fetch(`${s.url}/v1/decisions`, { headers: { authorization: `Bearer ${got.pass}` } })).status, 200, provider);
+    }
+    assert.equal((await post("/dev/store-purchase", { provider: "x" })).status, 400);
+  } finally { await s.close(); rmSync(dir, { recursive: true, force: true }); }
+});

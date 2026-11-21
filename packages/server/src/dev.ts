@@ -14,7 +14,7 @@ import { openDb } from "./db.ts";
 import { Decisions } from "./decisions.ts";
 import { EventHub } from "./events.ts";
 import { createApp } from "./http.ts";
-import { createLibrary } from "./lb.ts";
+import { createLibrary, PRODUCT_ID } from "./lb.ts";
 import { createPeerChannel } from "./pc.ts";
 
 export const DEV_BUNDLE = "dev.kitepon.approvalbox";
@@ -69,8 +69,27 @@ export async function startDevServer(o: DevServerOptions = {}) {
   // Webサインインの提供元の画面の代わり（websignin/start の providerUrl を渡すと、ブラウザが戻る先の URL を返す）。
   const dev = async (request: Request): Promise<Response | undefined> => {
     const path = new URL(request.url).pathname;
-    if (request.method !== "POST" || (path !== "/dev/id-token" && path !== "/dev/websignin")) return undefined;
-    const body = (await request.json().catch(() => ({}))) as { provider?: string; sub?: string; nonce?: string; providerUrl?: string };
+    if (request.method !== "POST" || (path !== "/dev/id-token" && path !== "/dev/websignin" && path !== "/dev/store-purchase")) return undefined;
+    const body = (await request.json().catch(() => ({}))) as { provider?: string; sub?: string; nonce?: string; providerUrl?: string; k?: string };
+    if (path === "/dev/store-purchase") {
+      // ストア無しで通行証を「ストア」にする: 偽ストアに30日有効の購読を置き、アプリが /auth/v1/receipt へ送る形をそのまま返す。k（signin の k）を渡すとその口座の購入になる。
+      if (body.provider !== "apple" && body.provider !== "google") return Response.json({ error: "provider" }, { status: 400 });
+      const id = randomBytes(8).readBigUInt64BE().toString().slice(0, 15).padStart(15, "1"); // Apple の取引 ID は数字だけ
+      const mark = typeof body.k === "string" && body.k ? body.k : undefined;
+      const expires = Date.now() + 30 * 24 * 3600_000;
+      const route = "/auth/v1/receipt";
+      if (body.provider === "apple") {
+        kit.apple.transactions[id] = { transactionId: id, originalTransactionId: id, productId: PRODUCT_ID, bundleId: DEV_BUNDLE, type: "Auto-Renewable Subscription", expiresDate: expires, ...(mark ? { appAccountToken: mark } : {}) };
+        return Response.json({ route, receipts: [{ store: "apple", transactionId: id }] });
+      }
+      const token = `dev-token-${id}`;
+      kit.google.subscriptions[token] = {
+        subscriptionState: "SUBSCRIPTION_STATE_ACTIVE", acknowledgementState: "ACKNOWLEDGEMENT_STATE_PENDING",
+        lineItems: [{ productId: PRODUCT_ID, expiryTime: new Date(expires).toISOString() }],
+        ...(mark ? { externalAccountIdentifiers: { obfuscatedExternalAccountId: mark } } : {}),
+      };
+      return Response.json({ route, receipts: [{ store: "google", productId: PRODUCT_ID, purchaseToken: token }] });
+    }
     if (path === "/dev/websignin") {
       if (typeof body.providerUrl !== "string") return Response.json({ error: "providerUrl" }, { status: 400 });
       return Response.json({ location: await kit.signInAtProvider(body.providerUrl, { sub: body.sub ?? subject }) });
