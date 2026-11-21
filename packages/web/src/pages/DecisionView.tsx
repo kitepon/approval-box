@@ -194,7 +194,7 @@ export function DecisionView({ id }: { id: string }) {
               <label class="file-pick">{t("画像・書類を添付")} <input type="file" multiple accept={ACCEPT} disabled={busy} onChange={(e) => { const input = e.target as HTMLInputElement; void drafts.add(input.files).then(() => { input.value = ""; }); }} />
               </label>
             )}
-            <span class="muted">{t("添付は合計50MBまでです。")}</span>
+            <span class="muted">{t("最大10件・1件20MB・合計50MB")}</span>
           </div>
           <div class="row">
             {d.status === "held"
