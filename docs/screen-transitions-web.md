@@ -1,5 +1,7 @@
 # Approval Box Web client: screen-transition map
 
+> **Closed on 2026-11-21 (Owner decision).** The browser client no longer shows requests: the server must not hand request contents to a browser screen. Only two things remain in `packages/web/src/main.tsx`: the closed notice (`ブラウザ版は終わりました`, with links to `/support.html`, `/terms.html`, `/privacy.html`) on every path except `/pair`, and `/pair`, the consent page BellTeam's registered-client pairing needs (`docs/bellteam-client.md`): sign in (phone approval) if needed, then the pairing page, with no menu and no event stream. The closed notice calls no API. Everything else below (S3-S9, the menu, the routes) describes the retired client and is kept as history; it is not live.
+
 Scope: `packages/web/src` only (a Preact single-page app). This map describes what the Web code does **after** it was brought to the common screens of `docs/architecture/screens.md` (the spec; state ids S1-S9 below are the spec's). Where the Web cannot follow the spec, section 9 says so and why.
 
 - Labels are quoted as the ja-JP UI shows them. English and the other locales are in `packages/web/src/messages.ts` / `messages-east-asian.ts` (the Japanese text is the catalog key).

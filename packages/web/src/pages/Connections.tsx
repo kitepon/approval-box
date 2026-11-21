@@ -164,7 +164,7 @@ export function Pair({ code }: { code: string }) {
     <section>
       <h1>{info?.client ? t("アプリの接続を許可") : t("AIをつなぐ")}</h1>
       {error && <p class="error">{systemMessage(error)}</p>}
-      {done && <><p class="notice">{systemMessage(done)}</p><button class="ghost" onClick={() => navigate("/connections")}>{t("接続へ")}</button></>}
+      {done && <><p class="notice">{systemMessage(done)}</p></>}
       {info?.client && !done && (
         <div class="panel">
           <p>{t("{name}があなたの決裁箱の申請を読み、あなたが押した答えを送ることを許可しますか？", { name: info.client_name ?? "" })}</p>
