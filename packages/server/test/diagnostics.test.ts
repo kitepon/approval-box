@@ -352,3 +352,16 @@ test("unknown recovery remains registered; bounded administrator notes survive a
  const changed={...input,diagnostic_log:{...input.diagnostic_log,impact_assessment:{...input.diagnostic_log.impact_assessment,summary:"Different assessment must not reuse the event ID."}}};assert.equal((await x.send(changed)).status,409);
  assert.equal(get<{n:number}>(x.db,"select occurrence_count n from diagnostic_groups")?.n,1);
 });
+test("named app operations and client_code are accepted; client_code needs no HTTP status and leaves old fingerprints alone", async (t) => {
+ const x=setup();t.after(()=>x.db.close());
+ const base={...x.event(),code:"processing_failed",diagnostic_log:{operation:"app.approveDevice",error_domain:"HTTP",handling:"unassessed",user_visible:false}};
+ const withCode={...base,event_id:randomUUID(),diagnostic_log:{...base.diagnostic_log,client_code:"invalid_qr"}};
+ assert.equal((await x.send(base)).status,202);
+ assert.equal((await x.send(withCode)).status,202);
+ assert.equal(diagnosticFingerprint(diagnosticSchema.parse(base)),diagnosticFingerprint(diagnosticSchema.parse({...base,event_id:randomUUID()})));
+ assert.notEqual(diagnosticFingerprint(diagnosticSchema.parse(base)),diagnosticFingerprint(diagnosticSchema.parse(withCode)));
+ for(const client_code of ["Invalid","a-b","x".repeat(65),""]) assert.equal((await x.send({...withCode,event_id:randomUUID(),diagnostic_log:{...withCode.diagnostic_log,client_code}})).status,400);
+ assert.equal((await x.send({...withCode,event_id:randomUUID(),diagnostic_log:{...withCode.diagnostic_log,http_status:500}})).status,400);
+ const rows=await (await x.admin("/logs")).json() as {message_template:string}[];
+ assert.ok(rows.some(r=>r.message_template.includes("client_code=invalid_qr")&&r.message_template.includes("app.approveDevice")));
+});
