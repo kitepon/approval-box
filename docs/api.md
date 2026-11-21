@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.48
+# Approval Box API（アプリ・Web版向け） v0.49
+
+2026-11-21 v0.49（追加のみ）: 診断の`diagnostic_log.operation`に、Appleアプリが自分の処理名で送る32個の`app.*`（`app.approveDevice`など）を足した。任意の`diagnostic_log.client_code`（`[a-z0-9_]{1,64}`、アプリ内のエラーコード）も足した。HTTPの状態が無い失敗の時だけ送り、`http_status`と一緒なら400。`app.operation`は古い版のため残す。`client_code`の無い診断のfingerprintは変わらない。serverの受理を先に配備してから、新しいアプリを配る。詳細は[diagnostics.md](diagnostics.md#named-app-operations-and-client-code-2026-11-21)。
 
 2026-11-21 v0.48（意味の変更・サーバーが共有ライブラリを使う設定の時だけ。ライブラリを使わないセルフホストは変わらない）: ライブラリだけで動く形（[login-pass.md](architecture/login-pass.md)「library-only mode」）。個人の識別子を作る・使う旧い入口は 410 `gone` を返す: `POST /auth/apple`・`POST /auth/google`・`POST /auth/link`・`POST /auth/apple/web/start`・`POST /auth/google/web/start`・`POST /auth/apple/callback` と `POST /auth/google/callback`（`/v1` の外）・`POST /billing/appstore/verify`・`POST /billing/play/verify`・`POST /appstore/notifications`・`POST /play/notifications`。`GET /auth/config` は今まで通り（`library_login: true`）。`/v1` の `Authorization: Bearer` は、ライブラリの通行証と登録クライアントのsession（BellTeam）だけを受け、旧いログインのsessionは 401 `unauthorized`。接続トークン（`/connector/v1`・`/mcp`）は変わらない。旧いログインと契約の記録（identities・auth_flows・login_links・ストアの契約の行・登録クライアント以外のsession）は、起動時に一度だけ消す。共有ライブラリは 0.7.1（`/auth/v1/stop-all-others` は無くなり、`signin` の `stopOthers` で行う）。
 

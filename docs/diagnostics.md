@@ -54,6 +54,12 @@ App code belongs to the private apps repository maintained by Bell; server chang
 
 The public reverse proxy also blocks `/api/admin` and `/api/admin/*` with 404 before forwarding. Stream `tools/deploy/block-public-admin.py` to `ssh main-server python3 -` to reproduce this deployment rule. It changes only the Approval Box virtual host, backs up the prior file, validates/reloads Caddy and restores the prior configuration on failure.
 
+## Named app operations and client code (2026-11-21)
+
+API v0.49 adds 32 `app.*` operation names. The Apple app sends `app.` plus the name of the AppStore function that ran the failed action, for example `app.approveDevice`, `app.lookupPairing` or `app.watchEventStream`. The exact list is `OPERATIONS` in `packages/server/src/diagnostics.ts`. `app.operation` stays accepted for builds up to 0.1.6(52), which used it for every unnamed action.
+
+Optional `diagnostic_log.client_code` is the app's own error code (`APIError.code`), `[a-z0-9_]{1,64}`. Send it only for a failure that had no HTTP status (status 0 on the client: the request was never sent or no response arrived). A body with both `client_code` and `http_status` is refused with 400. The code joins the fingerprint only when present, so existing groups and diagnostics without it keep their fingerprints. The admin `message_template` shows it as `client_code=<code>`. A code names the client-side check that failed; it does not establish a product defect or the cause. Deploy server acceptance before shipping a build that emits these names or the field.
+
 ## Optional answer request-key digest (2026-10-27)
 
 API v0.36 accepts optional `diagnostic_log.request_key_sha256`: exactly 64 lowercase hexadecimal characters. For an answer POST that fails with `URLError.timedOut` (`NSURLErrorDomain`, `-1001`), the native client can report the SHA256 of the exact UTF-8 bytes of the `Idempotency-Key` string it set on that request. Do not normalize case or hyphens, reconstruct the key from the body, or include the original key, answer, session, decision ID or URL. Other failures and requests omit the field. This digest is distinct from the diagnostic event ID and the diagnostic upload's own idempotency key.

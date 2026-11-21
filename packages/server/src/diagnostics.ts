@@ -7,7 +7,7 @@ import { type Db, all, get, run, tx } from "./db.ts";
 import { readLimited } from "./attachments.ts";
 import { ApiError } from "./errors.ts";
 
-export const OPERATIONS = ["decisions.list","decisions.detail","decisions.answer","decisions.hold","decisions.unhold","decisions.delete","attachments.list","attachments.upload","attachments.download","attachments.delete","auth.apple","auth.google","auth.logout","account.get","account.settings","account.delete","devices.register","devices.delete","connections.list","connections.delete","tokens.list","tokens.create","tokens.delete","onboarding","pairing.lookup","pairing.claim","pairing.reject","billing.verify","events","storekit.environment","storekit.purchase","storekit.restore","storekit.updates","session.read","session.save","session.clear","notifications.authorization","notifications.register","notifications.badge","attachments.preview","attachments.read","app.operation","app.crash","app.hang"] as const;
+export const OPERATIONS = ["decisions.list","decisions.detail","decisions.answer","decisions.hold","decisions.unhold","decisions.delete","attachments.list","attachments.upload","attachments.download","attachments.delete","auth.apple","auth.google","auth.logout","account.get","account.settings","account.delete","devices.register","devices.delete","connections.list","connections.delete","tokens.list","tokens.create","tokens.delete","onboarding","pairing.lookup","pairing.claim","pairing.reject","billing.verify","events","storekit.environment","storekit.purchase","storekit.restore","storekit.updates","session.read","session.save","session.clear","notifications.authorization","notifications.register","notifications.badge","attachments.preview","attachments.read","app.operation","app.crash","app.hang","app.answer","app.approveDevice","app.attachmentDrafts","app.claimPairing","app.confirmWrites","app.deleteAccount","app.deleteHistory","app.hold","app.issue","app.loadConnections","app.loadLinkedDevices","app.loadSettings","app.logout","app.lookupPairing","app.more","app.open","app.previewAttachment","app.refresh","app.registerDevice","app.rejectPairing","app.removeAttachment","app.removeConnection","app.revoke","app.saveRetention","app.signIn","app.startHandoffLogin","app.startLogin","app.stopAllOtherDevices","app.stopDevice","app.useDevelopmentSession","app.waitForHandoff","app.watchEventStream"] as const;
 export const DECODING_KEYS = ["id","title","context","options","label","recommendation","urgency","deadline","source","client","sessionLabel","via","test","status","answer","optionId","text","answeredAt","attachments","delivery","resumePhrase","createdAt","updatedAt","version","history","at","kind","by","note","fields","cancelReason","distinctReason","items","nextCursor","os","clients","lastSeenAt","lastUsedAt","token","setupCommand","steps","copy","connectionId","decisionId","passedAt","testedAt","failedStep","detail","userId","plan","expiresAt","store","setup","verified","checks","login","retentionDays","session","user","deleted","pairingId","deviceName","contentType","size","sha256","error","code","message","other"] as const;
 const integer = z.number().int().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 const nonnegative = integer.min(0);
@@ -23,7 +23,7 @@ export const diagnosticSchema = z.strictObject({
     request_key_sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     http_status: integer.min(100).max(599).optional(), response_format: z.enum(["json","html","empty","other"]).optional(),
     error_domain: z.enum(["NSURLErrorDomain","NSCocoaErrorDomain","UNErrorDomain","com.apple.AuthenticationServices.AuthorizationError","DecodingError","HTTP","StoreKit","MetricKit","other"]).optional(),
-    error_code: integer.optional(), decoding_kind: z.enum(["typeMismatch","valueNotFound","keyNotFound","dataCorrupted"]).optional(),
+    error_code: integer.optional(), client_code: z.string().regex(/^[a-z0-9_]{1,64}$/).optional(), decoding_kind: z.enum(["typeMismatch","valueNotFound","keyNotFound","dataCorrupted"]).optional(),
     decoding_path: z.array(z.union([z.enum(DECODING_KEYS),nonnegative])).max(32).optional(),
     handling: z.enum(["normal_cancel","reconnecting","retry_available","handling_failed","unassessed"]).optional(),
     impact_assessment: z.strictObject({severity: z.enum(["info","warn","high","fatal"]), summary: z.string().trim().min(1).max(1000), recovery: z.enum(["recovered","unrecovered","unknown"])}).optional(),
@@ -31,7 +31,7 @@ export const diagnosticSchema = z.strictObject({
     signal: integer.optional(), exception_type: integer.optional(), exception_code: integer.optional(),
     hang_duration_ms: z.number().finite().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
     stack_frames: z.array(z.strictObject({binary_uuid: z.uuid(),offset:nonnegative,sample_count:nonnegative.optional()})).max(32).optional(),
-  }),
+  }).refine(d => d.client_code === undefined || d.http_status === undefined, {message: "client_code is only for failures without an HTTP status", path: ["client_code"]}),
 });
 type Diagnostic = z.infer<typeof diagnosticSchema>;
 export const investigationInputSchema = z.strictObject({
@@ -51,7 +51,7 @@ function canonical(value: unknown): string {
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 export function diagnosticFingerprint(input: Diagnostic) {
   const d = input.diagnostic_log;
-  return hash(canonical([input.code,input.module,input.device_type,d.operation,d.http_method ?? null,d.error_domain ?? null,d.error_code ?? null,d.http_status ?? null,d.response_format ?? null,d.decoding_kind ?? null,d.decoding_path?.map(k=>typeof k === "number" ? "[]" : k) ?? null,d.cancellation ?? null,d.user_visible,d.signal ?? null,d.exception_type ?? null,d.exception_code ?? null,d.stack_frames?.[0]?.binary_uuid.toLowerCase() ?? null,d.stack_frames?.[0]?.offset ?? null]));
+  return hash(canonical([input.code,input.module,input.device_type,d.operation,d.http_method ?? null,d.error_domain ?? null,d.error_code ?? null,d.http_status ?? null,d.response_format ?? null,d.decoding_kind ?? null,d.decoding_path?.map(k=>typeof k === "number" ? "[]" : k) ?? null,d.cancellation ?? null,d.user_visible,d.signal ?? null,d.exception_type ?? null,d.exception_code ?? null,d.stack_frames?.[0]?.binary_uuid.toLowerCase() ?? null,d.stack_frames?.[0]?.offset ?? null,...(d.client_code === undefined ? [] : [d.client_code])]));
 }
 function referenceOnly(input: Diagnostic) {
   const d = input.diagnostic_log, a = d.impact_assessment;
@@ -73,6 +73,7 @@ const operationLabels: Record<Diagnostic["diagnostic_log"]["operation"], string>
   "onboarding": "初期設定", "pairing.lookup": "ペアリング照会", "pairing.claim": "ペアリング承認", "pairing.reject": "ペアリング拒否", "billing.verify": "購入検証", "events": "承認更新の監視",
   "storekit.environment": "購入環境取得", "storekit.purchase": "購入", "storekit.restore": "購入復元", "storekit.updates": "購入更新の監視", "session.read": "セッション読取り", "session.save": "セッション保存", "session.clear": "セッション消去",
   "notifications.authorization": "通知許可要求", "notifications.register": "通知登録", "notifications.badge": "通知バッジ更新", "attachments.preview": "添付表示", "attachments.read": "添付読取り", "app.operation": "アプリ処理", "app.crash": "アプリ異常終了", "app.hang": "アプリ応答監視",
+  "app.answer": "アプリ: 回答", "app.approveDevice": "アプリ: 端末の承認", "app.attachmentDrafts": "アプリ: 添付の下書き", "app.claimPairing": "アプリ: 接続の承認", "app.confirmWrites": "アプリ: 書込みの確認", "app.deleteAccount": "アプリ: アカウント削除", "app.deleteHistory": "アプリ: 履歴削除", "app.hold": "アプリ: 保留", "app.issue": "アプリ: コードの発行", "app.loadConnections": "アプリ: 接続一覧の読込み", "app.loadLinkedDevices": "アプリ: 端末一覧の読込み", "app.loadSettings": "アプリ: 設定の読込み", "app.logout": "アプリ: ログアウト", "app.lookupPairing": "アプリ: 接続の照会", "app.more": "アプリ: 続きの読込み", "app.open": "アプリ: 開く", "app.previewAttachment": "アプリ: 添付の表示", "app.refresh": "アプリ: 更新", "app.registerDevice": "アプリ: 端末登録", "app.rejectPairing": "アプリ: 接続の拒否", "app.removeAttachment": "アプリ: 添付の削除", "app.removeConnection": "アプリ: 接続の削除", "app.revoke": "アプリ: 取消し", "app.saveRetention": "アプリ: 保存期間の保存", "app.signIn": "アプリ: サインイン", "app.startHandoffLogin": "アプリ: スマホの承認でログイン開始", "app.startLogin": "アプリ: ログイン開始", "app.stopAllOtherDevices": "アプリ: ほかの端末をすべて停止", "app.stopDevice": "アプリ: 端末の停止", "app.useDevelopmentSession": "アプリ: 開発用セッション", "app.waitForHandoff": "アプリ: スマホの承認待ち", "app.watchEventStream": "アプリ: 更新の監視",
 };
 /** 読取り用の説明だけを作る。欠測は補完せず、受付・保存・集約の判定に使わない。 */
 function diagnosticReportSummary(input: Diagnostic): string {
@@ -84,6 +85,7 @@ function diagnosticReportSummary(input: Diagnostic): string {
     d.response_format === undefined ? undefined : `応答形式=${d.response_format}`,
     d.error_domain === undefined ? undefined : `domain=${d.error_domain}`,
     d.error_code === undefined ? undefined : `code=${d.error_code}`,
+    d.client_code === undefined ? undefined : `client_code=${d.client_code}`,
     d.decoding_kind === undefined ? undefined : `decode=${d.decoding_kind}`,
     d.cancellation === undefined ? undefined : `取消種別=${d.cancellation}`,
     d.signal === undefined ? undefined : `signal=${d.signal}`,
