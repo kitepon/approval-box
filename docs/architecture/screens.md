@@ -61,7 +61,7 @@ In this order:
   - Linux: `Appleでサインイン`, then `Googleでログイン` (both web sign-in in the system browser), and under them `ブラウザが開きます。サインインが終わると、この画面に戻ります。`
   - After a web sign-in the device is signed in (pass kind signed). If it has no contract, S7 offers `スマホの契約をこの端末で使う` (the handoff under the account rule: QR, code and check number as in S2, approved on the phone with the same account). An exempt account needs nothing and goes straight to `受信`.
   - Disclosure step 3 becomes `ほかの端末（Linux・もう一方のスマホ）も、同じ Apple または Google のアカウントでサインインします。契約はスマホから受け取ります。`
-  - Web sign-in return: the app's own auth session with the scheme `approvalbox-websignin` (iOS/Mac ASWebAuthenticationSession, Android Auth Tab; never declared as an OS-opened URL scheme), Linux the loopback `127.0.0.1` with a random path. A verified https link (Universal Link / App Link) is not used yet.
+  - Web sign-in return: a verified https link `https://<server>/app/websignin` (Android App Link, required: the Auth Tab with a session scheme hung on a device, login-billing 0.12.0; iOS 17.4+ / macOS 14.4+ Universal Link), below those OS versions the auth session's own scheme `approvalbox-websignin` (never declared as an OS-opened URL scheme); Linux the loopback `127.0.0.1` with a random path. The server serves `/.well-known/assetlinks.json` and `/.well-known/apple-app-site-association` for that path only.
 - Self-hosted server in ID-login mode (Web only, never production): Google's sign-in box and `Appleでサインイン` take the place of item 2, followed by `GoogleとAppleは別のアカウントになります。いつも同じ方でログインしてください。`.
 
 Edges:
