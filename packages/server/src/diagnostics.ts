@@ -136,10 +136,9 @@ export class Diagnostics {
       const fingerprint = diagnosticFingerprint(input);
       const group = get<{fingerprint:string}>(this.db,"select fingerprint from diagnostic_groups where fingerprint=?",fingerprint);
       if (!referenceOnly(input) && !group && (get<{n:number}>(this.db,"select count(*) n from diagnostic_groups")?.n ?? 0)>=500) throw new ApiError("rate_limited","診断の種類数の上限です。",{},3600);
+      // 参考の診断は生の行だけに残し、修理の件（group）には一切触れない（フラジャイルと合意 2026-11-21。BugHubは件の変化で開き直すため）。
       const reference = referenceOnly(input);
-      if (reference && group) {
-        run(this.db,"update diagnostic_groups set occurrence_count=occurrence_count+1,last_seen=?,payload=? where fingerprint=?",at,payload,fingerprint);
-      } else if (!reference) {
+      if (!reference) {
       run(this.db,"insert into diagnostic_groups (fingerprint,severity,message_template,occurrence_count,first_seen,last_seen,status,payload) values (?,?,?,1,?,?,'open',?) on conflict(fingerprint) do update set severity=excluded.severity,occurrence_count=occurrence_count+1,last_seen=excluded.last_seen,status='open',payload=excluded.payload,resolved_at=null,resolution_note=null",fingerprint,severity(input),`${input.module}.${input.code}: ${input.diagnostic_log.operation} (${input.device_type})`,at,at,payload);
       }
       run(this.db,"insert into diagnostic_receipts values (?,?,?)",input.event_id,digest,at);

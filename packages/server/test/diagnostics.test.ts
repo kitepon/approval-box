@@ -304,8 +304,9 @@ test("assessed recovered communication stays raw-only; duplicate receipts and le
  const legacy={...input,event_id:randomUUID(),diagnostic_log:{operation:"events",user_visible:false,error_domain:"NSURLErrorDomain",error_code:-1005}};
  assert.equal(diagnosticFingerprint(diagnosticSchema.parse(input)),diagnosticFingerprint(diagnosticSchema.parse(legacy)));
  await x.send(legacy);let row=(await (await x.admin("/logs")).json())[0];assert.equal(row.severity,"high");
- await x.send({...input,event_id:randomUUID()});row=(await (await x.admin("/logs")).json())[0];assert.equal(row.status,"open");assert.equal(row.severity,"high");assert.equal(row.occurrence_count,2);
- await x.admin("/logs/resolve",{fingerprint:row.fingerprint});await x.send({...input,event_id:randomUUID()});row=(await (await x.admin("/logs")).json())[0];assert.equal(row.status,"resolved");assert.equal(row.occurrence_count,3);
+ await x.send({...input,event_id:randomUUID()});row=(await (await x.admin("/logs")).json())[0];assert.equal(row.status,"open");assert.equal(row.severity,"high");assert.equal(row.occurrence_count,1);
+ await x.admin("/logs/resolve",{fingerprint:row.fingerprint});await x.send({...input,event_id:randomUUID()});row=(await (await x.admin("/logs")).json())[0];assert.equal(row.status,"resolved");assert.equal(row.occurrence_count,1);
+ assert.equal(all(x.db,"select * from diagnostics").length,4);
 });
 test("handling alone and unknown recovery do not hide impact; source severity and evidence are projected",async()=>{
  const x=setup();const base={...x.event(),code:"api_failed",module:"api",diagnostic_log:{operation:"decisions.answer",user_visible:true,error_domain:"NSURLErrorDomain",error_code:-1001,handling:"retry_available"}};
@@ -336,9 +337,10 @@ test("recovered retry of an unexpected cancellation stays a reference; unassesse
  await x.send({...recovered,event_id:randomUUID(),diagnostic_log:{...log,handling:"retry_available",impact_assessment:{severity:"warn",summary:"Retries were exhausted and an error was shown; the list stayed stale.",recovery:"unrecovered"}}});
  await x.send({...recovered,event_id:randomUUID(),diagnostic_log:{...log,handling:"handling_failed",impact_assessment:{severity:"info",summary:"Recovered, but the retry action stayed disabled.",recovery:"recovered"}}});
  rows=await (await x.admin("/logs")).json();assert.equal(rows.length,1);assert.equal(rows[0].occurrence_count,3);assert.equal(rows[0].status,"open");
- // 既に未解決がある時、参考の発生は回数だけ進め、状態と重大度を動かさない。
- const severity=rows[0].severity;await x.send({...recovered,event_id:randomUUID()});
- rows=await (await x.admin("/logs")).json();assert.equal(rows[0].occurrence_count,4);assert.equal(rows[0].status,"open");assert.equal(rows[0].severity,severity);
+ // 既に未解決がある時も、参考の発生は件に触れない（回数・最終時刻・中身・状態・重大度そのまま）。生の行だけ残る。
+ const before=rows[0];await x.send({...recovered,event_id:randomUUID()});
+ rows=await (await x.admin("/logs")).json();assert.equal(rows[0].occurrence_count,3);assert.equal(rows[0].status,"open");assert.equal(rows[0].severity,before.severity);assert.equal(rows[0].last_seen,before.last_seen);
+ assert.equal(all(x.db,"select * from diagnostics").length,6);
 });
 
 test("unknown recovery remains registered; bounded administrator notes survive assessment projection and replay",async()=>{
