@@ -11,7 +11,7 @@ import { after, before, test } from "node:test";
 import nodeDataChannel from "node-datachannel";
 import * as steer from "aiterm-steer-delivery";
 import { serve } from "@hono/node-server";
-import { b64url, generateSealKey, generateSigningKey, signSnapshot, snapshotHash, toJson, type DeviceEntry, type SnapshotBody } from "@kitepon/peer-channel";
+import { b64url, fromHex, generateSealKey, generateSigningKey, signSnapshot, snapshotHash, toJson, type DeviceEntry, type SnapshotBody } from "@kitepon/peer-channel";
 import { TestDevice } from "@kitepon/peer-channel/testing";
 import { Accounts } from "../../server/src/accounts.ts";
 import { openDb } from "../../server/src/db.ts";
@@ -25,6 +25,7 @@ import { sendChannelAnswer } from "../src/channel-delivery.ts";
 import { LocalApi } from "../src/local-api.ts";
 import type { PeerChannelRuntime } from "../src/pc-daemon.ts";
 import { startDaemonPeerChannel, useLocalApi } from "../src/daemon.ts";
+import { rebindKeys } from "../src/pc-rebind.ts";
 import { admissionFile, pcPrepared, readMode, serverOffersPeerChannel } from "../src/pc-mode.ts";
 import { writeJsonFile } from "../src/config.ts";
 import { startPairingBinding } from "@kitepon/peer-channel/pairing";
@@ -53,10 +54,15 @@ let pc: PeerChannelRuntime;
 let mcp: LocalApi;
 let device: TestDevice;
 let k = "";
+let serverDb: ReturnType<typeof openDb>;
+let conn: { id: string; token: string };
+let phone: { access: { url: string; headers: Record<string, string> }; sign: ReturnType<typeof generateSigningKey>; seal: Awaited<ReturnType<typeof generateSealKey>> };
+let admitted: { snapshot: { body: string; signer: string; sig: string }; hash: string };
 
 before(async () => {
   // --- the server, test mode: library (billing off) and /pc/v1 ---
   const db = openDb(join(dir, "approval-box.db"));
+  serverDb = db;
   const events = new EventHub(db);
   const accounts = new Accounts(db, events, "off", new Set());
   const library = createLibrary({ db, publicUrl: ORIGIN, billing: "off", kKey: randomBytes(32).toString("base64url"), passKey: { id: "p1", key: randomBytes(32).toString("base64url") }, appleAudiences: [BUNDLE], googleAudiences: [], exemptK: [],
@@ -70,7 +76,7 @@ before(async () => {
   const signed = (await (await call("POST", "/auth/v1/signin", undefined, { provider: "apple", idToken: idToken(nonce, "owner"), nonce })).json()) as { pass: string; k: string };
   k = signed.k;
   accounts.ensureUser(k);
-  const conn = accounts.createConnection(k, "PC", "linux", ["claude-code"]);
+  conn = accounts.createConnection(k, "PC", "linux", ["claude-code"]);
 
   // --- the phone: genesis in the mirror ---
   const devSign = generateSigningKey();
@@ -93,6 +99,8 @@ before(async () => {
   ]);
   approver.close();
   writeJsonFile(admissionFile(), admission); // what setup's finishBinding writes
+  admitted = admission;
+  phone = { access: phoneAccess, sign: devSign, seal: devSeal };
   assert.equal(pcPrepared(), true);
 
   // --- the daemon decides the mode (flag on + admitted) and starts the endpoint; MCP follows the daemon's mode ---
@@ -206,6 +214,57 @@ test("request images and answer attachments travel only between PC and phone; a 
 
   const written = readdirSync(dir).filter((f) => /^(approval-box\.db|pc-mirror\.db)/.test(f) && statSync(join(dir, f)).isFile()).map((f) => readFileSync(join(dir, f)).toString("latin1")).join("");
   for (const marker of ["e2e-image-marker-51aa", "e2e-photo-marker-0d2c", "画像つき"]) assert.ok(!written.includes(marker), marker);
+});
+
+test("the setup test passes on the PC; the server gets only the passed bit (Q8)", { timeout: 60_000 }, async () => {
+  const t = await mcp.call<{ decision_id: string }>("POST", "/setup-test", { client: "claude-code", session_label: "接続テスト", route: { channel_id: "c-setup", harness: "other" } });
+  const req = await device.next("request", 15_000);
+  assert.equal(req.body.content.decision_id, t.decision_id);
+  device.ack(req.body.id);
+  device.answer(req, { option_id: "ok" });
+  assert.equal((await device.next("ack")).body.result, "ok");
+  let text = "";
+  for (let i = 0; i < 100 && !/確認コード/.test(text); i++) { text = (await mcp.call<{ answer_text?: string }>("GET", `/decisions/${t.decision_id}`)).answer_text ?? ""; if (!/確認コード/.test(text)) await new Promise((r) => setTimeout(r, 20)); }
+  const code = /確認コード: (\d{6})/.exec(text)![1]!;
+  assert.deepEqual(await mcp.call("POST", "/setup-test/confirm", { decision_id: t.decision_id, code }), { status: "passed", client: "claude-code" });
+  let row: any;
+  for (let i = 0; i < 100 && !row; i++) { row = serverDb.prepare("select status, decision_id, code from setup_checks where connection_id = ? and client = ?").get(conn.id, "claude-code"); if (!row) await new Promise((r) => setTimeout(r, 30)); }
+  assert.deepEqual([row.status, row.decision_id, row.code], ["passed", null, null]);
+  assert.ok((serverDb.prepare("select setup_verified_at from users where id = ?").get(k) as any).setup_verified_at);
+});
+
+test("setup --rebind (0.5.3): a new key set without a new product pairing; requests keep flowing with the new key", { timeout: 60_000 }, async () => {
+  const before = readFileSync(join(dir, "home", "state", "pc", "keys.json"), "utf8");
+  let shown!: (text: string) => void;
+  const text = new Promise<string>((ok) => { shown = ok; });
+  const approver = new TestDevice(phone.access, phone.sign, phone.seal, { key_id: "", sig_pub: "", seal_pub: "", connection_id: "", added_at: 0, added_by: "" });
+  await approver.open();
+  const registry = { body: JSON.parse(Buffer.from(admitted.snapshot.body, "base64url").toString("utf8")) as SnapshotBody, hash: fromHex(admitted.hash) };
+  await Promise.all([
+    rebindKeys({ server: base, token: conn.token }, {
+      show: (t) => shown(t),
+      restart: async () => { device.close(); await pc.stop(); pc = (await startDaemonPeerChannel({ server: base, token: conn.token }, () => {}))!; },
+    }),
+    text.then((t) => { assert.match(t, /^PC1PAIR::/); return approver.approveConnector({ text: t, registry }); }),
+  ]);
+  approver.close();
+  assert.notEqual(readFileSync(join(dir, "home", "state", "pc", "keys.json"), "utf8"), before, "the keys were replaced");
+  const admission = JSON.parse(readFileSync(admissionFile(), "utf8")) as typeof admitted;
+  const body = JSON.parse(Buffer.from(admission.snapshot.body, "base64url").toString("utf8")) as SnapshotBody;
+  const active = body.connectors.filter((c) => !body.removed.some((r) => r.key_id === c.key_id));
+  assert.equal(active.length, 1);
+  assert.equal(readMode()?.mode, "pc");
+  device = new TestDevice(phone.access, phone.sign, phone.seal, active[0]!, { product: ["approval-box/decision@1"], answerSchema: "approval-box/answer@1" });
+  await device.open();
+  const r = { title: "結び直しの後", context: "", options: [{ id: "a", label: "A" }, { id: "b", label: "B" }], requester: "ナユタ", session_label: "e2e", client: "claude-code", route: { channel_id: "c-rebind", harness: "other" } };
+  const first = await mcp.call("POST", "/decisions", r).catch((e: unknown) => e) as ServerError;
+  const d = await mcp.call<{ decision_id: string }>("POST", "/decisions", { ...r, check_token: first.body.check_token });
+  await device.dial((await device.join()).at(-1)!);
+  let req = await device.next("request", 15_000);
+  while (req.body.content.decision_id !== d.decision_id) { device.ack(req.body.id); req = await device.next("request", 15_000); } // the kept outbox comes again
+  device.ack(req.body.id);
+  device.answer(req, { option_id: "a" });
+  assert.equal((await device.next("ack")).body.result, "ok");
 });
 
 test("a server without /pc/v1 says peer_channel false; the daemon picks today's path with a named line", { timeout: 30_000 }, async () => {

@@ -5,7 +5,8 @@ import type { Server } from "node:net";
 import { join } from "node:path";
 import { Connector } from "@kitepon/peer-channel/connector";
 import type { SignedSnapshotJson } from "@kitepon/peer-channel";
-import type { Api } from "./api.ts";
+import { Api } from "./api.ts";
+import { osName } from "./version.ts";
 import { ANSWER_SCHEMA, DECISION_SCHEMA, LocalBox } from "./local-box.ts";
 import { serveLocal, socketPath } from "./local-api.ts";
 import { keysFile, loadOrCreateKeys } from "./pc-keys.ts";
@@ -44,6 +45,13 @@ export async function startPeerChannel(o: PcOptions) {
     amend: (rid, content, blobs) => { try { connector.amend(rid, { schema: DECISION_SCHEMA, content, ...(blobs ? { blobs } : {}) }); } catch { log("peer-channel: amend_after_close"); } },
     cancel: (rid, reason) => { try { connector.cancel(rid, reason); } catch { log("peer-channel: cancel_after_close"); } },
   };
+  // 接続テストが手元で通ったら、サーバーへ「確認済み」の印だけを送る（契約 Q8。申請・答え・コードは送らない）。届かなければ時間を空けて5回まで。
+  box.onSetupPassed = (client) => void (async () => {
+    for (let i = 0, wait = 2000; i < 5; i++, wait *= 2) {
+      try { await new Api({ server: o.server, token: o.token }).call("POST", "/setup-test/verified", { client, os: osName() }); return; }
+      catch (error) { log(`接続テストの確認済みをサーバーへ送れません（${(error as Error).message}）`); await new Promise((r) => setTimeout(r, wait)); }
+    }
+  })();
   connector.start();
   const path = o.socket ?? socketPath();
   if (process.platform !== "win32") rmSync(path, { force: true }); // 前のデーモンが残した印（席の lock を持つのはこのデーモンだけ）

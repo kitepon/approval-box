@@ -10,16 +10,23 @@ export const keysFile = () => join(pcRoot(), "keys.json");
 
 type Saved = { v: 1; sig_d: string; seal_d: string; seal_pub: string };
 
+/** 新しい鍵（まだ保存しない。結び直しは、結べてから saveKeys で置く）。 */
+export async function newKeys(): Promise<{ keys: { sign: SigningKey; seal: SealKey }; saved: Saved }> {
+  const sig = createECDH("prime256v1"); sig.generateKeys();
+  const seal = createECDH("prime256v1"); seal.generateKeys();
+  const saved: Saved = { v: 1, sig_d: sig.getPrivateKey("hex"), seal_d: seal.getPrivateKey("hex"), seal_pub: seal.getPublicKey("hex", "uncompressed") };
+  return { keys: await fromSaved(saved), saved };
+}
+
+export const saveKeys = (saved: Saved, file = keysFile()) => writeJsonFile(file, saved, { discardTemporaryOnError: true });
+
+const fromSaved = async (saved: Saved) => ({ sign: signingKeyFromScalar(fromHex(saved.sig_d)), seal: await sealKeyFromScalar(fromHex(saved.seal_d), fromHex(saved.seal_pub)) });
+
 /** 鍵を読む。無ければ作って 0600 で保存する。 */
 export async function loadOrCreateKeys(file = keysFile()): Promise<{ sign: SigningKey; seal: SealKey }> {
-  let saved: Saved;
-  if (existsSync(file)) saved = JSON.parse(readFileSync(file, "utf8")) as Saved;
-  else {
-    const sig = createECDH("prime256v1"); sig.generateKeys();
-    const seal = createECDH("prime256v1"); seal.generateKeys();
-    saved = { v: 1, sig_d: sig.getPrivateKey("hex"), seal_d: seal.getPrivateKey("hex"), seal_pub: seal.getPublicKey("hex", "uncompressed") };
-    writeJsonFile(file, saved, { discardTemporaryOnError: true });
-  }
-  return { sign: signingKeyFromScalar(fromHex(saved.sig_d)), seal: await sealKeyFromScalar(fromHex(saved.seal_d), fromHex(saved.seal_pub)) };
+  if (existsSync(file)) return fromSaved(JSON.parse(readFileSync(file, "utf8")) as Saved);
+  const fresh = await newKeys();
+  saveKeys(fresh.saved, file);
+  return fresh.keys;
 }
 

@@ -268,3 +268,19 @@ test("the test server's Android app-links value parses as written in login-pass.
     { packageName: "dev.kitepon.approvalbox.debug", fingerprints: [debug] },
   ]);
 });
+
+test("setup-test/verified (c8c, Q8): only the passed bit for that client, no decision, no code", async () => {
+  const x = await setup({ billing: "off" });
+  try {
+    const { k } = await x.signIn("ivy");
+    x.accounts.ensureUser(k);
+    const conn = x.accounts.createConnection(k, "pc", "linux", ["codex"]);
+    const r = await x.call("POST", "/connector/v1/setup-test/verified", conn.token, { client: "codex", os: "linux" });
+    assert.deepEqual(await r.json(), { status: "passed", client: "codex" });
+    const row = x.db.prepare("select status, decision_id, code, passed_at from setup_checks where connection_id = ?").get(conn.id) as any;
+    assert.deepEqual([row.status, row.decision_id, row.code, !!row.passed_at], ["passed", null, null, true]);
+    assert.ok((x.db.prepare("select setup_verified_at from users where id = ?").get(k) as any).setup_verified_at);
+    assert.equal((x.db.prepare("select count(*) n from decisions").get() as any).n, 0);
+    assert.equal((await x.call("POST", "/connector/v1/setup-test/verified", undefined, { client: "codex" })).status, 401);
+  } finally { await x.close(); }
+});

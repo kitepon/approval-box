@@ -521,6 +521,11 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     }));
     return c.json(decisions.startSetupTest(c.get("conn"), input.client, input.os, input.route, input.session_label));
   });
+  // peer-channel の道（c8c）: 手元で通った接続テストの印だけ（中身・コードなし）。
+  conn.post("/setup-test/verified", async (c) => {
+    const input = await body(c, z.object({ client: z.string().trim().min(1).max(40), os: z.string().max(20).optional() }));
+    return c.json(decisions.setupVerified(c.get("conn"), input.client, input.os));
+  });
   conn.post("/setup-test/confirm", async (c) => {
     const input = await body(c, z.object({ decision_id: z.string(), code: z.string() }));
     return c.json(decisions.confirmSetupTest(c.get("conn"), input.decision_id, input.code));

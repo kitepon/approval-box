@@ -90,6 +90,8 @@ function parse<T>(schema: z.ZodType<T>, body: unknown): T {
 export class LocalBox {
   readonly events = new EventEmitter();
   transport?: Transport;
+  /** 接続テストが手元で通った時（サーバーへ「確認済み」の印だけを送る。pc-daemon が付ける）。 */
+  onSetupPassed?: (client: string) => void;
   private store: Store;
 
   private readonly file: string;
@@ -359,6 +361,7 @@ export class LocalBox {
     if (rec.setup_code !== input.code.trim()) error("validation_failed", "確認コードが違います。届いた答えに書かれたコードをそのまま渡してください。");
     if (rec.delivery !== "delivered" && rec.delivery !== "fetched") { rec.delivery = "delivered"; this.bump(rec); }
     this.save();
+    this.onSetupPassed?.(rec.client);
     return { status: "passed", client: rec.client };
   }
 

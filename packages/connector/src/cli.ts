@@ -7,6 +7,7 @@ import { createInterface } from "node:readline/promises";
 import QRCode from "qrcode";
 import { Api, ServerError } from "./api.ts";
 import { OFFICIAL_SERVER, readConfig, renameWithRetry, requireConfig, writeConfig, writeJsonFile } from "./config.ts";
+import { renameSync } from "node:fs";
 import { admissionFile, serverOffersPeerChannel } from "./pc-mode.ts";
 import { daemonStatus, ensureDaemon, runDaemon } from "./daemon.ts";
 import { exportConnection } from "./connection-export.ts";
@@ -48,6 +49,8 @@ function installRuntime(): string {
     rmSync(target, { recursive: true, force: true });
     mkdirSync(target, { recursive: true });
     cpSync(runtimeDir(), target, { recursive: true });
+    // node-datachannel と各OSのビルド済みの部品（peer-channel の道でだけ読む）。npm は node_modules の名前の置き場を配らないので、ここで名前を戻す。
+    if (existsSync(join(target, "native"))) renameSync(join(target, "native"), join(target, "node_modules"));
   }
   const bin = join(home(), "bin");
   mkdirSync(bin, { recursive: true, mode: 0o700 });
@@ -146,7 +149,35 @@ async function waitForChecks(api: Api, clients: string[]) {
   }
 }
 
+/** setup --rebind: ペアリング済みの接続に新しい鍵を結ぶ（peer-channel 契約 0.5.3）。製品のペアリングはやり直さない。 */
+async function rebind() {
+  const config = requireConfig();
+  const { rebindKeys } = await import("./pc-rebind.ts");
+  try {
+    await rebindKeys(config, {
+      show: async (text, typed) => {
+        out("この端末の鍵を結び直します。アプリの「接続」で、次のQRコードを読むか、確かめの文字を入力してください（最大5分）。\n");
+        out(await QRCode.toString(text, { type: "terminal", small: true }));
+        out(`  確かめの文字: ${typed}\n`);
+      },
+      restart: async () => {
+        // 新しい鍵で動かすため、配送デーモンを起こし直す。
+        const status = daemonStatus();
+        if (status.running && status.pid) { try { process.kill(status.pid); } catch { /* 既に終わっている */ } }
+        for (let i = 0; i < 50 && daemonStatus().running; i++) await new Promise((r) => setTimeout(r, 200));
+        ensureDaemon();
+      },
+    });
+    out("鍵を結び直しました。申請と答えは、新しい鍵で運ばれます。");
+  } catch (error) {
+    const code = (error as { code?: string }).code ?? "binding_failed";
+    out(`鍵を結び直せませんでした（${code}: ${(error as Error).message}）。前の鍵のままです。`);
+    process.exitCode = 1;
+  }
+}
+
 async function setup() {
+  if (flag("rebind")) return rebind();
   const config = readConfig();
   const server = (option("server") ?? config?.server ?? process.env.APPROVAL_BOX_SERVER ?? OFFICIAL_SERVER).replace(/\/$/, "");
   const targets = selectedTargets();
@@ -301,6 +332,7 @@ function help() {
   npx approval-box setup [--server URL] [--token TOKEN] [--only claude,codex,cursor,grok] [--no-instructions] [--no-register] [--yes]
       AIにApproval Boxを登録し、この端末をアカウントに結び、セットアップ確認まで行う
       --no-register: AIの設定は書かない（CLI設定を一人で書く管理元が harness-entries を読んで登録する）
+  npx approval-box setup --rebind  ペアリング済みのこの端末に、新しい鍵を結び直す（peer-channel の道。製品のペアリングはやり直さない）
   npx approval-box install-runtime  固定の実行入口を入れる（接続・AI登録は変更しない）
   approval-box harness-entries --json  登録内容（MCP・hook・許可）をJSONで管理元へ渡す。固定の実行入口から呼ぶ
   npx approval-box test       接続テスト（AIに「Approval Boxのsetup_testを実行して」と言って確かめる）

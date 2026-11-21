@@ -19,7 +19,8 @@ const result = await build({
   splitting: true,
   format: "esm",
   platform: "node",
-  // shortcut: peer-channel の道（c8c）が読む node-datachannel はネイティブのモジュールで、束ねられない。runtime へ載せる方法は adoption 7 の残り。
+  // peer-channel の道（c8c）が読む node-datachannel はネイティブのモジュールで、束ねられない。ship-datachannel.mjs が dist/native に置き、
+  // installRuntime が <runtime>/node_modules にする（peer-channel の道でだけ読む）。
   external: ["node-datachannel"],
   target: "node20",
   chunkNames: "chunks/[name]-[hash]",
@@ -46,4 +47,5 @@ for (const p of [...packages.values()].sort((a, b) => a.name.localeCompare(b.nam
   notices.push(`## ${p.name}@${p.version} (${p.license})`, "", p.text ? "```\n" + p.text + "\n```" : "(license text not shipped by the package)", "");
 }
 writeFileSync(new URL("../dist/THIRD_PARTY_NOTICES.md", import.meta.url), notices.join("\n"));
+await (await import("./ship-datachannel.mjs")).shipDataChannel();
 console.log(`built approval-box ${pkg.version}`);
