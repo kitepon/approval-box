@@ -145,7 +145,7 @@ export class Attachments {
         const staged = get<{ n: number }>(this.db, "select count(*) n from attachments where decision_id = ? and position is null", decisionId)!.n;
         if (staged >= MAX_PER_ANSWER) throw new ApiError("too_large", `1つの答えに付けられるのは${MAX_PER_ANSWER}ファイルまでです。`);
         const used = get<{ n: number | null }>(this.db, "select (select coalesce(sum(size),0) from attachments where user_id = ?) + (select coalesce(sum(size),0) from request_uploads where user_id = ?) n", userId, userId)!.n ?? 0;
-        if (used + input.data.length > MAX_ACCOUNT_BYTES) throw new ApiError("too_large", "添付の保存がアカウントの上限（1GB）に達しました。古い既決を消すと空きます。");
+        if (used + input.data.length > MAX_ACCOUNT_BYTES) throw new ApiError("too_large", "添付の保存がアカウントの上限（1GB）に達しました。設定の「履歴を削除」で古い履歴を消すと空きます。");
         run(this.db, `insert into attachments (id, user_id, decision_id, name, content_type, kind, size, sha256, idem_key, position, created_at)
             values (?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?)`,
           id, userId, decisionId, cleanName(input.name), input.contentType, type.kind, input.data.length, sha256, input.idempotencyKey, now());
