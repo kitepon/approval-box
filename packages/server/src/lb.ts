@@ -1,4 +1,4 @@
-// 共有の login-billing ライブラリ（kitepon/login-billing 0.7.1、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
+// 共有の login-billing ライブラリ（kitepon/login-billing 0.10.0（開発版、試験サーバーだけ）、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
 // ライブラリの内側は読まない。公開の入口（createLoginBilling・createHandler・Storage）だけを使う。
 import { createHandler, createLoginBilling, type AppleStoreConfig, type GoogleStoreConfig, type LoginBilling, type Storage } from "@kitepon/login-billing/server";
 import { type Db, get, run } from "./db.ts";
@@ -26,6 +26,12 @@ export class SqliteStorage implements Storage {
 
   async delete(key: string) {
     run(this.db, "delete from lb_kv where key = ?", key);
+  }
+
+  /** 一度きりの記録を、読むと同時に消す（契約1.20）。1つの文なので、同時に2つ来ても受け取れるのは片方だけ。 */
+  async take(key: string) {
+    const row = get<{ value: string; expires_at: number }>(this.db, "delete from lb_kv where key = ? returning value, expires_at", key);
+    return row && row.expires_at > this.now() ? row.value : undefined;
   }
 
   /** 期限を過ぎた行を消す（読む側も期限切れは見ない）。 */
@@ -87,8 +93,12 @@ export function createLibrary(input: LibraryInput) {
     ...(input.now ? { now: input.now } : {}),
   });
   const handler = createHandler(lb, { prefix: "/auth/v1", origins: [input.publicUrl] });
-  // 名前のない2つの入口は、書き込みが認証なしで起きる。1分あたりの回数を接続元ごとに絞る。
-  const limits: Record<string, (client: string) => boolean> = { "/auth/v1/signin/nonce": rateLimiter(60, 60_000), "/auth/v1/handoff/start": rateLimiter(20, 60_000) };
+  // 名前のない入口は、読み書きが認証なしで起きる。1分あたりの回数を接続元ごとに絞る。
+  const limits: Record<string, (client: string) => boolean> = {
+    "/auth/v1/signin/nonce": rateLimiter(60, 60_000), "/auth/v1/handoff/start": rateLimiter(20, 60_000),
+    "/auth/v1/websignin/start": rateLimiter(20, 60_000), "/auth/v1/websignin/callback": rateLimiter(20, 60_000), "/auth/v1/websignin/take": rateLimiter(60, 60_000),
+    "/auth/v1/prove/take": rateLimiter(60, 60_000), "/auth/v1/ticket/check": rateLimiter(60, 60_000),
+  };
   return { lb, handler, storage, allow: (path: string, client: string) => limits[path]?.(client) ?? true };
 }
 export type Library = ReturnType<typeof createLibrary>;

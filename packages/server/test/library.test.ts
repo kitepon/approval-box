@@ -109,6 +109,14 @@ test("lb_kv: 期限切れは読まず、掃除で消え、同じ鍵は上書き�
     await storage.delete("slot:b");
     assert.equal(await storage.get("slot:b"), undefined);
     assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 16);
+    // take: 1回目だけ値が返り、行は消える。期限切れは返さない（行は消す）
+    await storage.put("once:c", "z", 1000);
+    assert.deepEqual(await Promise.all([storage.take("once:c"), storage.take("once:c")]), ["z", undefined]);
+    assert.equal(get(db, "select 1 from lb_kv where key = 'once:c'"), undefined);
+    await storage.put("once:d", "w", 1000);
+    at += 1000;
+    assert.equal(await storage.take("once:d"), undefined);
+    assert.equal(get(db, "select 1 from lb_kv where key = 'once:d'"), undefined);
   })();
 });
 
