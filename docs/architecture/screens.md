@@ -81,7 +81,7 @@ Edges:
 ### One entry for every QR and 8-character code (Owner 2026-11-21: 「ユーザーが迷わなければいい」)
 The person never has to know which screen a QR or code belongs to.
 - Every `QRコードを読む` button and every 8-character code field in the app is the same reader. It decides by the content: an AI pairing QR/code -> the confirm `このAIをつなぎますか？`; a login QR/code of another device -> the confirm `この端末をログインさせますか？` (S8). A typed code is first looked up as an AI pairing; if no pairing has it, it is tried as a device login. Anything else -> S9 `決裁箱のQRコードではありません。`
-- The reader is reachable from S3 too: a `QRコードを読む` button in the S3 header on phones and tablets (where a camera exists), plus the existing places in S6 `AIをつなぐ` and S8 `ほかの端末をログインさせる`.
+- The reader opens from a camera/QR icon (SF Symbol `qrcode.viewfinder`, Material `qr_code_scanner`; accessibility label `QRコードを読む`) at the top right of the main screens (S3 受信, S4 履歴, S6 接続, S8 設定) on phones and tablets that have a camera, as most apps do (Owner 2026-11-21: 「カメラアイコンみたいなのがあって、そこでカメラ起動します」). The existing `QRコードを読む` buttons in S6 `AIをつなぐ` and S8 `ほかの端末をログインさせる` open the same reader. Devices without a camera show no icon; their code fields are the same one reader.
 - Camera: ask for camera access the first time the reader opens. If access was refused, say `カメラが許可されていません。設定で決裁箱のカメラを許可するか、8文字のコードを入力してください。` with `設定を開く`; never `この端末ではQRコードを読み取れません` on a device that has a camera.
 - The system camera app cannot open these QRs on purpose (they are not links); the S2 guidance already says to use the app.
 
