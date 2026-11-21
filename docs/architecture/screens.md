@@ -122,7 +122,8 @@ Same on every app. The Mac gains `外す`, `テストする`, the guides and the
 1. `アカウント`: `Appleでログインしています` / `Googleでログインしています` / `スマホの承認でログインしています`
 2. `契約`: status line (as S7, including `期限: …` when active) + `契約について` → S7
 3. `ほかの端末`:
-   - store pass: `ほかの端末をログインさせる` (→ code field + QR where a camera exists → confirm `この端末をログインさせますか？` `許可する` / `許可しない`); `ログインさせた端末` (rows `停止`, `ほかの端末をすべて停止`)
+   - store pass: `ほかの端末をログインさせる` (→ code field + QR where a camera exists → confirm, see below); `ログインさせた端末` (rows `停止`, `ほかの端末をすべて停止`)
+   - The confirm screen (login-billing contract 1.14, product duty for the QR confirm; ruling 2026-11-21), in this order: heading `この端末をログインさせますか？`; `確認番号` `NN`; `端末が名乗った名前` + the device label (the name that device gave itself, never shown as a checked fact); the warning `自分で始めたログインで、目の前の端末に同じ確認番号が出ている時だけ許可してください。メールやメッセージで頼まれたログインや、心当たりのないログインは許可しないでください。`; buttons `許可する` / `許可しない`. Why: a phishing page can relay a real QR and its number; the number only stops a mix-up of two codes. After a mistake the way out is `ログインさせた端末` → `停止`, kept one step from S8.
    - otherwise, the same section with the text: `この端末は、ほかの端末をログインさせられません。止めるときは、承認したスマホの 設定 → ほかの端末 から止めます。`
 4. `通知` (where the app cannot notify, e.g. the Web, the same section reads `ブラウザ版には通知がありません。通知はスマホとPCのアプリで受け取れます。`)
 5. `言語` (the heading `言語` is always shown next to the picker, on S1 too)
