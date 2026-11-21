@@ -113,6 +113,10 @@ Same on every app. The Mac gains `外す`, `テストする`, the guides and the
    - **Cannot buy here** (handoff pass, Linux, Web), the same text everywhere: `この端末では契約できません。契約は、iPhone・iPad・Mac または Android の決裁箱で、設定 → 契約 から行います。` When active: `この端末は、契約しているスマホの承認でログインしています。` with no buy, restore or manage controls.
 3. `1か月ごとの自動更新。解約は、契約したストアの管理画面から行えます。` + `利用規約` (/terms.html) `プライバシーポリシー` (/privacy.html) `特定商取引法に基づく表記` (https://kitepon.dev/specified-commercial-transactions/#approval-box).
 4. On no contract, also `ログアウト` (so a wrong account is never a dead end).
+5. **A purchase of another account** (login-billing contract 1.13 section 2, `otherAccount` / `otherAccountProducts`; ruling 2026-11-21): the store account of this device holds a purchase that belongs to another Approval Box account. It stays a failure; the app never finishes, hides or deletes it.
+   - On a purchase or restore attempt answered `otherAccount`: the S9 alert `この端末のストアのアカウントで買った契約は、決裁箱の別のアカウントに付いています。買った時のアカウントでログインし直すか、ストアで解約して期限が切れてから契約してください。` Never shown as bought.
+   - While `otherAccountProducts` is not empty: the same text as one line in S7 under the status line. No alert at launch or on any other screen.
+   - It leaves by itself when that account signs in on this device or the store reports the purchase ended (`ended`).
 
 ### S8 `設定` (same sections, same order, everywhere)
 1. `アカウント`: `Appleでログインしています` / `Googleでログインしています` / `スマホの承認でログインしています`
