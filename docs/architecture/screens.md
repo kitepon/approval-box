@@ -121,6 +121,7 @@ Same on every app. The Mac gains `外す`, `テストする`, the guides and the
    - `notConfirmed` (Kotlin: the store could not be reached; the library sends it again later): the S9 alert `ストアでの購入は済みましたが、決裁箱でまだ確かめられていません。少し待ってから「購入を復元」を押してください。`
    - `invalid`: the S9 alert `この購入は、決裁箱の契約として確かめられませんでした。ストアの契約の管理で、支払いの問題や一時停止がないか確かめてください。`
    - `attached`, `ended`, `cancelled`: nothing; `pending`: the existing notice `ストアでの承認待ちです。`
+   - When one attempt gives several answers (a restore of several purchases), one alert: `otherAccount` first, then `invalid`, then `notConfirmed`.
 
 ### S8 `設定` (same sections, same order, everywhere)
 1. `アカウント`: `Appleでログインしています` / `Googleでログインしています` / `スマホの承認でログインしています`
