@@ -165,9 +165,36 @@ button.link { background: none; border: none; color: inherit; text-decoration: u
 .image-overlay > button { align-self:flex-end; }
 .request-images { margin:1.5rem 0; }
 
-.language-picker { display: flex; align-items: center; justify-content: flex-end; gap: .6rem; padding: .75rem 1rem; }
+.language-picker { display: flex; align-items: center; justify-content: flex-start; gap: .6rem; padding: .75rem 0; }
 .language-picker select { width: auto; max-width: 70%; }
 @media (max-width: 719px) {
   .nav-item { flex: 1 1 0; min-width: 0; gap: 3px; padding-inline: 3px; font-size: clamp(.75rem, 3.2vw, 1rem); }
   .nav-item .count { flex-shrink: 0; }
 }
+
+/* common screens (docs/architecture/screens.md) */
+.login button.wide { width: 100%; margin: 12px 0; }
+.first-time { margin: 8px 0; }
+.first-time summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+.first-time ol { padding-left: 1.3rem; }
+.first-time li { margin-bottom: 10px; }
+.links { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0; }
+.library-check { font-size: 1.6rem; font-weight: 700; margin: 0; }
+.filters { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+button.filter { min-height: 36px; padding: 4px 14px; border-radius: 999px; font-weight: 600; }
+button.filter.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.option.selected { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.option.selected .badge { color: inherit; }
+a.button-link { display: inline-block; padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; text-decoration: none; background: var(--surface); }
+ul.plain { list-style: none; padding: 0; margin: 0 0 8px; }
+ul.plain li { padding: 6px 0; }
+.conn { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.conn:last-child { border-bottom: 0; }
+.tokens { margin-bottom: 12px; }
+.tokens summary { cursor: pointer; }
+.tokens summary h2 { display: inline; }
+dialog.alert { max-width: min(92vw, 420px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 16px; }
+dialog.alert::backdrop { background: rgba(0, 0, 0, 0.4); }
+dialog.alert h2 { margin-top: 0; }
+.plan-status { font-size: 1.1rem; margin: 0; }

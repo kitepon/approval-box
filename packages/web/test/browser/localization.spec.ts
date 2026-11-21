@@ -20,12 +20,15 @@ async function fixture(page: Page, signedIn=true) {
   });
 }
 
+// The picker lives on the login screen and in Settings only, so elsewhere the browser language is what changes.
+const setLanguages=(page:Page,languages:string[])=>page.evaluate((languages)=>{Object.defineProperty(navigator,"languages",{value:languages,configurable:true});window.dispatchEvent(new Event("languagechange"));},languages);
+
 test("login auto-detects English; selection persists, HTML lang and OS changes follow",async({page})=>{
   await fixture(page,false);await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("lang","en");
-  await expect(page.getByText("Requests for your decision arrive here.",{exact:false})).toBeVisible();
+  await expect(page.getByText("Answer your AI's questions from your phone or computer.",{exact:false})).toBeVisible();
   await page.getByRole("combobox").selectOption("ja");await expect(page.locator("html")).toHaveAttribute("lang","ja");
-  await page.reload();await expect(page.getByText("AIが判断を求める時に、ここへ集まります。",{exact:false})).toBeVisible();
+  await page.reload();await expect(page.getByText("AIの相談に、スマホやPCから答えます。",{exact:false})).toBeVisible();
   await page.getByRole("combobox").selectOption("system");await expect(page.locator("html")).toHaveAttribute("lang","en");
   await page.evaluate(()=>{Object.defineProperty(navigator,"languages",{value:["ja-JP"],configurable:true});window.dispatchEvent(new Event("languagechange"));});
   await expect(page.locator("html")).toHaveAttribute("lang","ja");
@@ -38,13 +41,13 @@ test("all main pages use English while content and reply drafts survive language
   await page.getByText(title,{exact:true}).click();
   await expect(page.getByRole("heading",{name:title})).toBeVisible();await expect(page.getByText(context,{exact:true})).toBeVisible();
   const draft="回答 draft $&";await page.getByRole("textbox").fill(draft);
-  await page.getByRole("combobox").selectOption("ja");await expect(page.getByRole("button",{name:"文だけで答える",exact:true})).toBeVisible();
+  await setLanguages(page,["ja-JP"]);await expect(page.getByRole("button",{name:"回答を送信",exact:true})).toBeVisible();
   await expect(page.getByRole("textbox")).toHaveValue(draft);
-  await page.getByRole("combobox").selectOption("en");await expect(page.getByRole("button",{name:"Send text",exact:true})).toBeVisible();
+  await setLanguages(page,["en-US"]);await expect(page.getByRole("button",{name:"Send answer",exact:true})).toBeVisible();
   await expect(page.getByRole("textbox")).toHaveValue(draft);
-  await page.getByRole("link",{name:"Completed"}).click();await expect(page.getByText("Delivered to AI",{exact:true})).toBeVisible();
-  await page.getByRole("link",{name:"Connections",exact:true}).click();await expect(page.getByRole("heading",{name:"Add a device",exact:true})).toBeVisible();
-  await page.getByRole("link",{name:"Settings"}).click();await expect(page.getByText("Signed in with Google.")).toBeVisible();
+  await page.getByRole("link",{name:"History"}).click();await expect(page.getByRole("heading",{name:"History",exact:true})).toBeVisible();await expect(page.getByText("Delivered to AI",{exact:true})).toBeVisible();
+  await page.getByRole("link",{name:"Connections",exact:true}).click();await expect(page.getByRole("heading",{name:"Connect an AI",exact:true})).toBeVisible();
+  await page.getByRole("link",{name:"Settings"}).click();await expect(page.getByText("Signed in with Google",{exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"Delete account and all data"})).toBeVisible();
 });
 
@@ -61,23 +64,23 @@ test("unsupported browser language falls back to Japanese and storage failure al
   await page.addInitScript(()=>{Storage.prototype.setItem=()=>{throw new Error("storage blocked");};});
   await page.goto("/");await expect(page.locator("html")).toHaveAttribute("lang","ja");
   await page.getByRole("combobox").selectOption("en");await expect(page.locator("html")).toHaveAttribute("lang","en");
-  await expect(page.getByText("Requests for your decision arrive here.",{exact:false})).toBeVisible();await ctx.close();
+  await expect(page.getByText("Answer your AI's questions from your phone or computer.",{exact:false})).toBeVisible();await ctx.close();
 });
 
 test("English navigation and account controls fit a narrow phone screen",async({page})=>{
   await page.setViewportSize({width:320,height:740});await fixture(page);await page.goto("/settings");
   await expect(page.getByRole("heading",{name:"Settings"})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  for(const name of ["Inbox","Completed","Connections","Settings"]){
+  for(const name of ["Inbox","History","Connections","Settings"]){
     const box=await page.getByRole("link",{name:name==='Inbox'?/Inbox/:name,exact:name!=='Inbox'}).boundingBox();
     expect(box).not.toBeNull();expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(321);
   }
 });
 
 for(const language of [
-  {tag:"ko-KR",code:"ko",settings:"설정",send:"글로만 답변",remove:"계정과 모든 데이터 삭제",prompt:"확인을 위해 ‘삭제’를 입력해 주세요"},
-  {tag:"zh-CN",code:"zh-Hans",settings:"设置",send:"仅发送文字",remove:"删除账号及所有数据",prompt:"请输入“删除”以确认"},
-  {tag:"zh-TW",code:"zh-Hant",settings:"設定",send:"僅傳送文字",remove:"刪除帳號及所有資料",prompt:"請輸入「刪除」以確認"},
+  {tag:"ko-KR",code:"ko",settings:"설정",send:"답변 보내기",remove:"계정과 모든 데이터 삭제",prompt:"확인을 위해 ‘삭제’를 입력해 주세요"},
+  {tag:"zh-CN",code:"zh-Hans",settings:"设置",send:"发送回答",remove:"删除账号及所有数据",prompt:"请输入“删除”以确认"},
+  {tag:"zh-TW",code:"zh-Hant",settings:"設定",send:"傳送回答",remove:"刪除帳號及所有資料",prompt:"請輸入「刪除」以確認"},
 ]) test(`${language.code}: auto-detection, UI, literal content, drafts, persistence and confirmation`,async({browser})=>{
   const ctx=await browser.newContext({locale:language.tag,viewport:{width:320,height:740}});const page=await ctx.newPage();
   try {
@@ -86,10 +89,10 @@ for(const language of [
     await page.goto("/d/K-TEST01");await expect(page.locator("html")).toHaveAttribute("lang",language.code);
     await expect(page.getByRole("heading",{name:title})).toBeVisible();await expect(page.getByText(context,{exact:true})).toBeVisible();
     await expect(page.getByRole("button",{name:language.send,exact:true})).toBeVisible();await page.getByRole("textbox").fill("답변 原文 $& <tag>");
-    await page.getByRole("combobox").selectOption("en");await expect(page.getByRole("button",{name:"Send text",exact:true})).toBeVisible();
-    await page.getByRole("combobox").selectOption(language.code);await expect(page.getByRole("textbox")).toHaveValue("답변 原文 $& <tag>");
-    await page.reload();await expect(page.getByRole("combobox")).toHaveValue(language.code);
+    await setLanguages(page,["en-US"]);await expect(page.getByRole("button",{name:"Send answer",exact:true})).toBeVisible();
+    await setLanguages(page,[language.tag]);await expect(page.getByRole("textbox")).toHaveValue("답변 原文 $& <tag>");
     await page.getByRole("link",{name:language.settings}).click();await expect(page.getByRole("heading",{name:language.settings,exact:true})).toBeVisible();
+    const picker=page.locator(".language-picker select");await picker.selectOption("en");await page.reload();await expect(picker).toHaveValue("en");await picker.selectOption(language.code);await expect(picker).toHaveValue(language.code);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await expect.poll(()=>headers).toContain(language.code);
     const prompts:string[]=[];let writes=0;
@@ -103,5 +106,5 @@ test("visible API errors follow a language change without a retry or loss of req
   await fixture(page);
   await page.route("**/v1/decisions?**",route=>route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:{code:"internal",message:"A server error occurred. Please try again later."}})}));
   await page.goto("/");await expect(page.getByText("A server error occurred. Please try again later.",{exact:true})).toBeVisible();
-  await page.getByRole("combobox").selectOption("ko");await expect(page.getByText("서버에 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.",{exact:true})).toBeVisible();
+  await setLanguages(page,["ko-KR"]);await expect(page.getByText("서버에 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.",{exact:true})).toBeVisible();
 });

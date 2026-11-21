@@ -1,8 +1,11 @@
+import { useState } from "preact/hooks";
 import { systemMessage, t } from "../i18n.ts";
 import { linkProps } from "../router";
 import { loadOpen, useResource } from "../store";
 import { ago, deadlineText, URGENCY_LABEL } from "../format";
 import type { Decision } from "../types";
+import { ListFilters, matches } from "./ListFilters";
+import { Plan } from "./Plan";
 import { Source } from "./Source";
 
 export function DecisionCard({ d }: { d: Decision }) {
@@ -25,26 +28,30 @@ export function DecisionCard({ d }: { d: Decision }) {
   );
 }
 
+/** S3 受信。契約が無い（402）時は、一覧の代わりに S7 を出す。 */
 export function Inbox() {
-  const { data, error, loading } = useResource(loadOpen);
-  const pending = data?.filter((d) => d.status === "pending") ?? [];
-  const held = data?.filter((d) => d.status === "held") ?? [];
+  const { data, error, loading, noContract } = useResource(loadOpen);
+  const [filter, setFilter] = useState<"all" | "pending" | "held">("all");
+  const [query, setQuery] = useState("");
+  if (noContract) return <Plan />;
+  // 未回答（pending）を先に、保留（held）を後に並べる。
+  const shown = (data ?? []).filter((d) => (filter === "all" || d.status === filter) && matches(d, query)).sort((a, b) => Number(a.status === "held") - Number(b.status === "held"));
   return (
     <section>
-      <h1>Approval Box</h1>
+      <h1>{t("受信")}</h1>
       {error && <p class="error">{systemMessage(error)}</p>}
       {loading && !data && <p class="muted">{t("読み込み中…")}</p>}
       {data && !data.length && (
         <div class="empty">
-          <p>{t("いま答えを待っている申請はありません。")}</p>
-          <p class="muted">{t("AIが判断を求めると、ここに届きます。")}</p>
+          <p>{t("いま決めることはありません")}</p>
+          <p class="muted">{t("相談が届いたら、お知らせします。")}</p>
         </div>
       )}
-      <div class="cards">{pending.map((d) => <DecisionCard key={d.id} d={d} />)}</div>
-      {held.length > 0 && (
+      {data && data.length > 0 && (
         <>
-          <h2>{t("保留中")}</h2>
-          <div class="cards">{held.map((d) => <DecisionCard key={d.id} d={d} />)}</div>
+          <ListFilters chips={[["all", t("すべて")], ["pending", t("未回答")], ["held", t("保留")]]} value={filter} onValue={setFilter} query={query} onQuery={setQuery} />
+          {!shown.length && <p class="muted">{t("一致する相談はありません。")}</p>}
+          <div class="cards">{shown.map((d) => <DecisionCard key={d.id} d={d} />)}</div>
         </>
       )}
     </section>

@@ -1,10 +1,11 @@
 import { systemMessage, t } from "../i18n.ts";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { api, ApiError } from "../api";
-import { navigate } from "../router";
+import { api, ApiError, isNoContract } from "../api";
+import { listPath, navigate } from "../router";
 import { bump, useBump } from "../store";
 import { ago, dateTime, deadlineText, DELIVERY_LABEL, FIELD_LABEL, URGENCY_LABEL } from "../format";
 import type { Decision } from "../types";
+import { Plan } from "./Plan";
 import { Source } from "./Source";
 import { ACCEPT, RequestImages, AttachmentList, MAX_COUNT, useDraftAttachments } from "./Attachments";
 
@@ -27,6 +28,8 @@ export function DecisionView({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [text, setText] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [noContract, setNoContract] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const swipe = useRef<{ x: number; y: number; at: number } | null>(null);
@@ -52,16 +55,18 @@ export function DecisionView({ id }: { id: string }) {
       shown.current = d;
       setDecision(d);
       setError(null);
-    }).catch((e: Error) => alive && setError(e.message));
+    }).catch((e: Error) => { if (alive) isNoContract(e) ? setNoContract(true) : setError(e.message); });
     return () => { alive = false; };
   }, [id, tick]);
 
+  if (noContract) return <Plan />;
   if (error) return <section><p class="error">{systemMessage(error)}</p><button class="ghost" onClick={() => navigate("/")}>{t("受信一覧へ")}</button></section>;
   if (!decision) return <section><p class="muted">{t("読み込み中…")}</p></section>;
   const d = decision;
   const open = d.status === "pending" || d.status === "held";
   const last = d.history.at(-1);
   const attached = drafts.items.length ? { attachment_ids: drafts.items.map((a) => a.id) } : {};
+  const chosen = d.options.some((o) => o.id === selected) ? selected : null;
 
   async function act(path: string, body?: unknown) {
     setBusy(true);
@@ -71,8 +76,9 @@ export function DecisionView({ id }: { id: string }) {
       setDecision(updated);
       setNotice(null);
       bump();
-      if (path === "answer") navigate("/");
+      if (path === "answer") { setSelected(null); setText(""); } // 答えた相談にとどまる（一覧へは飛ばない）
     } catch (e) {
+      if (isNoContract(e)) return setNoContract(true);
       if (e instanceof ApiError && e.body.decision) {
         shown.current = e.body.decision;
         setDecision(e.body.decision);
@@ -128,18 +134,18 @@ export function DecisionView({ id }: { id: string }) {
           ], { duration: 120, easing: "ease-out" });
           return;
         }
-        if (matchMedia("(prefers-reduced-motion: reduce)").matches) { navigate("/"); return; }
+        if (matchMedia("(prefers-reduced-motion: reduce)").matches) { navigate(listPath()); return; }
         panel.inert = true;
         const animation = panel.animate([
           { transform: from },
           { transform: `translateX(${Math.sign(distance) * Math.max(innerWidth, panel.offsetWidth)}px)` },
         ], { duration: 180, easing: "ease-in", fill: "forwards" });
         exitAnimation.current = animation;
-        void animation.finished.then(() => { if (panel.isConnected) navigate("/"); }).catch(() => {
+        void animation.finished.then(() => { if (panel.isConnected) navigate(listPath()); }).catch(() => {
           // Leaving by another route cancels the animation during cleanup.
         }).finally(() => { panel.inert = false; });
       }}>
-      <button class="back" onClick={() => history.length > 1 ? history.back() : navigate("/")}>{t("‹ 戻る")}</button>
+      <button class="back" onClick={() => history.length > 1 ? history.back() : navigate(listPath())}>{t("戻る")}</button>
       {notice && <p class="notice">{systemMessage(notice)}</p>}
       <div class="card-meta">
         <Source source={d.source} />
@@ -160,26 +166,27 @@ export function DecisionView({ id }: { id: string }) {
         </div>
       )}
       {d.distinct_reason && <div class="amended"><strong>{t("似た申請と別件である理由")}</strong><div>{d.distinct_reason}</div></div>}
-      {d.context && <PlainText text={d.context} />}
+      {d.context && <><h2>{t("背景")}</h2><PlainText text={d.context} /></>}
       <RequestImages decisionId={d.id} items={d.request_attachments ?? []} />
 
       {open && (
         <div class="answer">
-          <div class="options">
+          <h2>{t("どう進める？")}</h2>
+          <div class="options" role="radiogroup" aria-label={t("どう進める？")}>
             {d.options.map((o) => (
-              <button key={o.id} class={`option ${d.recommendation === o.id ? "recommended" : ""}`} disabled={busy || drafts.uploading > 0}
-                onClick={() => act("answer", { option_id: o.id, ...(text.trim() ? { text: text.trim() } : {}), ...attached, version: d.version })}>
+              <button key={o.id} role="radio" aria-checked={chosen === o.id} class={`option ${d.recommendation === o.id ? "recommended" : ""} ${chosen === o.id ? "selected" : ""}`} disabled={busy}
+                onClick={() => setSelected(chosen === o.id ? null : o.id)}>
                 {o.label}
                 {d.recommendation === o.id && <span class="badge">{t("AIの推奨")}</span>}
               </button>
             ))}
           </div>
           <label class="field">
-            <span>{t("添え書き・別の指示（任意）")}</span>
+            <span>{t("補足・別の指示")}</span>
             <textarea rows={3} value={text} onInput={(e) => setText((e.target as HTMLTextAreaElement).value)} placeholder={t("選択肢を選ばずに、文だけで指示し直すこともできます")} />
           </label>
           <div class="field">
-            <span>{t("添付（画像・書類、{count}ファイル・合計50MBまで。任意）", { count: MAX_COUNT })}</span>
+            <span>{t("画像・書類を添付")}</span>
             <AttachmentList decisionId={d.id} items={drafts.items} onRemove={drafts.remove} />
             {drafts.uploading > 0 && <p class="muted">{t("アップロード中…")}</p>}
             {drafts.error && <p class="error">{systemMessage(drafts.error)}</p>}
@@ -187,32 +194,33 @@ export function DecisionView({ id }: { id: string }) {
               <label class="file-pick">{t("ファイルを追加")} <input type="file" multiple accept={ACCEPT} disabled={busy} onChange={(e) => { const input = e.target as HTMLInputElement; void drafts.add(input.files).then(() => { input.value = ""; }); }} />
               </label>
             )}
+            <span class="muted">{t("添付は合計50MBまでです。")}</span>
           </div>
           <div class="row">
-            <button class="primary" disabled={busy || drafts.uploading > 0 || (!text.trim() && !drafts.items.length)}
-              onClick={() => act("answer", { ...(text.trim() ? { text: text.trim() } : {}), ...attached, version: d.version })}>
-              {drafts.items.length ? (text.trim() ? t("文と添付で答える") : t("添付だけで答える")) : t("文だけで答える")}
-            </button>
             {d.status === "held"
-              ? <button class="ghost" disabled={busy} onClick={() => act("unhold")}>{t("保留を戻す")}</button>
-              : <button class="ghost" disabled={busy} onClick={() => act("hold")}>{t("保留にする")}</button>}
+              ? <button class="ghost" disabled={busy} onClick={() => act("unhold")}>{t("保留を解除")}</button>
+              : <button class="ghost" disabled={busy} onClick={() => act("hold")}>{t("保留する")}</button>}
+            <button class="primary" disabled={busy || drafts.uploading > 0 || (!chosen && !text.trim() && !drafts.items.length)}
+              onClick={() => act("answer", { ...(chosen ? { option_id: chosen } : {}), ...(text.trim() ? { text: text.trim() } : {}), ...attached, version: d.version })}>
+              {t("回答を送信")}
+            </button>
           </div>
         </div>
       )}
 
       {d.status === "answered" && d.answer && (
         <div class="result">
-          <div><strong>{t("答え:")}</strong> {d.answer.option_id ? d.options.find((o) => o.id === d.answer!.option_id)?.label : d.answer.text ? t("（文で回答）") : t("（添付で回答）")}</div>
+          <div><strong>{t("あなたの回答")}</strong> {d.answer.option_id ? d.options.find((o) => o.id === d.answer!.option_id)?.label : d.answer.text ? t("（文で回答）") : t("（添付で回答）")}</div>
           {d.answer.text && <div class="answer-text">{d.answer.text}</div>}
           {d.answer.attachments?.length ? <AttachmentList decisionId={d.id} items={d.answer.attachments} /> : null}
           <div class={`delivery delivery-${d.delivery}`}>{DELIVERY_LABEL[d.delivery ?? ""] ?? d.delivery}</div>
           {d.delivery === "unknown" && <p class="muted">{t("AIへ届いたか確かめられませんでした。元の会話に下の一言を送ると、AIが答えを取りに来ます。")}</p>}
           {d.delivery === "waiting" && d.source.via === "remote" && <p class="muted">{t("チャットへ戻った時に、AIが答えを受け取ります。")}</p>}
+          <button class="ghost copy" onClick={copyResume}>{copied ? t("コピーしました") : t("再開の一言をコピー")}</button>
         </div>
       )}
       {d.status === "cancelled" && <div class="result"><strong>{t("AIが取り下げました")}</strong>{d.cancel_reason && <div>{d.cancel_reason}</div>}</div>}
 
-      <button class="ghost copy" onClick={copyResume}>{copied ? t("コピーしました") : t("再開の一言をコピー")}</button>
 
       <details class="history">
         <summary>{t("履歴")}</summary>

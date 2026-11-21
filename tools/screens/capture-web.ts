@@ -42,14 +42,14 @@ const checks = [{ connection_id: "c-pc", client: "claude-code", status: "passed"
 
 // ---- the stub --------------------------------------------------------------------------------------------------
 type Opts = {
-  library?: boolean; config?: Json; signedIn?: boolean; me?: Json; open?: Json[]; closed?: Json[]; connections?: Json[]; paid402?: boolean;
-  pairing?: Json; takes?: ("pending" | "ready" | "gone")[]; stallConfig?: boolean; stallStart?: boolean; startFails?: boolean;
+  library?: boolean; config?: Json; signedIn?: boolean; me?: Json; open?: Json[]; closed?: Json[]; connections?: Json[]; paid402?: boolean; deleteFails?: boolean;
+  pairing?: Json; takes?: ("pending" | "ready" | "gone")[]; stallConfig?: boolean; stallStart?: boolean; startFails?: boolean; code401?: string;
 };
-type Stub = { signedIn: boolean; starts: number; signouts: number; deletes: string[]; answers: string[]; exports: number; claims: string[]; sessionHeaders: (string | undefined)[] };
+type Stub = { events: number; tokens: number; signedIn: boolean; starts: number; signouts: number; deletes: string[]; answers: string[]; exports: number; claims: string[]; sessionHeaders: (string | undefined)[] };
 const json = (route: Route, status: number, body: unknown, headers: Record<string, string> = {}) => route.fulfill({ status, contentType: "application/json", headers, body: JSON.stringify(body) });
 
 async function install(context: BrowserContext, o: Opts): Promise<Stub> {
-  const s: Stub = { signedIn: o.signedIn ?? false, starts: 0, signouts: 0, deletes: [], answers: [], exports: 0, claims: [], sessionHeaders: [] };
+  const s: Stub = { events: 0, tokens: 0, signedIn: o.signedIn ?? false, starts: 0, signouts: 0, deletes: [], answers: [], exports: 0, claims: [], sessionHeaders: [] };
   const takes = [...(o.takes ?? ["pending"])];
   if (!o.library && s.signedIn) await context.addInitScript(() => localStorage.setItem("approval-box.session", "capture-fixture-only"));
   await context.route((url) => url.hostname !== "127.0.0.1", (route) => route.abort());
@@ -58,8 +58,9 @@ async function install(context: BrowserContext, o: Opts): Promise<Stub> {
   await context.route("**/v1/**", async (route) => {
     const req = route.request(), url = new URL(req.url()), p = url.pathname, m = req.method();
     s.sessionHeaders.push(await req.headerValue("authorization") ?? undefined);
+    if (p === "/v1/events") s.events++;
     if (p === "/v1/auth/config") { if (o.stallConfig) return; return json(route, 200, { ...(o.config ?? {}), ...(o.library ? { library_login: true } : {}) }); }
-    if (!s.signedIn) return json(route, 401, o.library ? { error: "pass_invalid" } : { error: { code: "unauthorized", message: "ログイン情報が無効か、期限が切れています。もう一度ログインしてください。" } });
+    if (!s.signedIn) return json(route, 401, o.library ? { error: o.code401 ?? "pass_invalid" } : { error: { code: "unauthorized", message: "ログイン情報が無効か、期限が切れています。もう一度ログインしてください。" } });
     if (p === "/v1/me" && m === "GET") return json(route, 200, o.me ?? me());
     if (p === "/v1/me" && m === "DELETE") { s.deletes.push("me"); s.signedIn = false; return json(route, 200, { ok: true }); }
     if (p === "/v1/me/settings") return json(route, 200, { retention_days: 30 });
@@ -68,12 +69,14 @@ async function install(context: BrowserContext, o: Opts): Promise<Stub> {
     if (o.paid402 && (p.startsWith("/v1/decisions") || p === "/v1/events")) return json(route, 402, { error: { code: "subscription_expired", message: "Approval Boxの契約がありません。iPhone・Mac・Android のアプリで契約してください。" } });
     if (p === "/v1/events") return route.fulfill({ status: 200, contentType: "text/event-stream", body: "" });
     if (p === "/v1/decisions" && m === "GET") return json(route, 200, { items: url.searchParams.get("status")?.includes("answered") ? (o.closed ?? []) : (o.open ?? []) });
+    if (p === "/v1/decisions" && m === "DELETE" && o.deleteFails) return json(route, 500, { error: { code: "internal", message: "サーバーで問題が起きました。しばらくしてからもう一度お試しください。" } });
     if (p === "/v1/decisions" && m === "DELETE") { s.deletes.push("closed"); o.closed = []; return json(route, 200, { deleted: 3 }); }
     const d = /^\/v1\/decisions\/([^/]+)(?:\/(\w+))?$/.exec(p);
     if (d && d[2] === "attachments") return json(route, 200, { items: [] });
     if (d && m === "GET") return detail[d[1]!] ? json(route, 200, detail[d[1]!]) : json(route, 404, { error: { code: "not_found", message: "項目が見つかりません。" } });
-    if (d && m === "POST" && d[2] === "answer") { s.answers.push(d[1]!); return json(route, 200, { ...detail[d[1]!], status: "answered", delivery: "waiting" }); }
+    if (d && m === "POST" && d[2] === "answer") { s.answers.push(d[1]!); return json(route, 200, { ...detail[d[1]!], status: "answered", delivery: "waiting", answer: { option_id: "go", answered_at: iso(0) }, version: 2 }); }
     if (d && m === "POST" && (d[2] === "hold" || d[2] === "unhold")) return json(route, 200, { ...detail[d[1]!], status: d[2] === "hold" ? "held" : "pending", version: 2 });
+    if (p === "/v1/tokens" && m === "POST") { s.tokens++; return json(route, 200, { id: "c-tk", token: "abx_capture_only", setup_command: "npx -y approval-box@latest setup --server https://approval-box.example --token abx_capture_only" }); }
     if (p === "/v1/connections" && m === "GET") return json(route, 200, o.connections ?? []);
     if (p === "/v1/pairing/lookup") return o.pairing && "error" in o.pairing ? json(route, 404, { error: { code: "not_found", message: o.pairing.error } }) : json(route, 200, o.pairing ?? {});
     const pr = /^\/v1\/pairing\/([^/]+)\/(claim|reject)$/.exec(p);
@@ -108,88 +111,128 @@ const text = (page: Page, value: string) => page.getByText(value, { exact: false
 const heading = (page: Page, name: string) => page.getByRole("heading", { name, exact: true }).first().waitFor({ timeout: 10_000 });
 const signedIn: Opts = { signedIn: true, config: {} };
 const lib: Opts = { library: true, signedIn: true };
-const SUBSCRIBE = "iPhone・Mac・Android のアプリで契約してください";
+const NOT_HERE = "この端末では契約できません。";
 const pc = { pairing_id: "p1", device_name: "開発PC", os: "linux", clients: ["claude-code", "codex"] };
 const conns = { ...signedIn, connections: [device, clientConn], me: me({ setup: { verified: true, checks } }) };
 
 const scenarios: Scenario[] = [
-  // signed out
-  { id: "boot", opts: { stallConfig: true }, ready: (p) => p.getByLabel("言語").first().waitFor() },
+  // signed out: S1 / S1b / S2
+  { id: "boot", opts: { stallConfig: true }, ready: (p) => p.locator("main.shell").waitFor() },
   { id: "login-id", opts: { config: both }, ready: (p) => text(p, "GoogleとAppleは別のアカウントになります") },
   { id: "login-id-apple-error", opts: { config: apple }, act: async (p) => { await p.getByRole("button", { name: "Appleでログイン" }).click(); }, ready: (p) => text(p, "Appleのログインができませんでした。") },
   { id: "login-none", opts: { config: {} }, ready: (p) => text(p, "このサーバーにはログインの設定がありません") },
-  { id: "login-library-loading", opts: { library: true, stallStart: true }, ready: (p) => heading(p, "Approval Box") },
-  { id: "login-library", opts: { library: true }, ready: (p) => text(p, "表示される番号が 42 か確かめてください") },
-  { id: "login-library-expired", opts: { library: true, takes: ["gone"] }, ready: (p) => text(p, "コードの有効期限が切れました。") },
-  { id: "login-library-error", opts: { library: true, startFails: true }, ready: (p) => text(p, "コードを出せませんでした。") },
-  // signed in: inbox
+  { id: "login-library", opts: { library: true }, ready: (p) => p.getByRole("button", { name: "スマホの承認でログイン" }).waitFor() },
+  { id: "login-library-first-time", opts: { library: true }, act: async (p) => { await p.getByText("はじめての方へ").click(); }, ready: (p) => text(p, "コマンドをコピー") },
+  ...(["stopped", "expired", "other"] as const).map((kind): Scenario => ({
+    id: `login-library-banner-${kind}`, opts: { ...lib, open: [], code401: { stopped: "pass_refused", expired: "pass_expired", other: "pass_invalid" }[kind] },
+    act: async (p, s) => { await text(p, "いま決めることはありません"); s.signedIn = false; await p.evaluate(() => document.dispatchEvent(new Event("visibilitychange"))); },
+    ready: (p) => text(p, { stopped: "承認したスマホから止められました", expired: "しばらく使われなかったため", other: "ログインが切れました。もう一度" }[kind]),
+  })),
+  { id: "login-library-wait", opts: { library: true }, act: async (p) => { await p.getByRole("button", { name: "スマホの承認でログイン" }).click(); }, ready: (p) => text(p, "確認番号") },
+  { id: "login-library-expired", opts: { library: true, takes: ["gone"] }, act: async (p) => { await p.getByRole("button", { name: "スマホの承認でログイン" }).click(); }, ready: (p) => text(p, "コードの期限が切れました。") },
+  { id: "login-library-error", opts: { library: true, startFails: true }, act: async (p) => { await p.getByRole("button", { name: "スマホの承認でログイン" }).click(); }, ready: (p) => text(p, "コードを出せませんでした。") },
+  // signed in: S3 inbox
   { id: "inbox", opts: { ...signedIn, open: [testReq, pending, second, held, amended] }, ready: (p) => text(p, "古いログを消してよいですか？") },
-  { id: "inbox-empty", opts: { ...signedIn, open: [] }, ready: (p) => text(p, "いま答えを待っている申請はありません。") },
-  { id: "inbox-402", opts: { ...lib, paid402: true }, ready: (p) => text(p, SUBSCRIBE) },
-  // decision
+  { id: "inbox-held", opts: { ...signedIn, open: [testReq, pending, second, held, amended] }, act: async (p) => { await text(p, "古いログを消してよいですか？"); await p.getByRole("button", { name: "保留", exact: true }).click(); }, ready: (p) => text(p, "請求書の送り先を変えてよいですか？") },
+  { id: "inbox-search-none", opts: { ...signedIn, open: [pending, second] }, act: async (p) => { await text(p, "古いログを消してよいですか？"); await p.getByRole("searchbox", { name: "相談を検索" }).fill("zzz"); }, ready: (p) => text(p, "一致する相談はありません。") },
+  { id: "inbox-empty", opts: { ...signedIn, open: [] }, ready: (p) => text(p, "いま決めることはありません") },
+  // S7 in place of the lists on 402
+  { id: "inbox-402", opts: { ...lib, paid402: true, me: me({ login: null, plan: "expired", store: undefined }) }, ready: (p) => text(p, NOT_HERE) },
+  // S5 decision
   { id: "decision-open", path: "/d/K-A1B2C3", opts: signedIn, ready: (p) => text(p, "今日は見送る") },
+  { id: "decision-open-chosen", path: "/d/K-A1B2C3", opts: signedIn, act: async (p) => { await p.getByRole("radio", { name: /今日は見送る/ }).click(); }, ready: (p) => p.getByRole("radio", { name: /今日は見送る/, checked: true }).waitFor() },
   { id: "decision-open-amended", path: "/d/K-AM3ND1", opts: signedIn, ready: (p) => text(p, "AIが修正しました") },
-  { id: "decision-held", path: "/d/K-H7J8K9", opts: signedIn, ready: (p) => text(p, "保留を戻す") },
-  { id: "decision-answered", path: "/d/K-AN5WR1", opts: signedIn, ready: (p) => text(p, "答え:") },
+  { id: "decision-held", path: "/d/K-H7J8K9", opts: signedIn, ready: (p) => text(p, "保留を解除") },
+  { id: "decision-answered", path: "/d/K-AN5WR1", opts: signedIn, ready: (p) => text(p, "あなたの回答") },
   { id: "decision-answered-unknown", path: "/d/K-AN5WR2", opts: signedIn, ready: (p) => text(p, "AIへ届いたか確かめられませんでした") },
   { id: "decision-cancelled", path: "/d/K-CANC31", opts: signedIn, ready: (p) => text(p, "AIが取り下げました") },
   { id: "decision-error", path: "/d/K-NOPE00", opts: signedIn, ready: (p) => text(p, "項目が見つかりません。") },
-  { id: "decision-402", path: "/d/K-A1B2C3", opts: { ...lib, paid402: true }, ready: (p) => text(p, SUBSCRIBE) },
-  // history
-  { id: "history", path: "/history", opts: { ...signedIn, closed: [answered, answeredText, cancelled] }, ready: (p) => text(p, "既決の履歴を削除") },
-  { id: "history-empty", path: "/history", opts: { ...signedIn, closed: [] }, ready: (p) => text(p, "まだ答えた申請はありません。") },
-  { id: "history-402", path: "/history", opts: { ...lib, paid402: true }, ready: (p) => text(p, SUBSCRIBE) },
-  // connections / pairing
-  { id: "connections-empty", path: "/connections", opts: { ...signedIn, connections: [] }, ready: (p) => text(p, "はじめに: PCにコネクタを入れる") },
+  { id: "decision-402", path: "/d/K-A1B2C3", opts: { ...lib, paid402: true, me: me({ login: null, plan: "expired", store: undefined }) }, ready: (p) => text(p, NOT_HERE) },
+  // S4 history
+  { id: "history", path: "/history", opts: { ...signedIn, closed: [answered, answeredText, cancelled] }, ready: (p) => text(p, "ログの保存先を変えてよいですか？") },
+  { id: "history-empty", path: "/history", opts: { ...signedIn, closed: [] }, ready: (p) => text(p, "まだ履歴はありません") },
+  { id: "history-402", path: "/history", opts: { ...lib, paid402: true, me: me({ login: null, plan: "expired", store: undefined }) }, ready: (p) => text(p, NOT_HERE) },
+  // S6 connections / pairing
+  { id: "connections-empty", path: "/connections", opts: { ...signedIn, connections: [] }, ready: (p) => text(p, "まだつないだAIはありません。") },
   { id: "connections", path: "/connections", opts: conns, ready: (p) => text(p, "開発PC") },
-  { id: "connections-test-hint", path: "/connections", opts: conns, act: async (p) => { await p.getByRole("button", { name: "接続テスト" }).click(); }, ready: (p) => text(p, "Approval Boxのsetup_testを実行して") },
-  { id: "pair-device", path: "/pair?c=ABCD-EFGH", opts: { ...signedIn, pairing: pc }, ready: (p) => text(p, "次の端末を、あなたのApproval Boxに追加しますか？") },
-  { id: "pair-done", path: "/pair?c=ABCD-EFGH", opts: { ...signedIn, pairing: pc }, act: async (p) => { await p.getByRole("button", { name: "この端末を追加" }).click(); }, ready: (p) => text(p, "追加しました。PCの画面でセットアップが続きます。") },
+  { id: "connections-test-hint", path: "/connections", opts: conns, act: async (p) => { await p.getByRole("button", { name: "テストする" }).first().click(); }, ready: (p) => text(p, "Approval Boxのsetup_testを実行して") },
+  { id: "connections-token", path: "/connections", opts: signedIn, act: async (p) => { await p.getByText("画面のない端末を登録").click(); await p.getByPlaceholder("端末名").fill("自宅サーバー"); await p.getByRole("button", { name: "トークンを作る" }).click(); }, ready: (p) => text(p, "この1回しか表示されません") },
+  { id: "pair-device", path: "/pair?c=ABCD-EFGH", opts: { ...signedIn, pairing: pc }, ready: (p) => text(p, "このAIをつなぎますか？") },
+  { id: "pair-done", path: "/pair?c=ABCD-EFGH", opts: { ...signedIn, pairing: pc }, act: async (p) => { await p.getByRole("button", { name: "つなぐ" }).click(); }, ready: (p) => text(p, "追加しました。PCの画面でセットアップが続きます。") },
   { id: "pair-client", path: "/pair?c=ABCD-EFGH", opts: { ...signedIn, pairing: { pairing_id: "p2", device_name: "BellTeam サーバー", clients: [], client: "bellteam", client_name: "BellTeam" } }, ready: (p) => text(p, "許可する") },
   { id: "pair-error", path: "/pair?c=ZZZZ-0000", opts: { ...signedIn, pairing: { error: "そのコードは見つからないか、期限が切れています。PCで npx -y approval-box@latest setup をやり直してください。" } }, ready: (p) => text(p, "そのコードは見つからないか") },
-  // settings
-  { id: "settings-subscribed", path: "/settings", opts: signedIn, ready: (p) => text(p, "App Storeで契約中") },
-  { id: "settings-expired", path: "/settings", opts: { ...signedIn, me: me({ plan: "expired", expires_at: iso(-24 * HOUR), setup: { verified: true, checks } }) }, ready: (p) => text(p, "期限切れ") },
-  { id: "settings-unverified", path: "/settings", opts: { ...signedIn, me: me({ plan: "expired", store: undefined, setup: { verified: false, checks: [] } }) }, ready: (p) => text(p, "契約の前に、セットアップ確認を済ませてください。") },
+  // S8 settings
+  { id: "settings-subscribed", path: "/settings", opts: signedIn, ready: (p) => text(p, "契約中（App Store）") },
+  { id: "settings-expired", path: "/settings", opts: { ...signedIn, me: me({ plan: "expired", expires_at: iso(-24 * HOUR), setup: { verified: true, checks } }) }, ready: (p) => text(p, "期限切れ（") },
   { id: "settings-no-contract", path: "/settings", opts: { ...lib, me: me({ login: null, plan: "expired", store: undefined, setup: { verified: true, checks } }) }, ready: (p) => text(p, "未契約") },
   { id: "settings-selfhost", path: "/settings", opts: { ...signedIn, me: me({ billing: "off", plan: "active", store: undefined }) }, ready: (p) => text(p, "料金はかかりません") },
-  { id: "settings-library", path: "/settings", opts: { ...lib, me: me({ login: null, store: "google_play" }) }, ready: (p) => text(p, "Google Playで契約中") },
+  { id: "settings-library", path: "/settings", opts: { ...lib, me: me({ login: null, store: "google_play" }) }, ready: (p) => text(p, "契約中（Google Play）") },
+  { id: "settings-alert", path: "/settings", opts: { ...signedIn, deleteFails: true }, act: async (p) => { p.on("dialog", (d) => void d.accept()); await text(p, "契約中（App Store）"); await p.getByRole("button", { name: "履歴を削除" }).click(); }, ready: (p) => p.getByRole("alertdialog").getByText("確認してください").waitFor({ timeout: 10_000 }) },
+  // S7 contract
+  { id: "plan-subscribed", path: "/plan", opts: { ...lib, me: me({ login: null, expires_at: iso(30 * 24 * HOUR) }) }, ready: (p) => text(p, "期限:") },
+  { id: "plan-google-play", path: "/plan", opts: { ...lib, me: me({ login: null, store: "google_play", expires_at: iso(30 * 24 * HOUR) }) }, ready: (p) => text(p, "契約中（Google Play）") },
+  { id: "plan-expired", path: "/plan", opts: { ...lib, me: me({ login: null, plan: "expired", expires_at: iso(-24 * HOUR) }) }, ready: (p) => p.getByRole("button", { name: "ログアウト" }).waitFor() },
+  { id: "plan-none", path: "/plan", opts: { ...lib, me: me({ login: null, plan: "expired", store: undefined }) }, ready: (p) => p.getByRole("button", { name: "ログアウト" }).waitFor() },
+  { id: "plan-selfhost", path: "/plan", opts: { ...signedIn, me: me({ billing: "off", plan: "active", store: undefined }) }, ready: (p) => text(p, "料金はかかりません") },
 ];
 
 // ---- transition checks (each prints one line; a failure is reported and the exit code is 1) --------------------------
 type Check = { name: string; opts: Opts; path?: string; run: (page: Page, stub: Stub) => Promise<void> };
 const urlIs = (page: Page, expected: string) => page.waitForURL((u) => u.pathname + u.search === expected, { timeout: 10_000 });
 const bump = (page: Page) => page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-const QR = "表示される番号が 42 か確かめてください";
-const EMPTY = "いま答えを待っている申請はありません。";
+const SIGN_IN = "スマホの承認でログイン";
+const EMPTY = "いま決めることはありません";
+const startPhone = (page: Page) => page.getByRole("button", { name: SIGN_IN }).click();
+const BANNER = { pass_refused: "承認したスマホから止められました", pass_expired: "しばらく使われなかったため", pass_invalid: "ログインが切れました。もう一度" };
 const checkList: Check[] = [
-  { name: "library: take=ready opens the inbox (no Authorization header ever sent)", opts: { library: true, takes: ["pending", "ready"] }, run: async (p, s) => {
-    await p.getByRole("link", { name: "受信" }).waitFor({ timeout: 10_000 }); if (s.sessionHeaders.some((h) => h)) throw new Error("Authorization header seen"); } },
-  { name: "library: pass stopped (401 pass_invalid) while signed in returns to the QR screen", opts: { ...lib, open: [] }, run: async (p, s) => {
-    await text(p, EMPTY); s.signedIn = false; await bump(p); await text(p, QR); } },
-  { name: "id login: 401 while signed in returns to the sign-in screen", opts: { ...signedIn, config: both, open: [] }, run: async (p, s) => {
-    await text(p, EMPTY); s.signedIn = false; await bump(p); await text(p, "GoogleとAppleは別のアカウントになります"); } },
-  { name: "402 keeps the menu and shows the subscribe-in-the-app text; 設定 still opens", opts: { ...lib, paid402: true }, run: async (p) => {
-    await text(p, SUBSCRIBE); await p.getByRole("link", { name: "設定" }).click(); await urlIs(p, "/settings"); await heading(p, "契約"); } },
-  { name: "inbox card -> /d/<id>; an option button answers and returns to /", opts: { ...signedIn, open: [pending] }, run: async (p, s) => {
+  { name: "S1 -> S2 -> inbox: the sign-in button starts the code only when pressed; take=ready opens the inbox (no Authorization header ever sent)", opts: { library: true, takes: ["pending", "ready"] }, run: async (p, s) => {
+    await p.getByRole("button", { name: SIGN_IN }).waitFor(); if (s.starts !== 0) throw new Error("code started before the button");
+    await startPhone(p); await text(p, "確認番号"); await p.getByRole("link", { name: "受信" }).waitFor({ timeout: 10_000 }); if (s.sessionHeaders.some((h) => h)) throw new Error("Authorization header seen"); } },
+  { name: "S2: やめる -> S1", opts: { library: true }, run: async (p) => { await startPhone(p); await text(p, "確認番号"); await p.getByRole("button", { name: "やめる" }).click(); await p.getByRole("button", { name: SIGN_IN }).waitFor(); } },
+  { name: "S2: code expires -> stays on S2 with コードの期限が切れました。; 新しいコードを出す issues a second code", opts: { library: true, takes: ["gone"] }, run: async (p, s) => {
+    await startPhone(p); await text(p, "コードの期限が切れました。"); await p.getByRole("button", { name: "新しいコードを出す" }).click(); await text(p, "WXYZ-6789"); if (s.starts !== 2) throw new Error("no second code"); } },
+  ...(Object.entries(BANNER) as [keyof typeof BANNER, string][]).map(([code, banner]): Check => ({
+    name: `S1b: ${code} (401) while signed in returns to S1 with the reason`, opts: { ...lib, open: [], code401: code }, run: async (p, s) => {
+      await text(p, EMPTY); s.signedIn = false; await bump(p); await text(p, banner); await p.getByRole("button", { name: SIGN_IN }).waitFor(); } })),
+  { name: "S1: signed out at the start shows no banner", opts: { library: true }, run: async (p) => { await p.getByRole("button", { name: SIGN_IN }).waitFor(); if (await p.getByRole("status").count()) throw new Error("banner shown"); } },
+  { name: "id login: 401 while signed in returns to S1 (Google/Apple) with the generic banner", opts: { ...signedIn, config: both, open: [] }, run: async (p, s) => {
+    await text(p, EMPTY); s.signedIn = false; await bump(p); await text(p, "ログインが切れました。もう一度"); await text(p, "GoogleとAppleは別のアカウントになります"); } },
+  { name: "402: S7 replaces the inbox and the history, 設定 still opens, ログアウト leaves; the event stream is not retried", opts: { ...lib, paid402: true, me: me({ login: null, plan: "expired", store: undefined }) }, run: async (p, s) => {
+    await text(p, NOT_HERE); await p.getByRole("link", { name: "履歴" }).click(); await urlIs(p, "/history"); await text(p, NOT_HERE);
+    await p.getByRole("link", { name: "設定" }).click(); await urlIs(p, "/settings"); await heading(p, "契約");
+    await p.waitForTimeout(3000); if (s.events !== 1) throw new Error(`event stream requested ${s.events} times`);
+    await p.getByRole("link", { name: "契約について" }).click(); await urlIs(p, "/plan");
+    await p.getByRole("button", { name: "ログアウト" }).click(); await p.getByRole("button", { name: SIGN_IN }).waitFor(); if (s.signouts !== 1) throw new Error("no signout"); } },
+  { name: "設定 契約について -> /plan (S7)", opts: { ...lib, me: me({ login: null }) }, path: "/settings", run: async (p) => {
+    await p.getByRole("link", { name: "契約について" }).click(); await urlIs(p, "/plan"); await text(p, "この端末では契約できません。"); } },
+  { name: "inbox card -> /d/<id>; choosing an option then 回答を送信 stays on the answered request", opts: { ...signedIn, open: [pending] }, run: async (p, s) => {
     await p.getByText("新しい版を本番へ出してよいですか？").click(); await urlIs(p, "/d/K-A1B2C3");
-    await p.getByRole("button", { name: /^出す/ }).click(); await urlIs(p, "/"); if (s.answers.length !== 1) throw new Error("no answer sent"); } },
-  { name: "decision: 保留にする stays on /d/<id> and flips to 保留を戻す", opts: { ...signedIn, open: [pending] }, path: "/d/K-A1B2C3", run: async (p) => {
-    await p.getByRole("button", { name: "保留にする" }).click(); await p.getByRole("button", { name: "保留を戻す" }).waitFor(); } },
-  { name: "nav: 既決 / 接続 / 設定 / 受信 go to /history /connections /settings /", opts: { ...signedIn, open: [], closed: [], connections: [] }, run: async (p) => {
-    await p.getByRole("link", { name: "既決" }).click(); await urlIs(p, "/history");
+    await p.getByRole("radio", { name: /^出す/ }).click(); await p.getByRole("button", { name: "回答を送信" }).click();
+    await text(p, "あなたの回答"); await urlIs(p, "/d/K-A1B2C3"); if (s.answers.length !== 1) throw new Error("no answer sent"); } },
+  { name: "history card -> /d/<id> keeps 履歴 highlighted; 戻る returns to /history", opts: { ...signedIn, closed: [answered] }, path: "/history", run: async (p) => {
+    await p.getByText("新しい版を本番へ出してよいですか？").click(); await urlIs(p, "/d/K-AN5WR1");
+    const cls = await p.getByRole("link", { name: "履歴", exact: true }).getAttribute("class"); if (!cls?.includes("active")) throw new Error("履歴 not highlighted");
+    await p.getByRole("button", { name: "戻る" }).click(); await urlIs(p, "/history"); } },
+  { name: "decision: 保留する stays on /d/<id> and flips to 保留を解除", opts: { ...signedIn, open: [pending] }, path: "/d/K-A1B2C3", run: async (p) => {
+    await p.getByRole("button", { name: "保留する" }).click(); await p.getByRole("button", { name: "保留を解除" }).waitFor(); } },
+  { name: "nav: 履歴 / 接続 / 設定 / 受信 go to /history /connections /settings /; the language picker is only in 設定", opts: { ...signedIn, open: [], closed: [], connections: [] }, run: async (p) => {
+    if (await p.locator(".language-picker").count()) throw new Error("language picker on the inbox");
+    await p.getByRole("link", { name: "履歴" }).click(); await urlIs(p, "/history");
     await p.getByRole("link", { name: "接続" }).click(); await urlIs(p, "/connections");
-    await p.getByRole("link", { name: "設定" }).click(); await urlIs(p, "/settings");
+    await p.getByRole("link", { name: "設定" }).click(); await urlIs(p, "/settings"); if ((await p.locator(".language-picker").count()) !== 1) throw new Error("no language picker in 設定");
     await p.getByRole("link", { name: "受信" }).click(); await urlIs(p, "/"); } },
-  { name: "設定 接続とテストへ -> /connections; 次へ -> /pair?c=; この端末を追加 then 接続へ -> /connections", opts: { ...signedIn, me: me({ plan: "expired", store: undefined, setup: { verified: false, checks: [] } }), connections: [], pairing: pc }, path: "/settings", run: async (p) => {
-    await p.getByRole("button", { name: "接続とテストへ" }).click(); await urlIs(p, "/connections");
-    await p.getByPlaceholder("ABCD-EFGH").fill("abcd-efgh"); await p.getByRole("button", { name: "次へ" }).click(); await urlIs(p, "/pair?c=abcd-efgh");
-    await p.getByRole("button", { name: "この端末を追加" }).click(); await p.getByRole("button", { name: "接続へ" }).click(); await urlIs(p, "/connections"); } },
-  { name: "library: ログアウト calls signout and shows a fresh QR at /", opts: { ...lib, open: [] }, path: "/settings", run: async (p, s) => {
-    await p.getByRole("button", { name: "ログアウト" }).click(); await text(p, QR); await urlIs(p, "/"); if (s.signouts !== 1) throw new Error("no signout"); } },
-  { name: "library: アカウントと全データを削除 (confirm, then 削除 typed) -> DELETE /me, signout, QR screen", opts: { ...lib, open: [] }, path: "/settings", run: async (p, s) => {
+  { name: "接続: コード + コードを確認 -> /pair?c=; つなぐ then 接続へ -> /connections", opts: { ...signedIn, connections: [], pairing: pc }, path: "/connections", run: async (p) => {
+    await p.getByPlaceholder("ABCD-EFGH").fill("abcd-efgh"); await p.getByRole("button", { name: "コードを確認" }).click(); await urlIs(p, "/pair?c=abcd-efgh");
+    await p.getByRole("button", { name: "つなぐ" }).click(); await p.getByRole("button", { name: "接続へ" }).click(); await urlIs(p, "/connections"); } },
+  { name: "接続: 画面のない端末を登録 creates a token and shows the command once", opts: { ...signedIn, connections: [] }, path: "/connections", run: async (p, s) => {
+    await p.getByText("画面のない端末を登録").click(); await p.getByPlaceholder("端末名").fill("自宅サーバー"); await p.getByRole("button", { name: "トークンを作る" }).click(); await text(p, "--token abx_capture_only"); if (s.tokens !== 1) throw new Error("no token"); } },
+  { name: "library: ログアウト calls signout and shows S1 at /", opts: { ...lib, open: [] }, path: "/settings", run: async (p, s) => {
+    await p.getByRole("button", { name: "ログアウト" }).click(); await p.getByRole("button", { name: SIGN_IN }).waitFor(); await urlIs(p, "/"); if (s.signouts !== 1) throw new Error("no signout"); } },
+  { name: "library: アカウントと全データを削除 (confirm, then 削除 typed) -> DELETE /me, signout, S1", opts: { ...lib, open: [] }, path: "/settings", run: async (p, s) => {
     p.on("dialog", (d) => void (d.type() === "prompt" ? d.accept("削除") : d.accept()));
-    await p.getByRole("button", { name: "アカウントと全データを削除" }).click(); await text(p, QR); if (!s.deletes.includes("me") || s.signouts !== 1) throw new Error("not deleted"); } },
+    await p.getByRole("button", { name: "アカウントと全データを削除" }).click(); await p.getByRole("button", { name: SIGN_IN }).waitFor(); if (!s.deletes.includes("me") || s.signouts !== 1) throw new Error("not deleted"); } },
+  { name: "設定 履歴を削除 (confirm) -> DELETE, count shown on the page", opts: { ...lib, open: [], closed: [answered] }, path: "/settings", run: async (p, s) => {
+    p.on("dialog", (d) => void d.accept()); await p.getByRole("button", { name: "履歴を削除" }).click(); await text(p, "3件消しました。"); if (!s.deletes.includes("closed")) throw new Error("no delete"); } },
   { name: "保存されている情報の写しを受け取る downloads a file and stays on /settings", opts: lib, path: "/settings", run: async (p, s) => {
     const dl = p.waitForEvent("download"); await p.getByRole("button", { name: "保存されている情報の写しを受け取る" }).click(); await dl; if (s.exports !== 1) throw new Error("no export"); await urlIs(p, "/settings"); } },
   { name: "an unknown path shows the inbox", opts: { ...signedIn, open: [] }, path: "/nowhere", run: async (p) => { await text(p, EMPTY); } },

@@ -25,7 +25,7 @@ for (const status of ["pending","held"]) test(`${status} closes with an unsent r
   await fixture(page,status);let writes=0;
   page.on("request",r=>{if(r.method()==="POST")writes++;});
   await page.getByRole("textbox").fill("Unsent reply");
-  await expect(page.getByRole("button",{name:"Send text",exact:true})).toBeEnabled();
+  await expect(page.getByRole("button",{name:"Send answer",exact:true})).toBeEnabled();
   await swipe(page,120);await expect(page).toHaveURL(/\/$/);expect(writes).toBe(0);
 });
 for (const dx of [-120,120]) test(`pending detail slides in swipe direction ${dx}`,async({page})=>{

@@ -1,46 +1,51 @@
 import { systemMessage, t } from "../i18n.ts";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "../api";
-import { navigate } from "../router";
+import { CopyLine } from "../copyline";
+import { showAlert } from "../dialog";
+import { INSTALL } from "../login";
+import { linkProps, navigate } from "../router";
 import { bump, loadMe, useResource } from "../store";
 import { ago, CHECK_LABEL, clientLabel, dateTime, FAILED_STEP } from "../format";
 import type { Check, Connection } from "../types";
-
-const INSTALL = "npx -y approval-box@latest setup";
-
-function CopyLine({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div class="copyline">
-      <code>{text}</code>
-      <button class="ghost small" onClick={async () => {
-        try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { prompt(t("コピーしてください"), text); }
-      }}>{copied ? t("済") : t("コピー")}</button>
-    </div>
-  );
-}
-
-export function SetupGuide() {
-  return (
-    <div class="panel">
-      <h2>{t("はじめに: PCにコネクタを入れる")}</h2>
-      <p>{t("AI（Claude Code・Codex・Cursor・Grok）を使っているPCで、次を実行してください。")}</p>
-      <CopyLine text={INSTALL} />
-      <p class="muted">{t("画面にQRコードとコードが出たら、下の「端末を追加」で読み取るか、コードを入力します。")}</p>
-    </div>
-  );
-}
 
 function checkLine(check: Check) {
   return (
     <li key={`${check.connection_id}-${check.client}`} class={`check check-${check.status}`}>
       <span>{clientLabel(check.client)}</span>
       <span>{CHECK_LABEL[check.status] ?? check.status}{check.tested_at ? `（${dateTime(check.tested_at)}）` : ""}</span>
+      {check.status === "waiting_answer" && check.decision_id && <a class="button-link" {...linkProps(`/d/${check.decision_id}`)}>{t("テストの申請を開く")}</a>}
       {check.status === "failed" && check.failed_step && <div class="muted">{FAILED_STEP[check.failed_step]}{check.detail ? `（${check.detail}）` : ""}</div>}
     </li>
   );
 }
 
+/** 画面のない端末の接続トークン。作った時だけ、その端末で実行するコマンドを1回だけ見せる（できた接続は「つないだAI」に並ぶ）。 */
+function Tokens() {
+  const [label, setLabel] = useState("");
+  const [command, setCommand] = useState<string | null>(null);
+
+  async function create(e: Event) {
+    e.preventDefault();
+    if (!label.trim()) return;
+    try { const r = await api<{ setup_command: string }>("POST", "/tokens", { label: label.trim() }, { idempotent: false }); setCommand(r.setup_command); setLabel(""); bump(); }
+    catch (err) { showAlert((err as Error).message); }
+  }
+
+  return (
+    <details class="tokens">
+      <summary><h2>{t("画面のない端末を登録")}</h2></summary>
+      <p class="muted">{t("画面のない端末（サーバーなど）は、名前をつけて接続トークンを作り、表示されたコマンドをその端末で実行します。")}</p>
+      <form class="row" onSubmit={create}>
+        <input value={label} onInput={(e) => setLabel((e.target as HTMLInputElement).value)} placeholder={t("端末名")} aria-label={t("端末名")} maxLength={100} />
+        <button class="primary" type="submit" disabled={!label.trim()}>{t("トークンを作る")}</button>
+      </form>
+      {command && <div class="notice"><p>{t("このトークンは、この1回しか表示されません。コマンドをコピーして、その端末で実行してください。")}</p><CopyLine text={command} /></div>}
+    </details>
+  );
+}
+
+/** S6 接続: AIをつなぐ / つないだAI / 接続テスト / 画面のない端末を登録。「AIごとの登録手順」はWebにまだ中身が無いので出さない。 */
 export function Connections() {
   const me = useResource(loadMe);
   const conns = useResource(() => api<Connection[]>("GET", "/connections"));
@@ -50,47 +55,59 @@ export function Connections() {
   async function revoke(c: Connection) {
     const message = c.kind === "client" ? t("「{name}」の許可を外します。{name}はApproval Boxを読めなくなります。", { name: c.label }) : t("「{name}」の接続を外します。この端末のAIはApproval Boxを使えなくなります。", { name: c.label });
     if (!confirm(message)) return;
-    try { await api("DELETE", `/connections/${c.id}`); bump(); } catch (e) { alert((e as Error).message); }
+    try { await api("DELETE", `/connections/${c.id}`); bump(); } catch (e) { showAlert((e as Error).message); }
   }
 
+  const devices = conns.data?.filter((c) => c.kind !== "client") ?? [];
   return (
     <section>
       <h1>{t("接続")}</h1>
       <div class="panel">
-        <h2>{t("端末を追加")}</h2>
+        <h2>{t("AIをつなぐ")}</h2>
+        <p>{t("AI（Claude Code・Codex・Cursor・Grok）を使っているPCで、次を実行してください。")}</p>
+        <CopyLine text={INSTALL} />
+        <p class="muted">{t("画面にコードが出たら、下の欄に入力します。")}</p>
         <form class="row" onSubmit={(e) => { e.preventDefault(); if (code.trim()) navigate(`/pair?c=${encodeURIComponent(code.trim())}`); }}>
-          <input class="code-input" value={code} onInput={(e) => setCode((e.target as HTMLInputElement).value)} placeholder="ABCD-EFGH" autocomplete="off" autocapitalize="characters" />
-          <button class="primary" type="submit">{t("次へ")}</button>
+          <input class="code-input" value={code} onInput={(e) => setCode((e.target as HTMLInputElement).value)} placeholder="ABCD-EFGH" aria-label="ABCD-EFGH" autocomplete="off" autocapitalize="characters" />
+          <button class="primary" type="submit">{t("コードを確認")}</button>
         </form>
-        <p class="muted">{t("PCで次のコマンドを実行すると出るコードです。QRコードはスマホのカメラで読めます。")} <code>{INSTALL}</code></p>
       </div>
-
-      {conns.data && !conns.data.length && <SetupGuide />}
-
-      {conns.data?.map((c) => {
-        const checks = me.data?.setup.checks.filter((x) => x.connection_id === c.id) ?? [];
-        return (
-          <div class="panel" key={c.id}>
-            <div class="row spread">
-              <h2>{c.label}</h2>
-              <span class="muted">{c.os ?? ""} {c.last_seen_at ? `・${ago(c.last_seen_at)}` : ""}</span>
-            </div>
-            <ul class="checks">{checks.map(checkLine)}</ul>
-            <div class="row">
-              {c.kind !== "client" && <button class="ghost" onClick={() => setTesting(c.id)}>{t("接続テスト")}</button>}
-              <button class="ghost danger" onClick={() => revoke(c)}>{t("外す")}</button>
-            </div>
-            {testing === c.id && (
-              <p class="notice">{t("テストしたいAIに次のように伝えてください。")} <strong>{t("Approval Boxのsetup_testを実行して")}</strong>{t("テストの申請に答えると、AIが受け取り、ここが「確認済み」になります。")}</p>
-            )}
-          </div>
-        );
-      })}
 
       <div class="panel">
-        <h2>{t("チャットのAI（Claude・ChatGPT）")}</h2>
-        <p class="muted">{t("Claude.ai・ChatGPTのコネクタからの接続は準備中です。")}</p>
+        <h2>{t("つないだAI")}</h2>
+        {conns.data && !conns.data.length && <p class="muted">{t("まだつないだAIはありません。")}</p>}
+        {conns.data?.map((c) => (
+          <div class="row spread conn" key={c.id}>
+            <div>
+              <strong>{c.label}</strong>
+              <div class="muted">{c.os ?? ""} {c.last_seen_at ? `・${ago(c.last_seen_at)}` : ""}</div>
+            </div>
+            <button class="ghost danger small" onClick={() => revoke(c)}>{t("外す")}</button>
+          </div>
+        ))}
       </div>
+
+      <div class="panel">
+        <h2>{t("接続テスト")}</h2>
+        {conns.data && !devices.length && <p class="muted">{t("AIをつなぐと、ここでテストできます。")}</p>}
+        {devices.map((c) => {
+          const checks = me.data?.setup.checks.filter((x) => x.connection_id === c.id) ?? [];
+          return (
+            <div class="conn" key={c.id}>
+              <div class="row spread">
+                <strong>{c.label}</strong>
+                <button class="ghost small" onClick={() => setTesting(c.id)}>{t("テストする")}</button>
+              </div>
+              <ul class="checks">{checks.map(checkLine)}</ul>
+              {testing === c.id && (
+                <p class="notice">{t("テストしたいAIに次のように伝えてください。")} <strong>{t("Approval Boxのsetup_testを実行して")}</strong>{t("テストの申請に答えると、AIが受け取り、ここが「確認済み」になります。")}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <Tokens />
     </section>
   );
 }
@@ -118,7 +135,7 @@ export function Pair({ code }: { code: string }) {
 
   return (
     <section>
-      <h1>{info?.client ? t("アプリの接続を許可") : t("端末を追加")}</h1>
+      <h1>{info?.client ? t("アプリの接続を許可") : t("AIをつなぐ")}</h1>
       {error && <p class="error">{systemMessage(error)}</p>}
       {done && <><p class="notice">{systemMessage(done)}</p><button class="ghost" onClick={() => navigate("/connections")}>{t("接続へ")}</button></>}
       {info?.client && !done && (
@@ -134,7 +151,7 @@ export function Pair({ code }: { code: string }) {
       )}
       {info && !info.client && !done && (
         <div class="panel">
-          <p>{t("次の端末を、あなたのApproval Boxに追加しますか？")}</p>
+          <p>{t("このAIをつなぎますか？")}</p>
           <dl class="pairing">
             <dt>{t("端末名")}</dt><dd>{info.device_name}</dd>
             {info.os && <><dt>OS</dt><dd>{info.os}</dd></>}
@@ -142,7 +159,7 @@ export function Pair({ code }: { code: string }) {
           </dl>
           <p class="muted">{t("自分で approval-box の setup を実行した覚えがなければ「心当たりがない」を押してください。")}</p>
           <div class="row">
-            <button class="primary" onClick={() => decide(true)}>{t("この端末を追加")}</button>
+            <button class="primary" onClick={() => decide(true)}>{t("つなぐ")}</button>
             <button class="ghost danger" onClick={() => decide(false)}>{t("心当たりがない")}</button>
           </div>
         </div>
