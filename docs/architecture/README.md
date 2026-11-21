@@ -2,6 +2,8 @@
 
 基準はmain501c880（0.1.31/0.1.32の受け口判定は[配送経路](../connector-routing.md)末尾）。レヴィアタンの2026-11-06容量是正指導に従い、PR15/current（基準90066748）の改善前全域図を現用コードへ対応させた。PR15/finalのHTTP分割・SSE修理・親channel抽出は未採用である。
 
+移行中の目標図（peer-channel、相談と答えをサーバーに置かない形）: [peer-channel-adoption.md](peer-channel-adoption.md)。各段が出るまで、この表は今動いている形を書く。
+
 | 全体機能・入口 | 担当実装と所有状態 | 入力→出力・接続先 | 失敗・回収 |
 | --- | --- | --- | --- |
 | Web/nativeの利用者API | server/http.ts createApp、Accounts、Decisions、Attachments | session Bearer＋JSON/binary→SQLite確定状態→Web/native。契約は[api.md](../api.md) | 検証/権限エラー、409は最新状態を返す。欠測や通信中断を保存成功へしない |
