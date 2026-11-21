@@ -61,6 +61,10 @@ If a store's settings are missing the server answers 404 for its routes and noth
 
 The Google Play variables are in [billing-play.md](billing-play.md).
 
+## Library-only mode (2026-11-21, API v0.48)
+
+When library mode is on (the three LB keys), the library asks the stores and decides the plan from its entitlements ([login-pass.md](architecture/login-pass.md)). The paths drawn above are closed there: `POST /v1/billing/appstore/verify`, `POST /v1/billing/play/verify`, `POST /v1/appstore/notifications` and `POST /v1/play/notifications` answer 410 `gone`, and the one-time purge at startup (rekey.ts `purgeLegacy`) deletes every `appstore_subscriptions` and `play_subscriptions` row. The tables and `appstore.ts`/`play.ts` stay for self-hosted servers without the LB keys, which keep everything on this page unchanged. In library mode `users.plan` is no longer written: `/me` for a pass reads the library's entitlements; the gates for a BellTeam client session or AI connection (G2) read the library's `known(K)` first, then `users.plan` and `FREE_ACCOUNT_IDS` as today.
+
 ## Stripe removal (2026-11-20)
 
 Removed: `stripe.ts`, `/billing/stripe/*`, `/stripe/webhook`, `web_billing`, `store: "web"`, the `STRIPE_*` variables and the Web checkout panel. Migration 15 drops the `stripe_subscriptions` table (it held no rows in production). `appstore.ts` keeps the status table above. Next step (chart login-billing): the shared login and billing library replaces both store paths ([login-pass.md](architecture/login-pass.md)).

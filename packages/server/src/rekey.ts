@@ -87,3 +87,30 @@ function check(db: Db, ks: Map<string, string>, keyOf: (i: { provider: string; s
     || all<{ state: string }>(db, "select state from play_subscriptions where expires_at > ?", at).some((r) => PLAY_PAID_STATES.has(r.state));
   return live ? "live_subscription" : undefined;
 }
+
+const PURGE_KEY = "purge:legacy:done";
+/** ライブラリだけで動く時に消す、旧いログインと契約の行（表は残す。セルフホストの形は変えない）。 */
+const PURGE: [table: string, where: string][] = [
+  ["identities", ""], ["auth_flows", ""], ["login_links", ""], ["appstore_subscriptions", ""], ["play_subscriptions", ""], ["sessions", " where client is null"],
+];
+export type PurgeResult = Record<string, number> | { failed: string };
+
+/**
+ * 旧いログインと契約の行を一度だけ消す（login-pass.md「library-only mode」）。rekeyToK が済んだ後に呼ぶ。
+ * 1つの取引で消し、件数を lb_kv の印（期限なし）に残す。2回目からは印の件数を返すだけ。失敗したら何も消さない。
+ */
+export function purgeLegacy(db: Db): PurgeResult {
+  const done = get<{ value: string }>(db, "select value from lb_kv where key = ?", PURGE_KEY);
+  if (done) return JSON.parse(done.value) as PurgeResult;
+  db.exec("begin immediate");
+  try {
+    const counts: Record<string, number> = {};
+    for (const [table, where] of PURGE) counts[table] = Number(run(db, `delete from ${table}${where}`).changes);
+    run(db, "insert into lb_kv (key, value, expires_at) values (?, ?, ?)", PURGE_KEY, JSON.stringify(counts), Number.MAX_SAFE_INTEGER); // 期限なし。掃除に消されない
+    db.exec("commit");
+    return counts;
+  } catch {
+    db.exec("rollback");
+    return { failed: "error" };
+  }
+}

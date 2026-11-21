@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.47
+# Approval Box API（アプリ・Web版向け） v0.48
+
+2026-11-21 v0.48（意味の変更・サーバーが共有ライブラリを使う設定の時だけ。ライブラリを使わないセルフホストは変わらない）: ライブラリだけで動く形（[login-pass.md](architecture/login-pass.md)「library-only mode」）。個人の識別子を作る・使う旧い入口は 410 `gone` を返す: `POST /auth/apple`・`POST /auth/google`・`POST /auth/link`・`POST /auth/apple/web/start`・`POST /auth/google/web/start`・`POST /auth/apple/callback` と `POST /auth/google/callback`（`/v1` の外）・`POST /billing/appstore/verify`・`POST /billing/play/verify`・`POST /appstore/notifications`・`POST /play/notifications`。`GET /auth/config` は今まで通り（`library_login: true`）。`/v1` の `Authorization: Bearer` は、ライブラリの通行証と登録クライアントのsession（BellTeam）だけを受け、旧いログインのsessionは 401 `unauthorized`。接続トークン（`/connector/v1`・`/mcp`）は変わらない。旧いログインと契約の記録（identities・auth_flows・login_links・ストアの契約の行・登録クライアント以外のsession）は、起動時に一度だけ消す。共有ライブラリは 0.7.1（`/auth/v1/stop-all-others` は無くなり、`signin` の `stopOthers` で行う）。
 
 2026-11-20 v0.47（追加のみ）: `GET /auth/config` に真偽値 `library_login` を足した。サーバーが共有ライブラリを `/auth/v1` に置いている時だけ `true`、置いていない時は `false`（古いサーバーでは項目が無い）。Web版は `true` の時だけライブラリのQRログインを出し、`false`・項目なしなら今までのApple・Googleのボタンのまま。Web版は、ライブラリのログインでは `Authorization` を付けずcookie（`lb_pass`）で `/v1` を呼ぶ。`GET /me/export` は設定の「保存されている情報の写しを受け取る」から取る。
 
@@ -342,6 +344,7 @@ setup: {
 | 413 | `too_large` | 添付が大きすぎる・多すぎる（v0.23） |
 | 415 | `unsupported_type` | 添付できない形式（v0.23） |
 | 429 | `rate_limited` | `Retry-After` 秒待つ |
+| 410 | `gone` | ライブラリだけで動くサーバーで、旧いログイン・購入の照合・ストアの通知の入口を呼んだ（v0.48）。再試行しない。ライブラリのログイン・購入へ進む |
 | 5xx | `internal` | 時間を置いて送り直す（Idempotency-Key は同じものを使う） |
 
 message は利用者にそのまま見せてよい日本語の文。

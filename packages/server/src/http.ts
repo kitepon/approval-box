@@ -38,6 +38,12 @@ const PAID_ROUTES = [/^\/decisions(\/|$)/, /^\/events$/];
 /** 契約が無くても通す、セットアップ確認の申請を読む・答える経路。 */
 const SETUP_ROUTES: [string, RegExp][] = [["GET", /^\/decisions\/([^/]+)$/], ["POST", /^\/decisions\/([^/]+)\/answer$/]];
 
+/** ライブラリだけで動く時（login-pass.md「library-only mode」）に 410 を返す、個人の識別子を作る・使う旧い入口。 */
+const LEGACY_ROUTES = [
+  "/v1/auth/apple", "/v1/auth/google", "/v1/auth/link", "/v1/auth/apple/web/start", "/v1/auth/google/web/start", "/auth/apple/callback", "/auth/google/callback",
+  "/v1/billing/appstore/verify", "/v1/billing/play/verify", "/v1/appstore/notifications", "/v1/play/notifications",
+];
+
 /** 回数制限の単位（接続元）。前段の中継が付ける X-Forwarded-For の最後（中継が見た相手）か、直の接続元。メモリだけで使い、保存もログにも出さない。 */
 function clientKey(c: Context): string {
   const forwarded = c.req.header("x-forwarded-for");
@@ -127,8 +133,6 @@ function fileResponse(c: Context, meta: Attachment, data: Buffer) {
 
 export function createApp(services: Services, options: { staticHandler?: (c: Context) => Response | Promise<Response> } = {}) {
   const { accounts, decisions, events, library } = services;
-  /** AppleかGoogleで入る。ライブラリを使う時は、新しいアカウントのIDをライブラリのKにする（旧い入口と新しい入口が同じアカウントに着く）。 */
-  const identify = async (provider: Provider, subject: string) => accounts.signInWithIdentity(provider, subject, library ? await library.lb.deriveK(provider, subject) : undefined);
   const files = () => {
     if (!services.attachments) throw new ApiError("not_found", "このサーバーでは添付を使えません。");
     return services.attachments;
@@ -160,6 +164,8 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       if (!library.allow(c.req.path, clientKey(c))) return library.handler.errorResponse("rate_limited", c.req.raw);
       return (await library.handler.handle(c.req.raw)) ?? next();
     });
+    // 旧い入口は、下の今までの処理より先に登録して閉じる（セルフホストでライブラリを使わない時は今まで通り）。
+    for (const path of LEGACY_ROUTES) app.post(path, () => { throw new ApiError("gone", "この入口はもう使えません。アプリを新しい版にしてください。"); });
   }
 
   const diagnostics = new Diagnostics(services.db);
@@ -175,7 +181,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     const token = input.identity_token ?? input.id_token;
     if (!token) throw new ApiError("validation_failed", provider === "apple" ? "identity_token が要ります。" : "id_token が要ります。");
     const id = await verifyIdToken(provider, token, { audiences, ...(input.nonce ? { nonce: input.nonce } : {}), ...(services.idKeys ? { keys: services.idKeys } : {}) });
-    return c.json(await identify(provider, id.sub));
+    return c.json(accounts.signInWithIdentity(provider, id.sub));
   };
   // Web版のログインボタンに要る公開の値（秘密ではない）。設定が無ければボタンは出ない。library_login はライブラリのQRログインを使うサーバーだけ true。
   app.get("/v1/auth/config", (c) => c.json({ ...(services.webLogin ?? {}), library_login: !!library }));
@@ -213,7 +219,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
         const flow = accounts.takeAuthFlow(state, provider);
         if (typeof form.id_token !== "string") return back({ error: `${provider}_error` });
         const id = await verifyIdToken(provider, form.id_token, { audiences: [audience], nonce: flow.nonce, ...(services.idKeys ? { keys: services.idKeys } : {}) });
-        const signed = await identify(provider, id.sub);
+        const signed = accounts.signInWithIdentity(provider, id.sub);
         accounts.bindAuthFlow(state, signed.user.id);
         accounts.revokeSession(signed.session); // ここで作ったsessionは使わない。アプリには一度きりのコードを渡す
         return back({ code: accounts.createAppCode(signed.user.id, flow.code_challenge) });
@@ -267,6 +273,8 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       return next();
     }
     const auth = accounts.authenticate(bearer(c));
+    // ライブラリだけで動く時、通行証でないBearerは登録クライアントのsession（BellTeam）だけ。旧いログインのsessionは使えない。
+    if (library && !auth.client) throw new ApiError("unauthorized", "ログインの期限が切れました。もう一度ログインしてください。");
     if (auth.client) {
       // 登録クライアントのsessionが通れるのは許可表の経路だけ（docs/bellteam-client.md）。ログインのsessionは制限しない。
       if (!CLIENT_ROUTES.some(([method, p]) => method === c.req.method && p.test(path))) throw new ApiError("forbidden", "この許可では、このAPIは使えません。");

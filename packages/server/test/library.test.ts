@@ -74,9 +74,9 @@ function setup(options: { billing?: "off" | "store"; exempt?: string[]; offsetMs
     try { json = text ? JSON.parse(text) : null; } catch { /* JSONでない */ }
     return { status: res.status, json, text, headers: res.headers };
   };
-  const signIn = async (sub: string, provider: "apple" | "google" = "apple") => {
+  const signIn = async (sub: string, provider: "apple" | "google" = "apple", extra: { stopOthers?: boolean; replaces?: string } = {}) => {
     const nonce = (await call("POST", "/auth/v1/signin/nonce")).json.nonce as string;
-    const res = await call("POST", "/auth/v1/signin", { body: { provider, idToken: idToken(provider, provider === "apple" ? BUNDLE : GOOGLE_ID, nonce, sub), nonce } });
+    const res = await call("POST", "/auth/v1/signin", { body: { provider, idToken: idToken(provider, provider === "apple" ? BUNDLE : GOOGLE_ID, nonce, sub), nonce, ...extra } });
     assert.equal(res.status, 200);
     return res.json as { pass: string; k: string; purchaseMark: string };
   };
@@ -226,8 +226,11 @@ test("QRの引き継ぎ: Webのcookieで、TLSの手前の同じサイトのGET�
   assert.equal((await get(one.cookie)).status, 401);
   const two = await browser();
   assert.equal((await get(two.cookie)).status, 200);
-  const all = await x.call("POST", "/auth/v1/stop-all-others", { token: app });
-  assert.equal(all.status, 200); app = all.json.pass;
+  // 0.7.1（契約1.14）: 通行証だけでは止められない。ほかを止めるのはサインインの stopOthers。
+  assert.equal((await x.call("POST", "/auth/v1/stop-all-others", { token: app })).status, 404);
+  assert.equal((await get(two.cookie)).status, 200);
+  x.offset.value += 1000; // 止める時刻より前に始まった通行証が止まる（ミリ秒で比べる）
+  app = (await x.signIn("sub-handoff", "apple", { stopOthers: true, replaces: app })).pass;
   assert.equal((await get(two.cookie)).status, 401);
   assert.equal((await x.call("GET", "/v1/me/export", { token: app })).status, 200);
   assert.equal((await x.call("POST", "/auth/v1/signout", { token: app })).status, 200);
@@ -329,25 +332,72 @@ test("onNone: 契約が無いと分かったら、待っている申請（セッ
   assert.equal(get<{ n: number }>(x.db, "select count(*) n from history where kind = 'cancelled' and note = 'subscription_expired'")?.n, 2);
 });
 
-test("ライブラリを使う旧い入口: 新しいアカウントのIDは deriveK で、通行証で入っても同じアカウント", async () => {
+const LEGACY = [
+  "/v1/auth/apple", "/v1/auth/google", "/v1/auth/link", "/v1/auth/apple/web/start", "/v1/auth/google/web/start", "/auth/apple/callback", "/auth/google/callback",
+  "/v1/billing/appstore/verify", "/v1/billing/play/verify", "/v1/appstore/notifications", "/v1/play/notifications",
+];
+
+test("library-only: 個人の識別子を作る・使う旧い入口は 410 gone。/v1/auth/config は答える", async () => {
   const x = setup();
-  const nonce = "n-old";
-  const old = await x.call("POST", "/v1/auth/apple", { body: { identity_token: idToken("apple", BUNDLE, nonce, "sub-old"), nonce } });
-  assert.equal(old.status, 200);
-  const k = await kOf("apple", "sub-old");
-  assert.equal(old.json.user.id, k);
-  assert.equal(get<{ user_id: string }>(x.db, "select user_id from identities where provider = 'apple' and subject = 'sub-old'")?.user_id, k);
-  assert.equal((await x.call("GET", "/v1/me", { token: old.json.session })).json.user_id, k); // 旧いsessionも使える
-  const { pass } = await x.signIn("sub-old");
-  const me = await x.call("GET", "/v1/me", { token: pass });
+  const session = x.accounts.issueSession(x.accounts.createUser(), "old").session;
+  for (const path of LEGACY) {
+    for (const token of [undefined, session]) {
+      const res = await x.call("POST", path, { ...(token ? { token } : {}), body: { identity_token: idToken("apple", BUNDLE, "n", "sub-old"), nonce: "n" } });
+      assert.equal(res.status, 410, path);
+      assert.deepEqual(res.json, { error: { code: "gone", message: "この入口はもう使えません。アプリを新しい版にしてください。" } }, path);
+    }
+  }
+  const en = await x.app.request("/v1/auth/apple", { method: "POST", headers: { "accept-language": "en" } });
+  assert.equal((await en.json() as any).error.message, "This endpoint is no longer available. Please update the app.");
+  assert.equal(get<{ n: number }>(x.db, "select count(*) n from identities")?.n, 0);
+  const config = await x.call("GET", "/v1/auth/config");
+  assert.equal(config.status, 200);
+  assert.equal(config.json.library_login, true);
+});
+
+test("ライブラリを使わない時、旧い入口は今まで通り（410にならず、Appleで入れてsessionが使える）", async () => {
+  resetKeyCache();
+  const db = openDb(":memory:");
+  const events = new EventHub(db);
+  const accounts = new Accounts(db, events, "off");
+  const app = createApp({ db, accounts, decisions: new Decisions(db, events), events, publicUrl: ORIGIN, appleAudiences: [BUNDLE], idKeys: async () => [jwk as never] });
+  for (const path of LEGACY) assert.notEqual((await app.request(path, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status, 410, path);
+  const signed = await app.request("/v1/auth/apple", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identity_token: idToken("apple", BUNDLE, "n", "sub-self"), nonce: "n" }) });
+  assert.equal(signed.status, 200);
+  const { session, user } = await signed.json() as { session: string; user: { id: string } };
+  const me = await app.request("/v1/me", { headers: { authorization: `Bearer ${session}` } });
+  assert.equal(me.status, 200);
+  assert.equal((await me.json() as any).user_id, user.id);
+});
+
+test("library-only: 通行証でないBearerは、BellTeamのsessionだけ通り、旧いログインのsessionは401。接続トークンは今まで通り", async () => {
+  const exempt = await kOf("apple", "sub-owner");
+  const x = setup({ exempt: [exempt] });
+  const k = x.accounts.createUser(exempt);
+  const plain = x.accounts.issueSession(k, "apple").session;
+  const res = await x.call("GET", "/v1/me", { token: plain });
+  assert.equal(res.status, 401);
+  assert.equal(res.json.error.code, "unauthorized");
+  assert.equal((await x.call("GET", "/v1/me/export", { token: plain })).status, 401);
+  assert.equal((await x.call("POST", "/v1/auth/logout", { token: plain })).status, 401);
+  // BellTeamの範囲付きsession（client あり）
+  const client = x.accounts.issueSession(k, "bellteam", "bellteam").session;
+  const me = await x.call("GET", "/v1/me", { token: client });
+  assert.equal(me.status, 200);
   assert.equal(me.json.user_id, k);
-  assert.equal(me.json.login, "apple");
-  assert.equal(get<{ n: number }>(x.db, "select count(*) n from users")?.n, 1);
-  // 通行証が先にアカウントを作っていても、旧い入口は同じアカウントに着く。
-  const { k: other } = await x.signIn("sub-new-first");
-  await x.call("GET", "/v1/me/settings", { token: (await x.signIn("sub-new-first")).pass });
-  const again = await x.call("POST", "/v1/auth/apple", { body: { identity_token: idToken("apple", BUNDLE, nonce, "sub-new-first"), nonce } });
-  assert.equal(again.json.user.id, other);
+  assert.equal(me.json.plan, "active");
+  assert.equal((await x.call("GET", "/v1/decisions", { token: client })).status, 200);
+  assert.equal((await x.call("GET", "/v1/me/settings", { token: client })).status, 403); // 許可表の外は今まで通り
+  // AIの接続トークン（/connector/v1・/mcp）
+  const conn = x.accounts.createConnection(k, "pc", "linux", ["claude-code"]);
+  const info = await x.call("GET", "/connector/v1/connection", { token: conn.token });
+  assert.equal(info.status, 200);
+  assert.equal(info.json.me.plan, "active");
+  const created = await x.call("POST", "/connector/v1/decisions", { token: conn.token, body: { title: "t", options: [{ id: "a", label: "A" }, { id: "b", label: "B" }], session_label: "s", client: "claude-code" } });
+  assert.equal(created.status, 409); // 確認の札へ進んだ = 認証と契約の関門は通った
+  assert.equal(created.json.error.code, "confirm_required");
+  const mcp = await x.app.request("/mcp", { method: "POST", headers: { authorization: `Bearer ${conn.token}`, "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+  assert.notEqual(mcp.status, 401);
 });
 
 test("写し: 自分の保存を全部、秘密と他のアカウントを除いて、1つのJSONファイルで返す", async () => {
@@ -391,9 +441,9 @@ test("写し: 自分の保存を全部、秘密と他のアカウントを除い
   assert.equal(out.setup_checks.length, 1);
   // 秘密と他人
   for (const secret of [conn.token, hash(conn.token), "APNS-SECRET-TOKEN", "token_hash", "push_key", "apns_token", "OTHER-FCM", other, "他人の申請", otherConn.token, hash(otherConn.token)]) assert.equal(res.text.includes(secret), false, secret);
-  // 旧いsessionでも取れる。接続トークン・BellTeamのsession・認証なしは取れない。
+  // ライブラリだけで動く時、旧いsessionでは取れない。接続トークン・BellTeamのsession・認証なしも取れない。
   const session = x.accounts.issueSession(k, "old").session;
-  assert.equal((await x.call("GET", "/v1/me/export", { token: session })).status, 200);
+  assert.equal((await x.call("GET", "/v1/me/export", { token: session })).status, 401);
   assert.equal((await x.call("GET", "/v1/me/export", { token: x.accounts.issueSession(k, "bt", "bellteam").session })).status, 403);
   assert.equal((await x.call("GET", "/v1/me/export", { token: conn.token })).status, 401);
   assert.equal((await x.call("GET", "/v1/me/export")).status, 401);

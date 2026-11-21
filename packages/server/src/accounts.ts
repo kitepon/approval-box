@@ -54,7 +54,7 @@ export class Accounts {
 
   // ---- 利用者とsession ----
 
-  /** id は共有ライブラリのKで作る時だけ渡す（ライブラリの通行証が先に作っていれば、そのまま使う）。 */
+  /** id は共有ライブラリのKで作る時だけ渡す（ensureUser）。 */
   createUser(id: string = uuid()): string {
     run(this.db, "insert or ignore into users (id, created_at, plan) values (?, ?, 'expired')", id, now()); // 製品は無料期間を持たない。使えるのはストアの契約から
     return id;
@@ -154,10 +154,10 @@ export class Accounts {
    * AppleかGoogleで入る。そのIDのアカウントがあればそこへ、無ければ作る。
    * 同じIDならどの画面から入っても同じアカウント。違うIDなら別のアカウント（結ぶ・まとめる操作は無い。クオの裁定）。
    */
-  signInWithIdentity(provider: "apple" | "google", subject: string, newUserId?: string) {
+  signInWithIdentity(provider: "apple" | "google", subject: string) {
     return tx(this.db, () => {
       const linked = get<{ user_id: string }>(this.db, "select user_id from identities where provider = ? and subject = ?", provider, subject);
-      const userId = linked?.user_id ?? this.createUser(newUserId);
+      const userId = linked?.user_id ?? this.createUser();
       if (!linked) run(this.db, "insert into identities (provider, subject, user_id, created_at) values (?, ?, ?, ?)", provider, subject, userId, now());
       return { ...this.issueSession(userId, provider), user: { id: userId } };
     });

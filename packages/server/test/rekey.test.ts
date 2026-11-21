@@ -5,7 +5,7 @@ import { deriveKWith } from "@kitepon/login-billing/server";
 import { Accounts } from "../src/accounts.ts";
 import { type Db, all, get, openDb, run } from "../src/db.ts";
 import { EventHub } from "../src/events.ts";
-import { rekeyToK } from "../src/rekey.ts";
+import { purgeLegacy, rekeyToK } from "../src/rekey.ts";
 
 const kKey = randomBytes(32);
 const deriveK = (provider: "apple" | "google", subject: string) => deriveKWith(kKey, provider, subject);
@@ -115,4 +115,27 @@ test("付け替えの途中で失敗しても、何も変えない（削除も�
   assert.deepEqual(await rekeyToK(f.db, deriveK, f.empties), { failed: "error" });
   assert.equal(dump(f.db), before);
   assert.equal(get(f.db, "select 1 from lb_kv where key = 'rekey:done'"), undefined);
+});
+
+test("旧い行の一掃（library-only）: 付け替えの後に一度だけ、旧いログインと契約の行を消し、利用者・申請・接続・BellTeamのsessionは残す", async () => {
+  const { db, accounts, real, empties } = fixture();
+  await rekeyToK(db, deriveK, empties);
+  const ks = await Promise.all(real.map((r) => deriveK(r.provider, r.subject)));
+  for (const k of ks) accounts.issueSession(k, "bellteam", "bellteam"); // 登録クライアントのsession
+  const count = (table: string) => get<{ n: number }>(db, `select count(*) n from ${table}`)!.n;
+  const kept = () => ["users", "decisions", "history", "attachments", "connections", "devices", "setup_checks", "pairings", "events"].map((t) => [t, count(t)]);
+  const before = kept();
+  const counts = { identities: 3, auth_flows: 3, login_links: 3, appstore_subscriptions: 3, play_subscriptions: 3, sessions: 6 };
+  assert.deepEqual(purgeLegacy(db), counts);
+  for (const table of ["identities", "auth_flows", "login_links", "appstore_subscriptions", "play_subscriptions"]) assert.equal(count(table), 0, table);
+  assert.deepEqual(all<{ client: string }>(db, "select client from sessions").map((r) => r.client), ["bellteam", "bellteam", "bellteam"]);
+  assert.deepEqual(kept(), before);
+  assert.deepEqual(all(db, "pragma foreign_key_check"), []);
+  // 二度目は消さず、印の件数を返すだけ。付け替えも、空の identities を確かめ直さずに印の結果を返す。
+  run(db, "insert into login_links (code_hash, user_id, created_at, expires_at) values ('later', ?, ?, ?)", ks[0], at, at);
+  run(db, "delete from lb_kv where expires_at <= ?", Date.now());
+  assert.deepEqual(purgeLegacy(db), counts);
+  assert.equal(count("login_links"), 1);
+  assert.deepEqual(await rekeyToK(db, deriveK, empties), { deleted: 8, rekeyed: 3 });
+  assert.equal(get<{ n: number }>(db, "select count(*) n from lb_kv where key = 'purge:legacy:done'")?.n, 1);
 });

@@ -12,6 +12,7 @@ export type ErrorCode =
   | "duplicate_suspected"
   | "confirm_required"
   | "rate_limited"
+  | "gone"
   | "too_large"
   | "unsupported_type"
   | "internal";
@@ -27,6 +28,7 @@ const statusOf: Record<ErrorCode, number> = {
   duplicate_suspected: 409,
   confirm_required: 409,
   rate_limited: 429,
+  gone: 410,
   too_large: 413,
   unsupported_type: 415,
   internal: 500,
@@ -43,6 +45,7 @@ const english: Record<ErrorCode, string> = {
   duplicate_suspected: "A similar request already exists. Review it before creating another.",
   confirm_required: "Review the request and confirm before continuing.",
   rate_limited: "Too many requests. Wait before trying again.",
+  gone: "This endpoint is no longer available on this server.",
   too_large: "This upload exceeds the permitted size or attachment count.",
   unsupported_type: "This file type is not supported.",
   internal: "A server error occurred. Please try again later.",
@@ -53,18 +56,18 @@ const fallback: Record<Exclude<Locale, "ja" | "en">, Record<ErrorCode, string>> 
     forbidden: "이 인증 정보로는 이 API를 사용할 수 없습니다.", validation_failed: "입력 내용을 확인한 뒤 다시 시도해 주세요.", unauthorized: "로그인 정보가 유효하지 않거나 만료되었습니다. 다시 로그인해 주세요.",
     subscription_expired: "활성 구독이 없습니다.", not_found: "항목을 찾을 수 없습니다.", conflict: "현재 상태와 충돌합니다. 새로고침한 뒤 최신 내용을 확인해 주세요.",
     setup_not_verified: "설정을 확인한 뒤 계속해 주세요.", duplicate_suspected: "비슷한 요청이 있습니다. 새로 요청하기 전에 확인해 주세요.",
-    confirm_required: "요청 내용을 확인한 뒤 진행해 주세요.", rate_limited: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
+    confirm_required: "요청 내용을 확인한 뒤 진행해 주세요.", rate_limited: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.", gone: "이 서버에서는 더 이상 이 입구를 사용할 수 없습니다.",
     too_large: "업로드 크기 또는 첨부 파일 수가 한도를 초과했습니다.", unsupported_type: "지원하지 않는 파일 형식입니다.", internal: "서버에 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.",
   },
   "zh-Hans": {
     forbidden: "此凭证不能使用该 API。", validation_failed: "请检查输入内容后重试。", unauthorized: "登录信息无效或已过期，请重新登录。", subscription_expired: "没有有效的订阅。", not_found: "找不到所需项目。",
     conflict: "此操作与当前状态冲突，请刷新并确认最新内容。", setup_not_verified: "请验证设置后继续。", duplicate_suspected: "已有相似请求，请确认后再提交新请求。",
-    confirm_required: "请确认请求内容后继续。", rate_limited: "请求过多，请稍后重试。", too_large: "上传大小或附件数量超出限制。", unsupported_type: "不支持此文件类型。", internal: "服务器发生错误，请稍后重试。",
+    confirm_required: "请确认请求内容后继续。", rate_limited: "请求过多，请稍后重试。", gone: "此服务器已不再提供该入口。", too_large: "上传大小或附件数量超出限制。", unsupported_type: "不支持此文件类型。", internal: "服务器发生错误，请稍后重试。",
   },
   "zh-Hant": {
     forbidden: "此憑證不能使用此 API。", validation_failed: "請檢查輸入內容後再試。", unauthorized: "登入資訊無效或已到期，請重新登入。", subscription_expired: "沒有有效的訂閱。", not_found: "找不到所需項目。",
     conflict: "此操作與目前狀態衝突，請重新整理並確認最新內容。", setup_not_verified: "請驗證設定後繼續。", duplicate_suspected: "已有相似請求，請確認後再提交新請求。",
-    confirm_required: "請確認請求內容後繼續。", rate_limited: "請求過多，請稍後再試。", too_large: "上傳大小或附件數量超出限制。", unsupported_type: "不支援此檔案類型。", internal: "伺服器發生錯誤，請稍後再試。",
+    confirm_required: "請確認請求內容後繼續。", rate_limited: "請求過多，請稍後再試。", gone: "此伺服器已不再提供此入口。", too_large: "上傳大小或附件數量超出限制。", unsupported_type: "不支援此檔案類型。", internal: "伺服器發生錯誤，請稍後再試。",
   },
 };
 
@@ -80,7 +83,7 @@ export function fixedErrorTranslation(message: string, locale: Locale): string |
     forbidden: "この許可では、このAPIは使えません。", validation_failed: "入力内容を確かめて、もう一度お試しください。", unauthorized: "ログイン情報が無効か期限切れです。もう一度ログインしてください。",
     subscription_expired: "有効な契約がありません。", not_found: "項目が見つかりません。", conflict: "現在の状態と競合しています。最新の内容を確かめてください。",
     setup_not_verified: "セットアップを確認してから続けてください。", duplicate_suspected: "似た申請があります。内容を確認してください。", confirm_required: "申請内容を確認してから続けてください。",
-    rate_limited: "要求が多すぎます。少し待ってお試しください。", too_large: "アップロードの大きさか添付の数が上限を超えています。", unsupported_type: "対応していないファイル形式です。", internal: "サーバーで問題が起きました。時間を置いて試してください。",
+    rate_limited: "要求が多すぎます。少し待ってお試しください。", gone: "このサーバーでは、この入口はもう使えません。", too_large: "アップロードの大きさか添付の数が上限を超えています。", unsupported_type: "対応していないファイル形式です。", internal: "サーバーで問題が起きました。時間を置いて試してください。",
   };
   for (const catalog of [english, japanese, ...Object.values(fallback)]) {
     const entry = Object.entries(catalog).find(([, value]) => value === message);

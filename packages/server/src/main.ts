@@ -16,7 +16,7 @@ import { Play } from "./play.ts";
 import { createApp } from "./http.ts";
 import { CallBridgeDeliverer, callBridgeSender, readHeaderFile } from "./callbridge.ts";
 import { type Library, createLibrary } from "./lb.ts";
-import { rekeyToK } from "./rekey.ts";
+import { purgeLegacy, rekeyToK } from "./rekey.ts";
 
 const env = process.env;
 const dataDir = resolve(env.APPROVAL_BOX_DATA ?? "data");
@@ -167,6 +167,10 @@ if (library) {
     accounts.contract = (userId) => lb.known(userId);
     lb.onNone((userId) => decisions.endForNoContract(userId));
     console.log(`approval-box-server: ライブラリのログインを使います（付け替え ${result.rekeyed}、削除 ${result.deleted}）`);
+    // ライブラリだけで動く。旧いログインと契約の行を一度だけ消す（件数だけ出す。IDは出さない）。失敗しても旧い入口は閉じたままで、次の起動でやり直す。
+    const purged = purgeLegacy(db);
+    if ("failed" in purged) console.error(`approval-box-server: 旧いログインと契約の行を消せませんでした（${purged.failed}）。次の起動でやり直します`);
+    else console.log(`approval-box-server: 旧いログインと契約の行（一度だけ消した数）: ${Object.entries(purged).map(([table, n]) => `${table} ${n}`).join("、")}`);
   }
 }
 const diagnosticsAdminToken = env.DIAGNOSTICS_ADMIN_KEY_FILE ? readFileSync(env.DIAGNOSTICS_ADMIN_KEY_FILE,"utf8").trim() : env.DIAGNOSTICS_ADMIN_KEY;
