@@ -1,6 +1,6 @@
-// 共有の login-billing ライブラリ（kitepon/login-billing 0.7.1、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
+// 共有の login-billing ライブラリ（kitepon/login-billing 0.17.0、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
 // ライブラリの内側は読まない。公開の入口（createLoginBilling・createHandler・Storage）だけを使う。
-import { createHandler, createLoginBilling, type AppleStoreConfig, type GoogleStoreConfig, type LoginBilling, type Storage } from "@kitepon/login-billing/server";
+import { createHandler, createLoginBilling, type AppleStoreConfig, type GoogleStoreConfig, type LoginBilling, type Storage, type WebSignInConfig } from "@kitepon/login-billing/server";
 import { type Db, get, run } from "./db.ts";
 
 /** 月額の商品（App Store・Google Playで同じID）。 */
@@ -26,6 +26,26 @@ export class SqliteStorage implements Storage {
 
   async delete(key: string) {
     run(this.db, "delete from lb_kv where key = ?", key);
+  }
+
+  /** 一度きりの記録を、読むと同時に消す（契約1.20）。1つの文なので、同時に2つ来ても受け取れるのは片方だけ。 */
+  async take(key: string) {
+    const row = get<{ value: string; expires_at: number }>(this.db, "delete from lb_kv where key = ? returning value, expires_at", key);
+    return row && row.expires_at > this.now() ? row.value : undefined;
+  }
+
+  private readonly hits = new Map<string, { n: number; until: number }>();
+
+  /** 接続元ごとの回数（契約1.21）。鍵はライブラリがHMACした値。メモリだけで数え、ディスクへは書かない。 */
+  async hit(key: string, limit: number, windowMs: number) {
+    const t = this.now();
+    const h = this.hits.get(key);
+    if (!h || h.until <= t) {
+      if (this.hits.size >= 100_000) for (const [k, v] of this.hits) if (v.until <= t) this.hits.delete(k);
+      this.hits.set(key, { n: 1, until: t + windowMs });
+      return 1 <= limit;
+    }
+    return ++h.n <= limit;
   }
 
   /** 期限を過ぎた行を消す（読む側も期限切れは見ない）。 */
@@ -63,6 +83,8 @@ export type LibraryInput = {
   googleAudiences: string[];
   /** Google の id だけで入る道（試験。LB_GOOGLE_CODE_CLIENT_ID・LB_GOOGLE_CODE_CLIENT_SECRET が揃った時だけ）。 */
   googleCode?: { clientId: string; clientSecret: string };
+  /** Web サインイン（契約1.20）。戻り先は publicUrl から作る（loopback・セッションのスキーム・/app/websignin のリンク）。 */
+  webSignIn?: Pick<WebSignInConfig, "google" | "apple">;
   apple?: AppleStoreConfig;
   google?: GoogleStoreConfig;
   /** 課金の対象外にする K（FREE_ACCOUNT_IDS）。 */
@@ -81,14 +103,18 @@ export function createLibrary(input: LibraryInput) {
     kKey: input.kKey,
     passKeys: { current: input.passKey, ...(input.passKeyPrevious ? { previous: input.passKeyPrevious } : {}) },
     exemptK: input.exemptK,
+    ...(input.webSignIn && (input.webSignIn.google || input.webSignIn.apple) ? { webSignIn: { ...input.webSignIn, publicOrigin: input.publicUrl, returns: { loopback: true, sessionSchemes: ["approvalbox-websignin"], links: [`${input.publicUrl}/app/websignin`] } } } : {}),
     billing: input.billing,
     storage,
+    // ライブラリが出す1種類の行（Webサインインの失敗の理由。固定の一覧の符号だけで、K・利用者の識別子・トークン・アドレスは載らない）を、サーバーのいつもの1行のログへ。
+    log: (line: string) => console.error(`approval-box-server: ${line}`),
     ...(input.fetch ? { fetch: input.fetch } : {}),
     ...(input.now ? { now: input.now } : {}),
   });
-  const handler = createHandler(lb, { prefix: "/auth/v1", origins: [input.publicUrl] });
-  // 名前のない2つの入口は、書き込みが認証なしで起きる。1分あたりの回数を接続元ごとに絞る。
-  const limits: Record<string, (client: string) => boolean> = { "/auth/v1/signin/nonce": rateLimiter(60, 60_000), "/auth/v1/handoff/start": rateLimiter(20, 60_000) };
+  // 接続元は手前のプロキシ（Caddy・cloudflared）が付けた X-Forwarded-For の最後の値。http.ts の clientKey と同じ。
+  const handler = createHandler(lb, { prefix: "/auth/v1", origins: [input.publicUrl], caller: (r) => r.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || undefined });
+  // signin/nonce・handoff/start・websignin/start・prove/take・ticket/check はライブラリが接続元ごとに絞る（0.10.1。handoff/start は 0.17.0 から署名つきの開始も通行証ごとに絞る）。残る名前のない2つをここで絞る。
+  const limits: Record<string, (client: string) => boolean> = { "/auth/v1/websignin/callback": rateLimiter(20, 60_000), "/auth/v1/websignin/take": rateLimiter(60, 60_000) };
   return { lb, handler, storage, allow: (path: string, client: string) => limits[path]?.(client) ?? true };
 }
 export type Library = ReturnType<typeof createLibrary>;
