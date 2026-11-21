@@ -289,7 +289,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   });
   v1.delete("/decisions", async (c) => {
     const statuses = (c.req.query("status") ?? "").split(",").sort().join(",");
-    if (statuses !== "answered,cancelled") throw new ApiError("validation_failed", "消せるのは既決だけです（status=answered,cancelled）。");
+    if (statuses !== "answered,cancelled") throw new ApiError("validation_failed", "消せるのは履歴（回答済み・取り下げ）だけです（status=answered,cancelled）。");
     const res = await idempotent(c, services, c.get("userId"), () => decisions.deleteClosed(c.get("userId")));
     sweep();
     return res;

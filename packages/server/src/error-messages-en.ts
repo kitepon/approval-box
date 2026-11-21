@@ -24,7 +24,7 @@ export const errorMessagesEn: Record<string, string> = {
   "同じIdempotency-Keyが別のファイルに使われています。": "This Idempotency-Key was used for a different file.",
   "この形式のファイルは付けられません。画像（JPEG・PNG・HEIC・GIF・WebP）か書類（PDF・テキスト・CSV・JSON・Word・Excel・PowerPoint）を選んでください。": "This file type is not supported. Choose an image (JPEG, PNG, HEIC, GIF, WebP) or document (PDF, text, CSV, JSON, Word, Excel, PowerPoint).",
   "ファイルが空です。": "The file is empty.", "ファイルの中身が形式と合いません。": "The file content does not match its declared type.",
-  "添付の保存がアカウントの上限（1GB）に達しました。古い既決を消すと空きます。": "Your account has reached its 1 GB attachment storage limit. Delete old completed requests to free space.",
+  "添付の保存がアカウントの上限（1GB）に達しました。設定の「履歴を削除」で古い履歴を消すと空きます。": "Your account has reached its 1 GB attachment storage limit. Delete old completed requests to free space.",
   "申請に付けられるのはJPEG・PNG・HEIC・GIF・WebP画像です。中身と形式を確かめてください。": "Request attachments must be JPEG, PNG, HEIC, GIF, or WebP images. Check the content and file type.",
   "画像が空です。": "The image is empty.", "1つの画像は20MBまでです。": "Each image can be up to 20 MB.",
   "添付の保存がアカウントの上限（1GB）に達しました。": "Your account has reached its 1 GB attachment storage limit.",
@@ -54,6 +54,6 @@ export const errorMessagesEn: Record<string, string> = {
   "このサーバーではAppleのログインを使えません。": "Sign in with Apple is not configured on this server.", "App Storeの照合は設定されていません。": "App Store verification is not configured.",
   "このサーバーではGoogleのログインを使えません。": "Sign in with Google is not configured on this server.",
   "redirect_uri は http://127.0.0.1:ポート番号/ か http://[::1]:ポート番号/ の形にしてください。ポートは1024から65535で、ユーザー名・クエリ・フラグメントは付けられません。": "redirect_uri must be http://127.0.0.1:PORT/ or http://[::1]:PORT/. The port must be 1024 to 65535, and credentials, a query, or a fragment are not allowed.",
-  "消せるのは既決だけです（status=answered,cancelled）。": "Only completed requests can be deleted (status=answered,cancelled).", "Idempotency-Key が要ります。": "Idempotency-Key is required.",
+  "消せるのは履歴（回答済み・取り下げ）だけです（status=answered,cancelled）。": "Only completed requests can be deleted (status=answered,cancelled).", "Idempotency-Key が要ります。": "Idempotency-Key is required.",
   "課金の受付はまだ準備中です。": "Billing is not available yet.", "そのAPIはありません。": "API endpoint not found.", "画像のbase64が正しくありません。": "The image base64 data is invalid.",
 };
