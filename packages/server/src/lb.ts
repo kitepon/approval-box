@@ -1,4 +1,4 @@
-// 共有の login-billing ライブラリ（kitepon/login-billing 0.12.1（開発版、試験サーバーだけ）、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
+// 共有の login-billing ライブラリ（kitepon/login-billing 0.13.0（開発版、試験サーバーだけ）、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
 // ライブラリの内側は読まない。公開の入口（createLoginBilling・createHandler・Storage）だけを使う。
 import { createHandler, createLoginBilling, type AppleStoreConfig, type GoogleStoreConfig, type LoginBilling, type Storage, type WebSignInConfig } from "@kitepon/login-billing/server";
 import { type Db, get, run } from "./db.ts";
@@ -106,6 +106,8 @@ export function createLibrary(input: LibraryInput) {
     ...(input.webSignIn && (input.webSignIn.google || input.webSignIn.apple) ? { webSignIn: { ...input.webSignIn, publicOrigin: input.publicUrl, returns: { loopback: true, sessionSchemes: ["approvalbox-websignin"], links: [`${input.publicUrl}/app/websignin`] } } } : {}),
     billing: input.billing,
     storage,
+    // ライブラリが出す1種類の行（Webサインインの失敗の理由。固定の一覧の符号だけで、K・利用者の識別子・トークン・アドレスは載らない）を、サーバーのいつもの1行のログへ。
+    log: (line: string) => console.error(`approval-box-server: ${line}`),
     ...(input.fetch ? { fetch: input.fetch } : {}),
     ...(input.now ? { now: input.now } : {}),
   });
