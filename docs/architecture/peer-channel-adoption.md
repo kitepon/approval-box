@@ -96,3 +96,11 @@ Built in c8c part 1: LocalBox, LocalApi and the socket, the daemon running the C
 
   Not shipped: Linux musl (Alpine), Windows arm64, Android; there node-datachannel does not load and the daemon reports it by name. Node ≥ 24 remains the known requirement for peer-channel mode.
 
+## 8. Local dev server (for the app builders, never deployed)
+
+`npm run dev:server` (packages/server/src/dev.ts) runs the whole Approval Box server on the builder's own machine: the real `createApp`, the library (login-billing 0.13.0) and `/pc/v1`, with login-billing's TestKit (`@kitepon/login-billing/testing`) as the library's `fetch`, its fake stores and fake web clients. It listens only on 127.0.0.1 (`PORT`, default 8788) and refuses to start when `PUBLIC_URL` is not a loopback http URL, so it cannot be deployed by mistake. Data goes to `DEV_DATA` (default `./.dev-data`, git-ignored; never `APPROVAL_BOX_DATA`). The fake person is `DEV_SUBJECT` (default `dev-person`); its K (Apple and Google) is exempt, so paid routes and `join` pass without a store.
+- Sign in from a device or a script: `POST /auth/v1/signin/nonce` → `POST /dev/id-token { provider: "apple" | "google", nonce, sub? }` (answers `{ id_token, aud }`; Apple aud `dev.kitepon.approvalbox`, Google aud `dev-google-client.apps.local`) → `POST /auth/v1/signin { provider, idToken, nonce }` gives a real pass from this server. Web sign-in: take `providerUrl` from `websignin/start`, `POST /dev/websignin { providerUrl, sub? }` answers the callback `location` the browser would follow.
+- Then everything else is the real server: `/v1`, `/connector/v1`, pairing, `/pc/v1` (signaling, mirror, TURN with an empty list). A wake is one local log line (`wake alert=1|0`), nothing is sent.
+- Not covered: real Apple/Google sign-in and stores, real APNs/FCM pushes, TURN, and anything a public URL needs (verified app links, the web sign-in return through `https://<origin>/app/websignin`).
+- Test: packages/server/test/dev.test.ts (a non-loopback `PUBLIC_URL` is refused; a fake sign-in gets a pass that passes a paid route).
+

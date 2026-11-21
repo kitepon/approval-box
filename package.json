@@ -12,7 +12,8 @@
     "test": "npm test -w packages/server -w packages/connector",
     "typecheck": "npm run typecheck -w packages/server -w packages/web -w packages/connector",
     "test:web": "node --test packages/web/test/*.test.ts",
-    "test:web:browser": "playwright test -c packages/web/playwright.config.ts"
+    "test:web:browser": "playwright test -c packages/web/playwright.config.ts",
+    "dev:server": "npm run dev:server -w packages/server"
   },
   "engines": {
     "node": ">=22.13"
