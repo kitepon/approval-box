@@ -13,7 +13,7 @@ export const en = {
   "GoogleとAppleは別のアカウントになります。いつも同じ方でログインしてください。": "Google and Apple create separate accounts. Always use the same sign-in method.",
   "このサーバーにはログインの設定がありません。管理者は、AppleかGoogleのログインを設定してください（READMEの「自分でサーバーを立てる」）。": "Sign-in is not configured on this server. Ask the administrator to configure Apple or Google sign-in (see self-hosting in the README).",
   "受信": "Inbox", "接続": "Connections", "設定": "Settings",
-  "添付は合計50MBまでです。": "Attachments can total up to 50 MB.", "画像": "Image", "書類": "Document", "保存する": "Save", "・取れませんでした": " · Could not download", "外す": "Remove",
+  "添付は合計50MBまでです。": "Attachments can total up to 50 MB.", "最大10件・1件20MB・合計50MB": "Up to 10 files, 20 MB each, 50 MB in total", "画像": "Image", "書類": "Document", "保存する": "Save", "・取れませんでした": " · Could not download", "外す": "Remove",
   "画像の大きさが一致しません。": "The image size does not match.", "画像を確認できませんでした。": "Could not verify the image.", "この画像はブラウザで表示できません。原本を保存して開いてください。": "This browser cannot display the image. Save the original and open it.", "画像を読み込み中…": "Loading image…", "拡大する": "Enlarge", "再読込": "Reload", "原本を保存": "Save original", "閉じる": "Close",
   "コピーしてください": "Copy this text",
   "接続テスト": "Test connection",

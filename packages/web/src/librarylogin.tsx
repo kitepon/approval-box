@@ -53,7 +53,7 @@ export function LibraryLogin({ onDone, onCancel }: { onDone: () => void; onCance
           <button class="primary" onClick={() => setRound((n) => n + 1)}>{t("新しいコードを出す")}</button>
         </>
       )}
-      <p>{t("契約したスマホの決裁箱で、設定 → ほかの端末をログインさせる を開き、このQRを読むか、コードを入力してください。確認番号が同じなら「許可する」を押します。")}</p>
+      {failed !== "expired" && <p>{t("契約したスマホの決裁箱で、設定 → ほかの端末をログインさせる を開き、このQRを読むか、コードを入力してください。確認番号が同じなら「許可する」を押します。")}</p>}
       <button class="ghost" onClick={onCancel}>{t("やめる")}</button>
     </div>
   );

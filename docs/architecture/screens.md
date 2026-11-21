@@ -55,6 +55,7 @@ In this order:
    3. `ほかの端末（Linux・ブラウザ・もう一方のスマホ）は、この画面の「スマホの承認でログイン」を押し、契約したスマホの 設定 → ほかの端末をログインさせる で承認します。`
 5. Links `利用規約` `プライバシーポリシー` `サポート`, then the language picker `言語`.
 - Banner (only after an automatic sign-out, see S1b): the reason in one line.
+- Self-hosted server in ID-login mode (Web only, never production): Google's sign-in box and `Appleでサインイン` take the place of item 2, followed by `GoogleとAppleは別のアカウントになります。いつも同じ方でログインしてください。`.
 
 Edges:
 - the native button → store sign-in → `受信`. On cancel, stay. On failure, the S9 alert.
@@ -74,12 +75,12 @@ Mapping: library code `pass_refused` → stopped, `pass_expired` → expired, an
 Edges:
 - The phone approves → `受信`.
 - `やめる` → S1.
-- The code expires → stay on S2; the QR, the code, the check number and the validity line are removed, and only `コードの期限が切れました。` and the button `新しいコードを出す` remain (with `やめる`). No error dialog, no bounce to S1.
+- The code expires → stay on S2; the QR, the code, the check number and the validity line are removed, and only `コードの期限が切れました。` and the button `新しいコードを出す` remain (with `やめる`); the guidance paragraph is removed too (ruling 2026-11-21 r2). No error dialog, no bounce to S1.
 - A native sign-in finishes meanwhile → `受信` (the native sign-in wins, contract 1.11).
 
 ### S3 `受信` / S4 `履歴` (lists)
 - In this order at the top of the list: the filter chips, then the search field `相談を検索`. No count line.
-- The same filter chips everywhere: `受信`: `すべて` `未回答` `保留`; `履歴`: `すべて` `回答済み` `取り下げ`. A row's status word uses the same words (`未回答`, `保留`, `回答済み`, `取り下げ`).
+- The same filter chips everywhere: `受信`: `すべて` `未回答` `保留`; `履歴`: `すべて` `回答済み` `取り下げ`. Every row shows its status word, pending rows included, with the same words (`未回答`, `保留`, `回答済み`, `取り下げ`) (ruling 2026-11-21 r2).
 - The same empty texts: `いま決めることはありません` / `相談が届いたら、お知らせします。` and `まだ履歴はありません` / `あなたの回答が、ここに残ります。`.
 - No match for a filter or search: `この条件の相談はありません` (one line).
 - A row opens S5. In a split view, the empty detail pane reads `相談を選んでください` (one line), and switching between `受信` and `履歴` clears the selection.
@@ -89,7 +90,7 @@ Edges:
 Page heading `相談` on every app. Header, `背景`, `AIの添付画像`. When answerable, in this order:
 1. `どう進める？` (options, `AIの推奨`)
 2. `補足・別の指示`
-3. One button `画像・書類を添付` (where the platform separates photos from files, the button opens a choice `写真` / `ファイル`)
+3. One button `画像・書類を添付` (where the platform separates photos from files, the button opens a choice `写真` / `ファイル`), with the one hint line `最大10件・1件20MB・合計50MB` under it and no other hint (ruling 2026-11-21 r2; limits from the server's attachments.ts)
 4. `保留する` / `保留を解除`
 5. `回答を送信` (always this label; disabled until an option is chosen or text is written)
 When answered: `あなたの回答`, delivery state, `再開の一言をコピー`. `戻る` returns to the list it came from (`閉じる` in a split view). After `回答を送信` the app stays on the answered request; it does not jump.
@@ -104,7 +105,7 @@ In this order:
 Same on every app. The Mac gains `外す`, `テストする`, the guides and the tokens.
 
 ### S7 `契約` (screen; opened from `設定 → 契約について`, and shown by itself on no contract / 402)
-1. Status line: `契約中（App Store）` / `契約中（Google Play）` / `未契約` / `期限切れ（YYYY/MM/DD）`, plus `期限: …` when active. A self-hosted server with billing off shows `このサーバーは自分で立てたもので、料金はかかりません。` instead. The status always comes from the server (`GET /me`), so every device of the account shows the same.
+1. Status line: `契約中（App Store）` / `契約中（Google Play）` / `未契約` / `期限切れ（YYYY/MM/DD）`, plus `期限: YYYY/MM/DD` (date only, the same format as `期限切れ（…）`) when active. A self-hosted server with billing off shows `このサーバーは自分で立てたもので、料金はかかりません。` instead. The status always comes from the server (`GET /me`), so every device of the account shows the same.
 2. One of these blocks:
    - **Can buy here** (store pass on iPhone/iPad/Mac/Android):
      - before setup is verified: `契約の前に、AIとつながっているか確かめます。` → `1. 接続テストの申請に答える` (button `接続テストの申請を開く` → S5) → `2. 契約する`

@@ -87,6 +87,7 @@ test("S2: an expired code stays on S2 and offers a new one", async ({ page }) =>
   await startLogin(page);
   await expect(page.getByText("The code has expired.")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(page.getByText(/On the subscribed phone/)).toHaveCount(0);
   await page.getByRole("button", { name: "Get a new code" }).click();
   await expect(page.getByText("WXYZ-6789", { exact: true })).toBeVisible();
   expect(seen.starts).toBe(2);
