@@ -5,7 +5,7 @@ import type { Server } from "node:net";
 import { join } from "node:path";
 import { Connector } from "@kitepon/peer-channel/connector";
 import type { SignedSnapshotJson } from "@kitepon/peer-channel";
-import { ServerError, type Api } from "./api.ts";
+import type { Api } from "./api.ts";
 import { ANSWER_SCHEMA, DECISION_SCHEMA, LocalBox } from "./local-box.ts";
 import { serveLocal, socketPath } from "./local-api.ts";
 import { keysFile, loadOrCreateKeys } from "./pc-keys.ts";
@@ -32,15 +32,16 @@ export async function startPeerChannel(o: PcOptions) {
     connectionId: o.connectionId, account: o.account, keys,
     ...(o.admission ? { admission: o.admission } : {}),
     product: [DECISION_SCHEMA],
-    validate: (schema, content, rid) => schema === ANSWER_SCHEMA && box.validAnswer(rid, content),
-    onAnswer: (a) => box.answered(a.rid, a.content),
+    validate: (schema, content, rid, blobs) => schema === ANSWER_SCHEMA && box.validAnswer(rid, content, blobs.length),
+    onAnswer: (a) => box.answered(a.rid, a.content, a.blobs),
+    onHold: (rid, held) => box.held(rid, held),
     onClosed: (rid, status) => { if (status === "expired") box.expired(rid); },
     stateDir: join(root, "connector"),
     onError: (code) => log(`peer-channel: ${code}`), // 符号だけ（K・鍵・中身は出さない）
   });
   box.transport = {
-    request: (content) => connector.request({ schema: DECISION_SCHEMA, content }),
-    amend: (rid, content) => { try { connector.amend(rid, { schema: DECISION_SCHEMA, content }); } catch { log("peer-channel: amend_after_close"); } },
+    request: (content, blobs) => connector.request({ schema: DECISION_SCHEMA, content, blobs }),
+    amend: (rid, content, blobs) => { try { connector.amend(rid, { schema: DECISION_SCHEMA, content, ...(blobs ? { blobs } : {}) }); } catch { log("peer-channel: amend_after_close"); } },
     cancel: (rid, reason) => { try { connector.cancel(rid, reason); } catch { log("peer-channel: cancel_after_close"); } },
   };
   connector.start();
@@ -57,7 +58,7 @@ export async function startPeerChannel(o: PcOptions) {
       onEvent("ready");
       signal.addEventListener("abort", () => { box.events.off("deliveries", wake); resolve(); }, { once: true });
     }),
-    download: async () => { throw new ServerError(404, "not_found", "peer-channel の道では添付はまだ使えません。", {}); },
+    download: async (path: string) => box.download(path),
   };
   return {
     box, connector, api,

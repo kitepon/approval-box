@@ -1,10 +1,12 @@
 // peer-channel の道（c8c）で、MCPの道具がデーモンの LocalBox を呼ぶ所。Api と同じ call(method, path, body) の形で、
 // 1行のJSONをデーモンのローカルソケット（Windowsは名前付きパイプ）へ送り、1行の答えを読む。本文はこの端末から出ない。
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { pcRoot } from "./pc-mode.ts";
 import { createConnection, createServer, type Server } from "node:net";
 import { join } from "node:path";
 import { ServerError } from "./api.ts";
-import type { LocalBox } from "./local-box.ts";
+import { LocalBox } from "./local-box.ts";
 import { stateRoot } from "./profile.ts";
 
 export const socketPath = (root = stateRoot()) => process.platform === "win32"
@@ -80,11 +82,18 @@ export class LocalApi {
     }
   }
 
-  async download(): Promise<Buffer> {
-    throw new ServerError(404, "not_found", "peer-channel の道では添付はまだ使えません（端末から運ぶ blob が未実装）。", {});
+  /** 添付の中身。同じ端末・同じ利用者のデーモンが書いた 0600 のファイルを、ソケットを通さず読む（大きな画像を1行のJSONに載せない）。 */
+  async download(path: string): Promise<Buffer> {
+    return new LocalBox(join(pcRoot(), "decisions.json")).download(path);
   }
 
-  async uploadRequestImage(): Promise<{ id: string }> {
-    throw new ServerError(400, "validation_failed", "申請画像は peer-channel の道ではまだ使えません（端末へ運ぶ blob が未実装）。", {});
+  /** 申請画像を state/pc/uploads に 0600 で置き、その印を返す。申請の時にデーモンが受け取って端末へ運ぶ（サーバーへは送らない）。 */
+  async uploadRequestImage(data: Buffer, name: string, contentType: string): Promise<{ id: string }> {
+    const id = randomUUID();
+    const dir = join(pcRoot(), "uploads");
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    writeFileSync(join(dir, id), data, { mode: 0o600 });
+    writeFileSync(join(dir, `${id}.json`), JSON.stringify({ name, content_type: contentType }), { mode: 0o600 });
+    return { id };
   }
 }

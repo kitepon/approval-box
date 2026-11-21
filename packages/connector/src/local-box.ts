@@ -4,7 +4,8 @@
 // shortcut: 検証と文はサーバーの decisions.ts から写した。サーバーの申請の経路を閉じる時（adoption 4）に、こちらを唯一の正にする。
 import { EventEmitter } from "node:events";
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import { ServerError } from "./api.ts";
 import { writeJsonFile } from "./config.ts";
@@ -24,7 +25,11 @@ const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 type Option = { id: string; label: string };
 type Route = { channel_id: string; harness: string };
-type Answer = { option_id?: string; text?: string; answered_at: string };
+export type FileMeta = { id: string; name: string; content_type: string; size: number; sha256: string };
+type Answer = { option_id?: string; text?: string; attachments?: FileMeta[]; answered_at: string };
+/** A blob from the device: its meta (8.2 blobs[]) and bytes, already SHA-256 checked by peer-channel. */
+export type InBlob = { meta: { name: string; content_type: string; size: number }; bytes: Uint8Array };
+export type OutBlob = { bytes: Uint8Array; content_type: string; name: string };
 export type Rec = {
   id: string; rid?: string; route?: Route;
   title: string; norm_title: string; context: string; options: Option[]; recommendation?: string; urgency: string; deadline?: string;
@@ -32,46 +37,47 @@ export type Rec = {
   status: "pending" | "held" | "answered" | "cancelled"; answer?: Answer;
   delivery?: "waiting" | "delivered" | "unknown" | "fetched"; delivery_id?: string; delivery_text?: string; delivery_detail?: string;
   resume_phrase: string; cancel_reason?: string; distinct_reason?: string; amend_count: number; setup_code?: string;
+  request_attachments?: FileMeta[];
   created_at: string; updated_at: string; version: number;
 };
 type Store = { decisions: Rec[]; checks: { hash: string; expires_at: string; used_at?: string }[] };
 
 /** 申請を端末へ運ぶ道（peer-channel の Connector）。テストでは無しでよい。 */
 export type Transport = {
-  request(content: unknown): string;
-  amend(rid: string, content: unknown): void;
+  request(content: unknown, blobs: OutBlob[]): string;
+  amend(rid: string, content: unknown, blobs?: OutBlob[]): void;
   cancel(rid: string, reason: string): void;
 };
 
 const optionSchema = z.object({ id: z.string().trim().min(1).max(40), label: z.string().trim().min(1).max(200) });
 const optionsSchema = z.array(optionSchema).min(2).max(6).refine((options) => new Set(options.map((o) => o.id)).size === options.length, "選択肢のidが重なっています");
 const routeSchema = z.object({ channel_id: z.string().min(1).max(100), harness: z.string().min(1).max(20) });
-const noImages = z.array(z.string()).max(0, "申請画像は peer-channel の道ではまだ使えません（端末へ運ぶ blob が未実装）").optional();
+const requestIds = z.array(z.string().min(1).max(100)).max(10).optional();
 const createSchema = z.object({
   title: z.string().trim().min(1).max(120), context: z.string().max(20000).default(""), options: optionsSchema,
   recommendation: z.string().optional(), urgency: z.enum(URGENCIES).default("normal"), deadline: z.iso.datetime({ offset: true }).optional(),
   session_label: z.string().trim().min(1).max(200), requester: z.string().trim().min(1).max(60).optional(),
   requester_bot_id: z.string().regex(/^bot-[a-z0-9]+$/).max(64).optional(), client: z.string().trim().min(1).max(40),
   route: routeSchema.optional(), distinct_reason: z.string().trim().min(1).max(500).optional(), check_token: z.string().max(200).optional(),
-  request_attachment_ids: noImages,
+  request_attachment_ids: requestIds,
 });
 const amendSchema = z.object({
   route: routeSchema.optional(), version: z.number().int().positive(), note: z.string().trim().min(1).max(500),
   changes: z.object({
-    request_attachment_ids: noImages, title: z.string().trim().min(1).max(120).optional(), context: z.string().max(20000).optional(),
+    request_attachment_ids: requestIds, title: z.string().trim().min(1).max(120).optional(), context: z.string().max(20000).optional(),
     options: optionsSchema.optional(), recommendation: z.string().nullable().optional(), urgency: z.enum(URGENCIES).optional(),
     deadline: z.iso.datetime({ offset: true }).nullable().optional(),
   }).refine((changes) => Object.keys(changes).length > 0, "直す項目がありません"),
 });
-const answerSchema = z.object({ option_id: z.string().max(40).optional(), text: z.string().trim().max(5000).optional() }).strict()
-  .refine((a) => a.option_id || a.text, "選択肢か文のどちらかが要ります");
+const answerSchema = z.object({ option_id: z.string().max(40).optional(), text: z.string().trim().max(5000).optional() }).strict();
+const MAX_REQUEST_BYTES = 50 * 1024 * 1024; // サーバーと同じ: 申請画像は合計50MBまで
 
 const now = () => new Date().toISOString();
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const normalizeTitle = (title: string) => title.normalize("NFKC").toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
 const pick = (length: number) => Array.from({ length }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
 const fail = (status: number, code: string, message: string, body: Record<string, unknown> = {}): never => { throw new ServerError(status, code, message, body); };
-const STATUS: Record<string, number> = { validation_failed: 400, not_found: 404, conflict: 409, confirm_required: 409, duplicate_suspected: 409, rate_limited: 429 };
+const STATUS: Record<string, number> = { too_large: 413, validation_failed: 400, not_found: 404, conflict: 409, confirm_required: 409, duplicate_suspected: 409, rate_limited: 429 };
 const error = (code: string, message: string, body: Record<string, unknown> = {}): never => fail(STATUS[code] ?? 400, code, message, body);
 
 function parse<T>(schema: z.ZodType<T>, body: unknown): T {
@@ -87,9 +93,11 @@ export class LocalBox {
   private store: Store;
 
   private readonly file: string;
+  private readonly root: string;
 
   constructor(file: string) {
     this.file = file;
+    this.root = dirname(file);
     this.store = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Store) : { decisions: [], checks: [] };
   }
 
@@ -107,7 +115,7 @@ export class LocalBox {
     return {
       decision_id: rec.id, title: rec.title, status: rec.status, version: rec.version, urgency: rec.urgency, options: rec.options,
       ...(rec.recommendation ? { recommendation: rec.recommendation } : {}), ...(rec.deadline ? { deadline: rec.deadline } : {}),
-      context: rec.context, request_attachments: [], session_label: rec.session_label, ...(rec.requester ? { requester: rec.requester } : {}),
+      context: rec.context, request_attachments: rec.request_attachments ?? [], session_label: rec.session_label, ...(rec.requester ? { requester: rec.requester } : {}),
       this_session: !!routeChannel && rec.route?.channel_id === routeChannel,
       ...(rec.answer ? { answer: rec.answer, answer_text: rec.delivery_text } : {}), ...(rec.delivery ? { delivery: rec.delivery } : {}),
       ...(rec.cancel_reason ? { cancel_reason: rec.cancel_reason } : {}), ...(rec.test ? { test: true } : {}),
@@ -173,7 +181,9 @@ export class LocalBox {
       resume_phrase: `Approval Box ${id} の答えを確認して続けて`, ...(input.distinct_reason ? { distinct_reason: input.distinct_reason } : {}),
       amend_count: 0, created_at: at, updated_at: at, version: 1,
     };
-    if (this.transport) rec.rid = this.transport.request(this.content(rec));
+    const images = this.takeUploads(input.request_attachment_ids ?? []);
+    if (images.length) rec.request_attachments = this.keepFiles(id, images);
+    if (this.transport) rec.rid = this.transport.request(this.content(rec), images);
     this.store.decisions.push(rec);
     this.save();
     return rec;
@@ -217,14 +227,16 @@ export class LocalBox {
     const options = c.options ?? rec.options;
     const recommendation = c.recommendation === undefined ? rec.recommendation : c.recommendation ?? undefined;
     if (recommendation && !options.some((o) => o.id === recommendation)) error("validation_failed", "recommendation が選択肢のidにありません。");
-    const changed = AMEND_FIELDS.some((f) => c[f] !== undefined);
+    const images = c.request_attachment_ids === undefined ? undefined : this.takeUploads(c.request_attachment_ids);
+    if (images) { this.dropFiles(rec.id, rec.request_attachments ?? []); rec.request_attachments = this.keepFiles(rec.id, images); }
+    const changed = AMEND_FIELDS.some((f) => c[f] !== undefined) || !!images;
     Object.assign(rec, { title: c.title ?? rec.title, norm_title: normalizeTitle(c.title ?? rec.title), context: c.context ?? rec.context, options, urgency: c.urgency ?? rec.urgency });
     if (recommendation) rec.recommendation = recommendation; else delete rec.recommendation;
     if (c.deadline !== undefined) { if (c.deadline) rec.deadline = c.deadline; else delete rec.deadline; }
     if (input.route) rec.route = input.route;
     rec.amend_count++;
     this.bump(rec);
-    if (changed && rec.rid) this.transport?.amend(rec.rid, this.content(rec)); // 配送先だけの変更は端末へ送らない
+    if (changed && rec.rid) this.transport?.amend(rec.rid, this.content(rec), images); // 配送先だけの変更は端末へ送らない
     this.save();
     return this.toAi(rec);
   }
@@ -261,24 +273,35 @@ export class LocalBox {
 
   // ---- 端末の答え（peer-channel の Connector から）----
 
-  /** 8.3 の7行目: その申請の今の選択肢に合う答えか。 */
-  validAnswer(rid: string, content: unknown) {
+  /** 8.3 の7行目: その申請の今の選択肢に合う答えか。選択肢・文・添付のどれかが要る（サーバーの answerSchema と同じ）。 */
+  validAnswer(rid: string, content: unknown, blobCount = 0) {
     const rec = this.store.decisions.find((d) => d.rid === rid);
     const r = answerSchema.safeParse(content);
-    return !!rec && OPEN.includes(rec.status) && r.success && (!r.data.option_id || rec.options.some((o) => o.id === r.data.option_id));
+    return !!rec && OPEN.includes(rec.status) && r.success && (!!r.data.option_id || !!r.data.text || blobCount > 0)
+      && (!r.data.option_id || rec.options.some((o) => o.id === r.data.option_id));
   }
 
-  answered(rid: string, content: unknown) {
+  answered(rid: string, content: unknown, blobs: InBlob[] = []) {
     const rec = this.store.decisions.find((d) => d.rid === rid);
     if (!rec || !OPEN.includes(rec.status)) return;
     const a = answerSchema.parse(content);
     const option = a.option_id ? rec.options.find((o) => o.id === a.option_id) : undefined;
-    const answer: Answer = { ...(option ? { option_id: option.id } : {}), ...(a.text ? { text: a.text } : {}), answered_at: now() };
+    const files = this.keepFiles(rec.id, blobs.map((b) => ({ bytes: b.bytes, content_type: b.meta.content_type, name: b.meta.name })));
+    const answer: Answer = { ...(option ? { option_id: option.id } : {}), ...(a.text ? { text: a.text } : {}), ...(files.length ? { attachments: files } : {}), answered_at: now() };
     Object.assign(rec, { status: "answered", answer, delivery: "waiting", delivery_id: randomUUID(), delivery_text: deliveryText(rec, answer, option) });
     delete rec.delivery_detail;
     this.bump(rec);
     this.save();
     this.events.emit("deliveries");
+  }
+
+  /** 端末で「保留」にした・戻した（peer-channel 0.5.2 の hold）。決めてはいない。後の答えが決める。 */
+  held(rid: string, held: boolean) {
+    const rec = this.store.decisions.find((d) => d.rid === rid);
+    if (!rec || !OPEN.includes(rec.status) || (rec.status === "held") === held) return;
+    rec.status = held ? "held" : "pending";
+    this.bump(rec);
+    this.save();
   }
 
   /** 端末へ届かないまま outbox の期限（既定14日）が来た。 */
@@ -295,7 +318,7 @@ export class LocalBox {
   deliveries() {
     return this.store.decisions.filter((d) => d.status === "answered" && d.delivery === "waiting" && d.route)
       .sort((a, b) => (a.updated_at < b.updated_at ? -1 : 1))
-      .map((d) => ({ decision_id: d.id, delivery_id: d.delivery_id!, route: d.route!, text: d.delivery_text! }));
+      .map((d) => ({ decision_id: d.id, delivery_id: d.delivery_id!, route: d.route!, text: d.delivery_text!, ...(d.answer?.attachments?.length ? { attachments: d.answer.attachments } : {}) }));
   }
 
   report(id: string, body: unknown) {
@@ -339,9 +362,51 @@ export class LocalBox {
     return { status: "passed", client: rec.client };
   }
 
+  // ---- 申請画像と答えの添付（この端末の 0600 のファイル。サーバーへは送らない）----
+
+  /** MCP が state/pc/uploads に置いた申請画像を受け取る（置いた側は LocalApi.uploadRequestImage）。 */
+  private takeUploads(ids: string[]): OutBlob[] {
+    if (new Set(ids).size !== ids.length) error("validation_failed", "同じ申請画像が2回並んでいます。");
+    const out = ids.map((id) => {
+      const base = join(this.root, "uploads", id.replace(/[^A-Za-z0-9-]/g, ""));
+      if (!existsSync(base) || !existsSync(`${base}.json`)) error("validation_failed", "使えない申請画像があります。もう一度付け直してください。");
+      const meta = JSON.parse(readFileSync(`${base}.json`, "utf8")) as { name: string; content_type: string };
+      return { bytes: new Uint8Array(readFileSync(base)), content_type: meta.content_type, name: meta.name, base };
+    });
+    if (out.reduce((n, x) => n + x.bytes.length, 0) > MAX_REQUEST_BYTES) error("too_large", "申請画像は合計50MBまでです。");
+    for (const x of out) { rmSync(x.base, { force: true }); rmSync(`${x.base}.json`, { force: true }); }
+    return out.map(({ base: _, ...x }) => x);
+  }
+
+  private keepFiles(decisionId: string, blobs: OutBlob[]): FileMeta[] {
+    if (!blobs.length) return [];
+    const dir = join(this.root, "files", decisionId);
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    return blobs.map((b) => {
+      const id = randomUUID();
+      writeFileSync(join(dir, id), b.bytes, { mode: 0o600 });
+      return { id, name: b.name, content_type: b.content_type, size: b.bytes.length, sha256: createHash("sha256").update(b.bytes).digest("hex") };
+    });
+  }
+
+  private dropFiles(decisionId: string, files: FileMeta[]) {
+    for (const f of files) rmSync(join(this.root, "files", decisionId, f.id), { force: true });
+  }
+
+  /** 添付の中身（Api.download と同じ道 /decisions/:id/attachments/:aid）。 */
+  download(path: string): Buffer {
+    const m = /^\/decisions\/([^/]+)\/attachments\/([^/?]+)$/.exec(path);
+    const rec = m ? this.store.decisions.find((d) => d.id === decodeURIComponent(m[1]!)) : undefined;
+    const aid = m ? decodeURIComponent(m[2]!) : "";
+    const known = rec && [...(rec.request_attachments ?? []), ...(rec.answer?.attachments ?? [])].some((f) => f.id === aid);
+    if (!rec || !known) return error("not_found", "その添付は見つかりません。");
+    return readFileSync(join(this.root, "files", rec.id, aid));
+  }
+
   /** 答え・取り下げから30日たった申請を消す（サーバーの既定の保存期間と同じ）。 */
   prune() {
     const before = Date.now() - KEEP_CLOSED_MS;
+    for (const d of this.store.decisions) if (!OPEN.includes(d.status) && Date.parse(d.updated_at) < before) rmSync(join(this.root, "files", d.id), { recursive: true, force: true });
     this.store.decisions = this.store.decisions.filter((d) => OPEN.includes(d.status) || Date.parse(d.updated_at) >= before);
   }
 
@@ -368,22 +433,31 @@ export class LocalBox {
       case "GET /deliveries": return { items: this.deliveries() };
       case "POST /deliveries/:id": return this.report(id, body);
       default:
-        if (p[0] === "decisions" && p[2] === "attachments") return error("not_found", "peer-channel の道では添付はまだ使えません（端末から運ぶ blob が未実装）。");
         return error("not_found", `この経路は手元にありません: ${method} ${url.pathname}`);
     }
   }
 }
 
-/** server/decisions.ts の deliveryText と同じ文（添付は無い）。接続テストは確認コードを添える。 */
+function formatBytes(size: number): string {
+  if (size < 1024) return `${size}B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)}KB`;
+  return `${(size / 1024 / 1024).toFixed(1)}MB`;
+}
+
+/** server/decisions.ts の deliveryText と同じ文。接続テストは確認コードを添える。 */
 function deliveryText(rec: Rec, answer: Answer, option: Option | undefined): string {
   const lines = [`[Approval Box] あなたが request_decision で出した申請 ${rec.id}「${rec.title}」に、利用者が答えました。`];
   if (option) lines.push(`答え: ${option.label}（option_id=${option.id}）`);
   if (answer.text) lines.push(option ? `添え書き: ${answer.text}` : `答え（文）: ${answer.text}`);
+  if (answer.attachments?.length) {
+    lines.push(`添付 ${answer.attachments.length}件（Approval Boxの get_attachment に decision_id="${rec.id}" と attachment_id を渡すと取れます）:`);
+    answer.attachments.forEach((a, i) => lines.push(`${i + 1}. ${a.name}（${a.content_type}、${formatBytes(a.size)}） attachment_id=${a.id}`));
+  }
   if (rec.setup_code) {
     lines.push("", `これはあなたが setup_test で始めた接続テストです。確認コード: ${rec.setup_code}`,
       `Approval Boxの confirm_setup_test を decision_id="${rec.id}", code="${rec.setup_code}" で呼んでください。それでセットアップ確認が終わります。`);
   } else {
-    lines.push("", option ? "この答えに従って作業を続けてください。" : "この指示に従って作業を続けてください。", SPEAK_BY_TITLE);
+    lines.push("", option ? "この答えに従って作業を続けてください。" : answer.text ? "この指示に従って作業を続けてください。" : "添付を確かめて作業を続けてください。", SPEAK_BY_TITLE);
   }
   return lines.join("\n");
 }

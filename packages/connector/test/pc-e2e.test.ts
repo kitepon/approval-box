@@ -176,6 +176,38 @@ test("request → device answer → the AI's channel; the server keeps no title,
   steer.closeChannel(PROFILE, channel.channel_id);
 });
 
+test("request images and answer attachments travel only between PC and phone; a device hold shows as held", { timeout: 60_000 }, async () => {
+  const image = Buffer.concat([Buffer.from("e2e-image-marker-51aa"), randomBytes(30_000)]);
+  const photo = Buffer.concat([Buffer.from("e2e-photo-marker-0d2c"), randomBytes(20_000)]);
+  const { id: upload } = await mcp.uploadRequestImage(image, "screen.png", "image/png");
+  const body = { title: "画像つき", context: "", options: [{ id: "ok", label: "OK" }, { id: "no", label: "NO" }], requester: "ナユタ", session_label: "e2e", client: "claude-code", route: { channel_id: "c-img", harness: "other" }, request_attachment_ids: [upload] };
+  const first = await mcp.call("POST", "/decisions", { ...body, request_attachment_ids: undefined }).catch((e: unknown) => e) as ServerError;
+  const d = await mcp.call<{ decision_id: string; request_attachments: { id: string; name: string }[] }>("POST", "/decisions", { ...body, check_token: first.body.check_token });
+  assert.deepEqual(d.request_attachments.map((a) => a.name), ["screen.png"]);
+
+  const req = await device.next("request", 15_000);
+  assert.equal(req.body.content.decision_id, d.decision_id);
+  assert.ok(Buffer.from(req.blobs![0]!.bytes).equals(image), "the image reached the phone byte-identical");
+  device.ack(req.body.id);
+
+  device.hold(req, true);
+  assert.equal((await device.next("ack")).body.result, "ok");
+  for (let i = 0; i < 50 && (await mcp.call<{ status: string }>("GET", `/decisions/${d.decision_id}`)).status !== "held"; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.equal((await mcp.call<{ status: string }>("GET", `/decisions/${d.decision_id}`)).status, "held");
+
+  device.answer(req, { option_id: "ok" }, [{ bytes: photo, content_type: "image/jpeg", name: "photo.jpg" }]);
+  assert.equal((await device.next("ack")).body.result, "ok");
+  let item: { text: string; attachments?: { id: string; sha256: string }[] } | undefined;
+  for (let i = 0; i < 100 && !item; i++) { item = (await mcp.call<{ items: { decision_id: string; text: string; attachments?: { id: string; sha256: string }[] }[] }>("GET", "/deliveries")).items.find((x) => x.decision_id === d.decision_id); if (!item) await new Promise((r) => setTimeout(r, 20)); }
+  assert.match(item!.text, /添付 1件/);
+  const got = await mcp.download(`/decisions/${d.decision_id}/attachments/${item!.attachments![0]!.id}`);
+  assert.ok(got.equals(photo), "the answer attachment is on the PC byte-identical");
+  assert.ok((await mcp.download(`/decisions/${d.decision_id}/attachments/${d.request_attachments[0]!.id}`)).equals(image));
+
+  const written = readdirSync(dir).filter((f) => /^(approval-box\.db|pc-mirror\.db)/.test(f) && statSync(join(dir, f)).isFile()).map((f) => readFileSync(join(dir, f)).toString("latin1")).join("");
+  for (const marker of ["e2e-image-marker-51aa", "e2e-photo-marker-0d2c", "画像つき"]) assert.ok(!written.includes(marker), marker);
+});
+
 test("a server without /pc/v1 says peer_channel false; the daemon picks today's path with a named line", { timeout: 30_000 }, async () => {
   const db = openDb(":memory:");
   const events = new EventHub(db);
