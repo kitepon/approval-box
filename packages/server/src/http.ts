@@ -20,8 +20,9 @@ import { LoginBillingError, type Checked } from "@kitepon/login-billing/server";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { type Library, PRODUCT_ID } from "./lb.ts";
 import { exportAccount } from "./export.ts";
+import { type AppLinks, appleAppSiteAssociation, assetLinks } from "./applinks.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal; library?: Library };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal; library?: Library; appLinks?: AppLinks };
 
 /** 登録クライアント（BellTeamなど）のsessionが通れる `/v1` の経路。ここに無いものは403。 */
 const CLIENT_ROUTES: [string, RegExp][] = [
@@ -172,6 +173,14 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   app.route("/api/admin",diagnosticsAdmin(diagnostics,services.diagnosticsAdminToken));
 
   app.get("/healthz", (c) => c.json({ ok: true }));
+
+  // アプリのリンクの宣言（設定がある時だけ。無ければ404。リダイレクトしない）。
+  const wellKnown = (body: unknown) => (c: Context) => {
+    if (!body) throw new ApiError("not_found", "このサーバーではアプリのリンクを設定していません。");
+    return c.body(JSON.stringify(body), 200, { "content-type": "application/json", "cache-control": "public, max-age=3600" });
+  };
+  app.get("/.well-known/assetlinks.json", wellKnown(services.appLinks && assetLinks(services.appLinks)));
+  app.get("/.well-known/apple-app-site-association", wellKnown(services.appLinks && appleAppSiteAssociation(services.appLinks)));
 
   // ================= アプリ・Web版 =================
   // GoogleとAppleのログイン。同じIDなら同じアカウント、違うIDなら別のアカウント。

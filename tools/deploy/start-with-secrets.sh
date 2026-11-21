@@ -44,5 +44,7 @@ if [ -n "${SECRETS_DIR:-}" ]; then
   put LB_PASS_KEY lb-pass-key
   put LB_PASS_KEY_PREVIOUS lb-pass-key-previous
   put LB_GOOGLE_CODE_CLIENT_SECRET lb-google-code-client-secret
+  put LB_WEB_GOOGLE_CLIENT_SECRET lb-web-google-client-secret
+  put LB_WEB_APPLE_PRIVATE_KEY lb-web-apple-private-key.p8 pem
 fi
 exec "$@"
