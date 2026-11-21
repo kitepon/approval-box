@@ -78,6 +78,13 @@ Edges:
 - The code expires → stay on S2; the QR, the code, the check number and the validity line are removed, and only `コードの期限が切れました。` and the button `新しいコードを出す` remain (with `やめる`); the guidance paragraph is removed too (ruling 2026-11-21 r2). No error dialog, no bounce to S1.
 - A native sign-in finishes meanwhile → `受信` (the native sign-in wins, contract 1.11).
 
+### One entry for every QR and 8-character code (Owner 2026-11-21: 「ユーザーが迷わなければいい」)
+The person never has to know which screen a QR or code belongs to.
+- Every `QRコードを読む` button and every 8-character code field in the app is the same reader. It decides by the content: an AI pairing QR/code -> the confirm `このAIをつなぎますか？`; a login QR/code of another device -> the confirm `この端末をログインさせますか？` (S8). A typed code is first looked up as an AI pairing; if no pairing has it, it is tried as a device login. Anything else -> S9 `決裁箱のQRコードではありません。`
+- The reader is reachable from S3 too: a `QRコードを読む` button in the S3 header on phones and tablets (where a camera exists), plus the existing places in S6 `AIをつなぐ` and S8 `ほかの端末をログインさせる`.
+- Camera: ask for camera access the first time the reader opens. If access was refused, say `カメラが許可されていません。設定で決裁箱のカメラを許可するか、8文字のコードを入力してください。` with `設定を開く`; never `この端末ではQRコードを読み取れません` on a device that has a camera.
+- The system camera app cannot open these QRs on purpose (they are not links); the S2 guidance already says to use the app.
+
 ### S3 `受信` / S4 `履歴` (lists)
 - In this order at the top of the list: the filter chips, then the search field `相談を検索`. No count line.
 - The same filter chips everywhere: `受信`: `すべて` `未回答` `保留`; `履歴`: `すべて` `回答済み` `取り下げ`. Every row shows its status word, pending rows included, with the same words (`未回答`, `保留`, `回答済み`, `取り下げ`) (ruling 2026-11-21 r2). Next to the status word (never instead of it) a row shows `急ぎ` when the request is urgent and `修正あり` when the AI amended it (ruling 2026-11-21 r3).
