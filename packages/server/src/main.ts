@@ -151,6 +151,13 @@ if (lbMissing.length === 3) {
       ...(previousKey && previousId ? { passKeyPrevious: { id: previousId, key: previousKey } } : {}),
       appleAudiences, googleAudiences, exemptK: [...freeAccountIds],
       ...(env.LB_GOOGLE_CODE_CLIENT_ID && secretValue("LB_GOOGLE_CODE_CLIENT_SECRET") ? { googleCode: { clientId: env.LB_GOOGLE_CODE_CLIENT_ID.trim(), clientSecret: secretValue("LB_GOOGLE_CODE_CLIENT_SECRET") } } : {}),
+      ...(() => {
+        // Web サインイン（契約1.20）。Google は Web 種のクライアント、Apple は Services ID と Sign in with Apple の鍵。そろった方だけ使う。
+        const google = env.LB_WEB_GOOGLE_CLIENT_ID && secretValue("LB_WEB_GOOGLE_CLIENT_SECRET") ? { clientId: env.LB_WEB_GOOGLE_CLIENT_ID.trim(), clientSecret: secretValue("LB_WEB_GOOGLE_CLIENT_SECRET") } : undefined;
+        const appleKey = secretValue("LB_WEB_APPLE_PRIVATE_KEY").replace(/\\n/g, "\n");
+        const apple = env.LB_WEB_APPLE_SERVICES_ID && env.LB_WEB_APPLE_TEAM_ID && env.LB_WEB_APPLE_KEY_ID && appleKey ? { servicesId: env.LB_WEB_APPLE_SERVICES_ID.trim(), teamId: env.LB_WEB_APPLE_TEAM_ID.trim(), keyId: env.LB_WEB_APPLE_KEY_ID.trim(), privateKey: appleKey } : undefined;
+        return google || apple ? { webSignIn: { ...(google ? { google } : {}), ...(apple ? { apple } : {}) } } : {};
+      })(),
       ...(appStoreApiOn ? { apple: { bundleId: env.APPSTORE_BUNDLE_ID || "dev.kitepon.approvalbox", issuerId: appStoreApi.issuerId, keyId: appStoreApi.keyId, privateKey: appStoreApi.privateKey } } : {}),
       ...(playServiceAccount ? { google: { packageName: env.PLAY_PACKAGE_NAME?.trim() || "dev.kitepon.approvalbox", serviceAccount: playServiceAccount } } : {}),
     });

@@ -1,6 +1,6 @@
 // 共有の login-billing ライブラリ（kitepon/login-billing 0.12.1（開発版、試験サーバーだけ）、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
 // ライブラリの内側は読まない。公開の入口（createLoginBilling・createHandler・Storage）だけを使う。
-import { createHandler, createLoginBilling, type AppleStoreConfig, type GoogleStoreConfig, type LoginBilling, type Storage } from "@kitepon/login-billing/server";
+import { createHandler, createLoginBilling, type AppleStoreConfig, type GoogleStoreConfig, type LoginBilling, type Storage, type WebSignInConfig } from "@kitepon/login-billing/server";
 import { type Db, get, run } from "./db.ts";
 
 /** 月額の商品（App Store・Google Playで同じID）。 */
@@ -83,6 +83,8 @@ export type LibraryInput = {
   googleAudiences: string[];
   /** Google の id だけで入る道（試験。LB_GOOGLE_CODE_CLIENT_ID・LB_GOOGLE_CODE_CLIENT_SECRET が揃った時だけ）。 */
   googleCode?: { clientId: string; clientSecret: string };
+  /** Web サインイン（契約1.20）。戻り先は publicUrl から作る（loopback・セッションのスキーム・/app/websignin のリンク）。 */
+  webSignIn?: Pick<WebSignInConfig, "google" | "apple">;
   apple?: AppleStoreConfig;
   google?: GoogleStoreConfig;
   /** 課金の対象外にする K（FREE_ACCOUNT_IDS）。 */
@@ -101,6 +103,7 @@ export function createLibrary(input: LibraryInput) {
     kKey: input.kKey,
     passKeys: { current: input.passKey, ...(input.passKeyPrevious ? { previous: input.passKeyPrevious } : {}) },
     exemptK: input.exemptK,
+    ...(input.webSignIn && (input.webSignIn.google || input.webSignIn.apple) ? { webSignIn: { ...input.webSignIn, publicOrigin: input.publicUrl, returns: { loopback: true, sessionSchemes: ["approvalbox-websignin"], links: [`${input.publicUrl}/app/websignin`] } } } : {}),
     billing: input.billing,
     storage,
     ...(input.fetch ? { fetch: input.fetch } : {}),
