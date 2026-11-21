@@ -5,8 +5,8 @@ const start = { slotId: "s".repeat(22), qrPayload: "lbq1:" + "s".repeat(22), sho
 const json = (route: { fulfill: (o: object) => Promise<void> }, status: number, body: unknown, headers: Record<string, string> = {}) =>
   route.fulfill({ status, contentType: "application/json", headers, body: JSON.stringify(body) });
 
-async function fixture(page: Page, options: { libraryLogin?: boolean; signedIn?: boolean; takes?: ("pending" | "ready" | "gone")[]; decisions402?: boolean; code401?: string } = {}) {
-  const seen = { authorization: [] as (string | undefined)[], starts: 0, signouts: 0, exports: 0, labels: [] as string[], signedIn: options.signedIn ?? false };
+async function fixture(page: Page, options: { libraryLogin?: boolean; signedIn?: boolean; takes?: ("pending" | "ready" | "gone")[]; code401?: string } = {}) {
+  const seen = { authorization: [] as (string | undefined)[], starts: 0, signouts: 0, labels: [] as string[], signedIn: options.signedIn ?? false };
   const takes = [...(options.takes ?? ["pending", "ready"])];
   // "**/v1/**" also matches /auth/v1/..., and the route registered last wins, so the library mock comes last.
   await page.route("**/v1/**", async (route) => {
@@ -14,12 +14,8 @@ async function fixture(page: Page, options: { libraryLogin?: boolean; signedIn?:
     seen.authorization.push(await route.request().headerValue("authorization") ?? undefined);
     if (url.pathname === "/v1/auth/config") return json(route, 200, { library_login: options.libraryLogin ?? true, ...(options.libraryLogin === false ? { apple_services_id: "dev.example.web" } : {}) });
     if (!seen.signedIn) return json(route, 401, { error: options.code401 ?? "pass_invalid" });
-    if (url.pathname === "/v1/me") return json(route, 200, { user_id: "k", login: null, billing: "store", plan: options.decisions402 ? "expired" : "active", ...(options.decisions402 ? {} : { store: "app_store", expires_at: "2026-12-21T00:00:00Z" }), setup: { verified: true, checks: [] }, purchase_mark: "k" });
-    if (url.pathname === "/v1/me/settings") return json(route, 200, { retention_days: 30 });
-    if (url.pathname === "/v1/me/export") { seen.exports++; return route.fulfill({ status: 200, contentType: "application/json", headers: { "content-disposition": 'attachment; filename="approval-box-export-20261120.json"' }, body: '{"account":{}}' }); }
-    if (url.pathname === "/v1/decisions" && options.decisions402) return json(route, 402, { error: { code: "subscription_expired", message: "Approval Boxの契約がありません。" } });
-    if (url.pathname === "/v1/decisions") return json(route, 200, { items: [] });
-    if (url.pathname === "/v1/events") return route.fulfill({ status: 200, contentType: "text/event-stream", body: "" });
+    if (url.pathname === "/v1/me") return json(route, 200, { user_id: "k", login: null, billing: "store", plan: "active", store: "app_store", expires_at: "2026-12-21T00:00:00Z", setup: { verified: true, checks: [] }, purchase_mark: "k" });
+    if (url.pathname === "/v1/pairing/lookup") return json(route, 200, { pairing_id: "p1", device_name: "Test PC", clients: ["codex"] });
     return json(route, 200, {});
   });
   await page.route("**/auth/v1/**", async (route) => {
@@ -41,7 +37,7 @@ const startLogin = (page: Page) => page.getByRole("button", { name: "Sign in wit
 
 test("S1: the phone-approval button starts nothing until pressed; purpose, first-time steps, legal links and language picker are on it", async ({ page }) => {
   const seen = await fixture(page);
-  await page.goto("/");
+  await page.goto("/pair?c=ABCD2345");
   await expect(page.getByRole("heading", { name: "Approval Box", exact: true })).toBeVisible();
   await expect(page.getByText("Answer your AI's questions from your phone or computer.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Terms of Service" })).toHaveAttribute("href", "/terms.html");
@@ -57,7 +53,7 @@ test("S1: the phone-approval button starts nothing until pressed; purpose, first
 
 test("S2: QR, login code, check number, validity and the guidance; cancel returns to S1; then the app opens with the cookie only", async ({ page }) => {
   const seen = await fixture(page, { takes: ["pending", "pending", "ready"] });
-  await page.goto("/");
+  await page.goto("/pair?c=ABCD2345");
   await startLogin(page);
   await expect(page.getByText("Scan the QR", { exact: false })).toHaveCount(0);
   await expect(page.getByText("On the subscribed phone, open Approval Box, go to Settings → Sign in other devices, then scan this QR code or enter the code. If the check number matches, press “Allow”.")).toBeVisible();
@@ -69,13 +65,14 @@ test("S2: QR, login code, check number, validity and the guidance; cancel return
   await expect(page.getByRole("img", { name: "QR code" }).locator("svg")).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign in with Apple" })).toHaveCount(0);
   expect(seen.labels).toEqual(["Chrome on Linux"]);
-  await expect(page.getByRole("link", { name: "Inbox" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("heading", { name: "Connect an AI", exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("link", { name: "Inbox" })).toHaveCount(0); // no menu on /pair
   expect(seen.authorization.every((value) => value === undefined)).toBe(true);
 });
 
 test("S2: cancel (やめる) goes back to S1", async ({ page }) => {
   await fixture(page);
-  await page.goto("/");
+  await page.goto("/pair?c=ABCD2345");
   await startLogin(page);
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("button", { name: "Sign in with phone approval" })).toBeVisible();
@@ -83,7 +80,7 @@ test("S2: cancel (やめる) goes back to S1", async ({ page }) => {
 
 test("S2: an expired code stays on S2 and offers a new one", async ({ page }) => {
   const seen = await fixture(page, { takes: ["gone"] });
-  await page.goto("/");
+  await page.goto("/pair?c=ABCD2345");
   await startLogin(page);
   await expect(page.getByText("The code has expired.")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
@@ -99,82 +96,25 @@ for (const [code, text] of [
   ["pass_invalid", "You were signed out. Please sign in again."],
 ] as const) test(`S1b: a signed-in browser that gets 401 ${code} returns to S1 with its reason`, async ({ page }) => {
   const seen = await fixture(page, { signedIn: true, code401: code });
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
+  await page.goto("/pair?c=ABCD2345");
+  const connect = page.getByRole("button", { name: "Connect", exact: true });
+  await expect(connect).toBeVisible(); // the lookup finished
   seen.signedIn = false;
-  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await connect.click(); // the next call gets the 401
   await expect(page.getByRole("status").filter({ hasText: text })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign in with phone approval" })).toBeVisible();
 });
 
 test("S1: a first visit that is simply signed out shows no banner", async ({ page }) => {
   await fixture(page);
-  await page.goto("/");
+  await page.goto("/pair?c=ABCD2345");
   await expect(page.getByRole("button", { name: "Sign in with phone approval" })).toBeVisible();
   await expect(page.getByRole("status")).toHaveCount(0);
 });
 
-test("an already signed-in browser skips the login; settings sections, export and sign out go through the library", async ({ page }) => {
-  const seen = await fixture(page, { signedIn: true });
-  await page.goto("/settings");
-  await expect(page.getByText("Subscribed (App Store)")).toBeVisible();
-  const headings = await page.getByRole("heading", { level: 2 }).allTextContents();
-  expect(headings).toEqual(["Account", "Subscription", "Other devices", "Notifications", "Language", "History storage", "Help", "Account management"]);
-  await expect(page.getByText("The browser version has no notifications. You can receive notifications in the phone and PC apps.", { exact: true })).toBeVisible();
-  await expect(page.getByText("Expires: 12/21/2026")).toBeVisible();
-  await expect(page.getByText("Signed in with phone approval", { exact: true })).toBeVisible();
-  await expect(page.getByText("Subscribed (App Store)")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Delete account and all data" })).toBeVisible();
-  const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Get a copy of the information we keep" }).click();
-  expect((await download).suggestedFilename()).toBe("approval-box-export-20261120.json");
-  expect(seen.exports).toBe(1);
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("button", { name: "Sign in with phone approval" })).toBeVisible();
-  expect(seen.signouts).toBe(1);
-  expect(seen.authorization.every((value) => value === undefined)).toBe(true);
-});
-
-test("S7: Settings → About your subscription shows the status, the cannot-buy text and the legal links", async ({ page }) => {
-  await fixture(page, { signedIn: true });
-  await page.goto("/settings");
-  await page.getByRole("link", { name: "About your subscription" }).click();
-  await expect(page).toHaveURL(/\/plan$/);
-  await expect(page.getByRole("heading", { name: "Subscription", exact: true })).toBeVisible();
-  await expect(page.getByText("Subscribed (App Store)")).toBeVisible();
-  await expect(page.getByText("Expires:", { exact: false })).toBeVisible();
-  await expect(page.getByText("You can't subscribe on this device.", { exact: false })).toBeVisible();
-  await expect(page.getByText("This device is signed in through the approval of the subscribed phone.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Notation based on the Specified Commercial Transactions Act" })).toBeVisible();
-});
-
-test("a 402 shows S7 (cannot-buy text, status, Sign out) in place of the inbox and history, and Sign out leaves", async ({ page }) => {
-  const seen = await fixture(page, { signedIn: true, decisions402: true });
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Subscription", exact: true })).toBeVisible();
-  await expect(page.getByText("Not subscribed", { exact: true })).toBeVisible();
-  await expect(page.getByText("You can't subscribe on this device. Subscribe in the Approval Box app on iPhone, iPad, Mac or Android, from Settings → Subscription.")).toBeVisible();
-  await page.getByRole("link", { name: "History" }).click();
-  await expect(page.getByRole("heading", { name: "Subscription", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("button", { name: "Sign in with phone approval" })).toBeVisible();
-  expect(seen.signouts).toBe(1);
-});
-
-test("the event stream stops on 402 instead of retrying forever", async ({ page }) => {
-  await fixture(page, { signedIn: true, decisions402: true });
-  let events = 0;
-  await page.route("**/v1/events", (route) => { events++; return json(route, 402, { error: "no_entitlement" }); });
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Subscription", exact: true })).toBeVisible();
-  await page.waitForTimeout(3500);
-  expect(events).toBe(1);
-});
-
 test("without library_login the Apple button stays and no library login starts", async ({ page }) => {
   const seen = await fixture(page, { libraryLogin: false });
-  await page.goto("/");
+  await page.goto("/pair?c=ABCD2345");
   await expect(page.getByRole("button", { name: "Sign in with Apple" })).toBeVisible();
   expect(seen.starts).toBe(0);
 });

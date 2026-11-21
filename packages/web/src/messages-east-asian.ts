@@ -55,7 +55,6 @@ export const ko: Record<MessageKey, string> = {
   "接続テスト": "연결 테스트",
   "追加しました。PCの画面でセットアップが続きます。": "기기를 추가했습니다. PC에서 설정을 계속해 주세요.",
   "断りました。この端末は追加されません。": "거부했습니다. 이 기기는 추가되지 않습니다.",
-  "接続へ": "연결로 돌아가기",
   "端末名": "기기 이름",
   "使うAI": "사용할 AI",
   "自分で approval-box の setup を実行した覚えがなければ「心当たりがない」を押してください。": "직접 approval-box setup을 실행하지 않았다면 ‘모르는 기기입니다’를 선택해 주세요.",
@@ -205,6 +204,9 @@ export const ko: Record<MessageKey, string> = {
   "AIごとの登録手順": "AI별 등록 방법",
   "登録手順をコピー": "등록 절차 복사",
   "相談": "상담",
+  "ブラウザ版は終わりました": "브라우저 버전은 종료되었습니다",
+  "決裁箱は、iPhone・iPad・Mac・Android・Linux のアプリでお使いください。相談の中身を、サーバーから配るブラウザの画面には出さないためです。": "결재함은 iPhone·iPad·Mac·Android·Linux 앱에서 이용해 주세요. 상담 내용을 서버에서 내려받는 브라우저 화면에는 표시하지 않기 때문입니다.",
+  "サポート（アプリの入手）": "지원(앱 받기)",
 };
 export const zhHans: Record<MessageKey, string> = {
   "{name}: {message}": "{name}: {message}",
@@ -262,7 +264,6 @@ export const zhHans: Record<MessageKey, string> = {
   "接続テスト": "测试连接",
   "追加しました。PCの画面でセットアップが続きます。": "设备已添加，请在电脑上继续设置。",
   "断りました。この端末は追加されません。": "已拒绝请求，不会添加此设备。",
-  "接続へ": "返回连接",
   "端末名": "设备名称",
   "使うAI": "使用的AI",
   "自分で approval-box の setup を実行した覚えがなければ「心当たりがない」を押してください。": "如果您没有亲自运行 approval-box setup，请选择“我不认识此设备”。",
@@ -412,6 +413,9 @@ export const zhHans: Record<MessageKey, string> = {
   "AIごとの登録手順": "各 AI 的设置指南",
   "登録手順をコピー": "复制设置步骤",
   "相談": "咨询",
+  "ブラウザ版は終わりました": "浏览器版已经结束",
+  "決裁箱は、iPhone・iPad・Mac・Android・Linux のアプリでお使いください。相談の中身を、サーバーから配るブラウザの画面には出さないためです。": "请在 iPhone、iPad、Mac、Android、Linux 的应用中使用决裁箱。因为咨询内容不会显示在由服务器提供的浏览器页面上。",
+  "サポート（アプリの入手）": "支持（获取应用）",
 };
 export const zhHant: Record<MessageKey, string> = {
   "{name}: {message}": "{name}: {message}",
@@ -469,7 +473,6 @@ export const zhHant: Record<MessageKey, string> = {
   "接続テスト": "測試連線",
   "追加しました。PCの画面でセットアップが続きます。": "裝置已新增，請在電腦上繼續設定。",
   "断りました。この端末は追加されません。": "已拒絕請求，不會新增此裝置。",
-  "接続へ": "返回連線",
   "端末名": "裝置名稱",
   "使うAI": "使用的AI",
   "自分で approval-box の setup を実行した覚えがなければ「心当たりがない」を押してください。": "如果您沒有親自執行 approval-box setup，請選擇「我不認識此裝置」。",
@@ -619,4 +622,7 @@ export const zhHant: Record<MessageKey, string> = {
   "AIごとの登録手順": "各 AI 的設定指南",
   "登録手順をコピー": "複製設定步驟",
   "相談": "諮詢",
+  "ブラウザ版は終わりました": "瀏覽器版已經結束",
+  "決裁箱は、iPhone・iPad・Mac・Android・Linux のアプリでお使いください。相談の中身を、サーバーから配るブラウザの画面には出さないためです。": "請在 iPhone、iPad、Mac、Android、Linux 的應用程式中使用決裁箱。因為諮詢內容不會顯示在由伺服器提供的瀏覽器頁面上。",
+  "サポート（アプリの入手）": "支援（取得應用程式）",
 };

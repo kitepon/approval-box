@@ -17,7 +17,7 @@ export const en = {
   "画像の大きさが一致しません。": "The image size does not match.", "画像を確認できませんでした。": "Could not verify the image.", "この画像はブラウザで表示できません。原本を保存して開いてください。": "This browser cannot display the image. Save the original and open it.", "画像を読み込み中…": "Loading image…", "拡大する": "Enlarge", "再読込": "Reload", "原本を保存": "Save original", "閉じる": "Close",
   "コピーしてください": "Copy this text",
   "接続テスト": "Test connection",
-  "追加しました。PCの画面でセットアップが続きます。": "Device added. Continue setup on your computer.", "断りました。この端末は追加されません。": "Request rejected. This device will not be added.", "接続へ": "Back to connections", "端末名": "Device name", "使うAI": "AI clients",
+  "追加しました。PCの画面でセットアップが続きます。": "Device added. Continue setup on your computer.", "断りました。この端末は追加されません。": "Request rejected. This device will not be added.", "端末名": "Device name", "使うAI": "AI clients",
   "自分で approval-box の setup を実行した覚えがなければ「心当たりがない」を押してください。": "If you did not run approval-box setup yourself, choose I don’t recognize this device.", "心当たりがない": "I don’t recognize this device",
   "AIがこの申請を取り下げました。": "The AI cancelled this request.", "AIが内容を直しました。内容を確かめてから答えてください。": "The AI updated this request. Review the changes before answering.", "受信一覧へ": "Back to inbox", "読み込み中…": "Loading…", "テスト": "Test", "接続:": "Connection:", "AIが修正しました": "Updated by AI", "似た申請と別件である理由": "Why this is a separate request", "AIの推奨": "AI recommendation",
   "選択肢を選ばずに、文だけで指示し直すこともできます": "You can reply with instructions without choosing an option", "アップロード中…": "Uploading…", "（文で回答）": "(Text answer)", "（添付で回答）": "(Attachment answer)",
@@ -118,5 +118,8 @@ export const en = {
   "AIごとの登録手順": "Setup guides by AI",
   "登録手順をコピー": "Copy setup steps",
   "相談": "Request",
+  "ブラウザ版は終わりました": "The browser version has ended",
+  "決裁箱は、iPhone・iPad・Mac・Android・Linux のアプリでお使いください。相談の中身を、サーバーから配るブラウザの画面には出さないためです。": "Please use Approval Box in the apps for iPhone, iPad, Mac, Android and Linux. Your requests are not shown in a browser screen served from the server.",
+  "サポート（アプリの入手）": "Support (get the app)",
 } as const;
 export type MessageKey = keyof typeof en;
