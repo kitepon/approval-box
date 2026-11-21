@@ -23,6 +23,8 @@ This file is the single source of the screens: states, operations, labels and gu
 
 Everything else is the same everywhere: screen names, headings, button labels, section order, guidance texts, error texts, confirmations.
 
+No code in any dialog (ruling 2026-11-22): an S9 alert shows only the app's own sentence, or the server's localized message where the API gives one; never an error code, an exception text or a "(code)" line. The code goes only to the diagnostic report. Failure texts of the login paths: native sign-in and web sign-in `サインインできませんでした。もう一度お試しください。`; logging this device in by a phone (QR, code, take) `ログインできませんでした。もう一度お試しください。`; approving another device `許可できませんでした。もう一度お試しください。`; an unknown failure anywhere else `処理に失敗しました。もう一度お試しください。`
+
 ## 1. Words (one name per thing)
 
 | Thing | The one label | Replaces |
