@@ -16,7 +16,7 @@ This file is the single source of the screens: states, operations, labels and gu
 | May differ | Why | How it still looks the same |
 |---|---|---|
 | The container: tab bar on a phone, sidebar on iPad, Mac, Linux and a wide browser | platform convention | the same 4 items, same order, same labels |
-| The native sign-in button: `Appleでログイン` on iPhone/iPad/Mac, `Googleでログイン` on Android, none on Linux/Web | login-billing contract §3: the apple part signs in with Apple only, the android part with Google only, every other device is logged in by a phone | the same screen; the button is simply absent where the contract has none |
+| The native sign-in button: Apple's system button (`Appleでサインイン`, text fixed by Apple's HIG) on iPhone/iPad/Mac, Google's branded `Googleでログイン` on Android, none on Linux/Web (ruling 2026-11-21: the vendor's own button text wins) | login-billing contract §3: the apple part signs in with Apple only, the android part with Google only, every other device is logged in by a phone | the same screen; the button is simply absent where the contract has none |
 | Whether this device can buy | contract §3: only a device signed in with its own store (a store pass) can buy; a device logged in by a phone (handoff pass), Linux and Web cannot | the same screen `契約` with the same wording; the buy block is replaced by the same "where to buy" text |
 | QR scanning | the Mac and Linux have no camera scanner | the code field is always there; the QR button is added where a camera exists |
 | Keyboard shortcuts | desktop convention | optional extras, never the only way |
@@ -32,7 +32,7 @@ Everything else is the same everywhere: screen names, headings, button labels, s
 | AI and PC connections | `接続` (its own menu item everywhere) | Mac `設定・接続` |
 | Settings | `設定` | |
 | The paid plan | `契約` (section, screen and button `契約について`) | `プラン`, `Approval Boxの契約`, `契約・購入を確認` |
-| Sign in with this device's own account | `Appleでログイン` / `Googleでログイン` | `Appleでサインイン` |
+| Sign in with this device's own account | the vendor's own button: `Appleでサインイン` / `Googleでログイン` | |
 | Log this device in by a phone's approval | `スマホの承認でログイン` | `別のスマホでログイン`, `スマホでログイン` |
 | Approve another device's login (on a store phone) | `ほかの端末をログインさせる` | `QRコードまたはコードでログインさせる`, `別の端末のログインを許可` |
 | Devices this phone logged in | `ログインさせた端末` | |
@@ -47,7 +47,7 @@ Always 4 items, in this order: `受信` (with the pending count), `履歴`, `接
 ### S1 `ログイン` (signed out)
 In this order:
 1. `Approval Box` / `AIの相談に、スマホやPCから答えます。`
-2. The native button where the contract has one: `Appleでログイン` or `Googleでログイン`.
+2. The native button where the contract has one: Apple's `Appleでサインイン` or Google's `Googleでログイン`.
 3. `スマホの承認でログイン`. This is the main button on Linux/Web, and the second button where a native sign-in exists.
 4. Disclosure `はじめての方へ` (the same 3 steps everywhere):
    1. `iPhone・iPad・Mac または Android の決裁箱で、Apple または Google でログインし、設定 → 契約 から契約します。`
@@ -64,7 +64,7 @@ Edges:
 - Pass stopped from the phone: `この端末のログインは、承認したスマホから止められました。もう一度ログインしてください。`
 - Pass expired (14 days unused): `しばらく使われなかったため、ログインが切れました。もう一度ログインしてください。`
 - Other 401: `ログインが切れました。もう一度ログインしてください。`
-Today all six apps drop to sign-in silently.
+Mapping: library code `pass_refused` → stopped, `pass_expired` → expired, anything else (e.g. `pass_invalid`) → the generic text (codes: login-billing library-contract.md §2). Before the redesign all six apps dropped to sign-in silently.
 
 ### S2 `スマホの承認を待っています`
 1. QR (where shown), `ログインコード` `ABCD-EFGH`, `確認番号` `NN`, `HH:MMまで有効`.
@@ -109,7 +109,7 @@ Same on every app. The Mac gains `外す`, `テストする`, the guides and the
      - before setup is verified: `契約の前に、AIとつながっているか確かめます。` → `1. 接続テストの申請に答える` (button `接続テストの申請を開く` → S5) → `2. 契約する`
      - then the price and the button `1か月無料で試す（その後 ¥… / 月）` or `¥… / 月で契約する`, `購入を復元`, and when active `App Storeで契約を管理` / `Google Playで契約を管理`
    - **Cannot buy here** (handoff pass, Linux, Web), the same text everywhere: `この端末では契約できません。契約は、iPhone・iPad・Mac または Android の決裁箱で、設定 → 契約 から行います。` When active: `この端末は、契約しているスマホの承認でログインしています。` with no buy, restore or manage controls.
-3. `1か月ごとの自動更新。解約は、契約したストアの管理画面から行えます。` + `利用規約` `プライバシーポリシー` `特定商取引法に基づく表記`.
+3. `1か月ごとの自動更新。解約は、契約したストアの管理画面から行えます。` + `利用規約` (/terms.html) `プライバシーポリシー` (/privacy.html) `特定商取引法に基づく表記` (https://kitepon.dev/specified-commercial-transactions/#approval-box).
 4. On no contract, also `ログアウト` (so a wrong account is never a dead end).
 
 ### S8 `設定` (same sections, same order, everywhere)
@@ -132,7 +132,7 @@ One alert title everywhere: `確認してください`. Its text is the server's
 ```mermaid
 stateDiagram-v2
   [*] --> S1
-  S1 --> Inbox: Appleでログイン / Googleでログイン (where present)
+  S1 --> Inbox: Appleでサインイン / Googleでログイン (where present)
   S1 --> S2: スマホの承認でログイン
   S2 --> Inbox: the phone approves
   S2 --> S2: code expires → 新しいコードを出す
@@ -161,7 +161,7 @@ stateDiagram-v2
 | App | Main changes |
 |---|---|
 | Web | `既決` → `履歴`; heading `受信`; language picker to `設定`; S7 replaces the 402 dead end; S1b banners; S2 guidance with the phone path; `ログイン` line for phone approval; legal links in `設定` |
-| iPhone/iPad | labels (`Appleでログイン`, `スマホの承認でログイン`, `ほかの端末をログインさせる`, `AIをつなぐ`); plan sheet → S7; iPad chips and search the same as iPhone; S1b banners; S2 expiry stays on screen |
+| iPhone/iPad | labels (`スマホの承認でログイン`, `ほかの端末をログインさせる`, `AIをつなぐ`); plan sheet → S7; iPad chips and search the same as iPhone; S1b banners; S2 expiry stays on screen |
 | Mac | `設定・接続` → `接続` + `設定`; S6 full (`外す`, `テストする`, guides, tokens); settings order as S8; `ヘルプ`; S7 (benefit lines, manage link); 402 shows S7 |
 | Android | labels; contract dialog → S7 screen; settings order as S8; S1b banners |
 | Linux | `スマホの承認でログイン` start screen as S1; S7 (402 alert replaced); settings order as S8; `ほかの端末` explanatory section; filter chips and search |
