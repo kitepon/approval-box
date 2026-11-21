@@ -1,4 +1,4 @@
-// 共有の login-billing ライブラリ（kitepon/login-billing 0.13.0（開発版、試験サーバーだけ）、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
+// 共有の login-billing ライブラリ（kitepon/login-billing 0.17.0（開発版、試験サーバーだけ）、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
 // ライブラリの内側は読まない。公開の入口（createLoginBilling・createHandler・Storage）だけを使う。
 import { createHandler, createLoginBilling, type AppleStoreConfig, type GoogleStoreConfig, type LoginBilling, type Storage, type WebSignInConfig } from "@kitepon/login-billing/server";
 import { type Db, get, run } from "./db.ts";
@@ -113,7 +113,7 @@ export function createLibrary(input: LibraryInput) {
   });
   // 接続元は手前のプロキシ（Caddy・cloudflared）が付けた X-Forwarded-For の最後の値。http.ts の clientKey と同じ。
   const handler = createHandler(lb, { prefix: "/auth/v1", origins: [input.publicUrl], caller: (r) => r.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || undefined });
-  // signin/nonce・handoff/start・websignin/start・prove/take・ticket/check はライブラリが接続元ごとに絞る（0.10.1）。残る名前のない2つをここで絞る。
+  // signin/nonce・handoff/start・websignin/start・prove/take・ticket/check はライブラリが接続元ごとに絞る（0.10.1。handoff/start は 0.17.0 から署名つきの開始も通行証ごとに絞る）。残る名前のない2つをここで絞る。
   const limits: Record<string, (client: string) => boolean> = { "/auth/v1/websignin/callback": rateLimiter(20, 60_000), "/auth/v1/websignin/take": rateLimiter(60, 60_000) };
   return { lb, handler, storage, allow: (path: string, client: string) => limits[path]?.(client) ?? true };
 }
