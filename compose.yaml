@@ -45,6 +45,13 @@ services:
       LB_GOOGLE_CODE_CLIENT_SECRET: ${LB_GOOGLE_CODE_CLIENT_SECRET:-}
       LB_GOOGLE_CODE_CLIENT_SECRET_FILE: ${LB_GOOGLE_CODE_CLIENT_SECRET_FILE:-}
       LB_REKEY_DELETE_IDS: ${LB_REKEY_DELETE_IDS:-}
+      # アプリのリンク（/.well-known、Webサインインの戻り /app/websignin）。形は docs/architecture/login-pass.md。無ければ404。
+      AB_ANDROID_APP_LINKS: ${AB_ANDROID_APP_LINKS:-}
+      AB_APPLE_APP_IDS: ${AB_APPLE_APP_IDS:-}
+      # peer-channel の TURN（/pc/v1/turn）。両方そろった時だけ。無ければ urls は空。docs/architecture/peer-channel-adoption.md
+      PC_TURN_SECRET: ${PC_TURN_SECRET:-}
+      PC_TURN_SECRET_FILE: ${PC_TURN_SECRET_FILE:-}
+      PC_TURN_URLS: ${PC_TURN_URLS:-}
       PLAY_PRODUCT_IDS: ${PLAY_PRODUCT_IDS:-}
       PLAY_PACKAGE_NAME: ${PLAY_PACKAGE_NAME:-}
       PLAY_CLIENT_EMAIL: ${PLAY_CLIENT_EMAIL:-}

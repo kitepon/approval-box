@@ -245,3 +245,15 @@ test("/.well-known app links: served from the settings as JSON without redirect,
     assert.equal((await y.call("GET", "/.well-known/apple-app-site-association")).status, 404);
   } finally { await y.close(); }
 });
+
+test("the test server's Android app-links value parses as written in login-pass.md", () => {
+  const play = "29:80:1A:79:E6:33:85:82:26:D8:C4:30:96:E9:F4:DD:A8:91:01:6B:C8:47:01:C7:CA:BD:B7:D8:C5:BD:97:36";
+  const upload = "7B:8B:69:03:39:83:C7:DE:D4:64:7C:B8:1F:6E:29:0C:2E:45:81:81:6F:4B:A0:D0:FC:1F:A1:7B:B9:37:69:96";
+  const debug = "32:38:26:CF:84:B5:17:5A:E3:A0:88:85:BB:29:44:2D:64:BE:2D:E3:A9:C3:2E:5D:DC:EC:7D:96:FA:76:61:B0";
+  const parsed = parseAppLinks(`dev.kitepon.approvalbox=${play},${upload},${debug};dev.kitepon.approvalbox.debug=${debug}`);
+  assert.deepEqual(parsed.problems, []);
+  assert.deepEqual(parsed.links.android, [
+    { packageName: "dev.kitepon.approvalbox", fingerprints: [play, upload, debug] },
+    { packageName: "dev.kitepon.approvalbox.debug", fingerprints: [debug] },
+  ]);
+});

@@ -44,5 +44,6 @@ if [ -n "${SECRETS_DIR:-}" ]; then
   put LB_PASS_KEY lb-pass-key
   put LB_PASS_KEY_PREVIOUS lb-pass-key-previous
   put LB_GOOGLE_CODE_CLIENT_SECRET lb-google-code-client-secret
+  put PC_TURN_SECRET pc-turn-secret
 fi
 exec "$@"
