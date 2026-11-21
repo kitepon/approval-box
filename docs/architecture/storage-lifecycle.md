@@ -28,7 +28,7 @@ foxの標準setupで、通常fileの.claude.jsonへのrenameがEPERMとなり、
 | --- | --- | --- | --- |
 | npm build/connector esbuild | server dist、Web dist、bundle chunks/ライセンス | Web/esbuildは既出力を置換。source/lockを原本として保持 | 完了前の配布を成功扱いしない。次buildが同出力を置換 |
 | cli.installRuntime/setup | home/runtime/version、harness設定の絶対path、動作中旧MCP/daemon | 同版を置換、設定backupOnceは一個 | 旧会話の参照が残るので旧runtime一括GCをしない。認証はcacheとして消さない |
-| server Attachments/Decisions | SQLite＋添付原本、Web/native/AI | closed保持期間、下書き24h、part1h、孤立原本GC | DB参照ある原本を削除せず、強制終了のpartは次通常hourly GC |
+| server Attachments/Decisions | SQLite＋添付原本、Web/native/AI | closed保持期間、下書き24h、part1h、孤立原本GC。SQLiteは `secure_delete = on` で開き、消した行を空きページに残さない。起動時に空きページがあれば一度 `vacuum` とWALの切り詰め（2026-11-21、ミランダ f02s） | DB参照ある原本を削除せず、強制終了のpartは次通常hourly GC |
 | daemon saveAttachment | home/attachments、回答に書いたpathとget_attachment | hash一致を再利用、30日超はpruneAttachments | 保存失敗も本文配送は継続、get_attachmentを案内。唯一の資料は利用者が別保存 |
 | server main cleanup/停止 | DB event/pairing/診断/決裁/添付、Web/API | hourly prune、SIGTERM/INTでabort→HTTP close→DB close | WAL/DBを容量理由で除去しない。利用者のpending/heldは保持 |
 | 通常配備normal_entry | expectedrun/manifest/prepared-source.tar、complete/bundle/outbox、監査/復旧reader | commit＋policy＋変換recipe＋hashに結んだ耐久原本 | resultだけでoutbox終端としない。unknown/唯一archiveを保持し自動再配備しない |

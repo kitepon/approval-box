@@ -243,9 +243,15 @@ export type Db = DatabaseSync;
 export function openDb(file: string): Db {
   if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
-  db.exec("pragma journal_mode = wal; pragma foreign_keys = on; pragma busy_timeout = 5000;");
+  // 消した行を空きページに文字として残さない（申請の自動削除・アカウント削除・旧いログインの一掃）。
+  db.exec("pragma journal_mode = wal; pragma foreign_keys = on; pragma busy_timeout = 5000; pragma secure_delete = on;");
   db.exec(schema);
   migrate(db);
+  // 以前の版が消した行の名残（空きページ）があれば、一度詰め直して消す。WALも空にする。
+  if (file !== ":memory:" && (get<{ freelist_count: number }>(db, "pragma freelist_count")?.freelist_count ?? 0) > 0) {
+    db.exec("vacuum");
+    db.exec("pragma wal_checkpoint(truncate)");
+  }
   return db;
 }
 
