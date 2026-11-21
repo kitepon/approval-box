@@ -1,4 +1,4 @@
-// 共有の login-billing ライブラリ（kitepon/login-billing 0.10.0（開発版、試験サーバーだけ）、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
+// 共有の login-billing ライブラリ（kitepon/login-billing 0.10.1（開発版、試験サーバーだけ）、無改造）をApproval Boxへつなぐ所。形は docs/architecture/login-pass.md。
 // ライブラリの内側は読まない。公開の入口（createLoginBilling・createHandler・Storage）だけを使う。
 import { createHandler, createLoginBilling, type AppleStoreConfig, type GoogleStoreConfig, type LoginBilling, type Storage } from "@kitepon/login-billing/server";
 import { type Db, get, run } from "./db.ts";
@@ -32,6 +32,20 @@ export class SqliteStorage implements Storage {
   async take(key: string) {
     const row = get<{ value: string; expires_at: number }>(this.db, "delete from lb_kv where key = ? returning value, expires_at", key);
     return row && row.expires_at > this.now() ? row.value : undefined;
+  }
+
+  private readonly hits = new Map<string, { n: number; until: number }>();
+
+  /** 接続元ごとの回数（契約1.21）。鍵はライブラリがHMACした値。メモリだけで数え、ディスクへは書かない。 */
+  async hit(key: string, limit: number, windowMs: number) {
+    const t = this.now();
+    const h = this.hits.get(key);
+    if (!h || h.until <= t) {
+      if (this.hits.size >= 100_000) for (const [k, v] of this.hits) if (v.until <= t) this.hits.delete(k);
+      this.hits.set(key, { n: 1, until: t + windowMs });
+      return 1 <= limit;
+    }
+    return ++h.n <= limit;
   }
 
   /** 期限を過ぎた行を消す（読む側も期限切れは見ない）。 */
@@ -92,13 +106,10 @@ export function createLibrary(input: LibraryInput) {
     ...(input.fetch ? { fetch: input.fetch } : {}),
     ...(input.now ? { now: input.now } : {}),
   });
-  const handler = createHandler(lb, { prefix: "/auth/v1", origins: [input.publicUrl] });
-  // 名前のない入口は、読み書きが認証なしで起きる。1分あたりの回数を接続元ごとに絞る。
-  const limits: Record<string, (client: string) => boolean> = {
-    "/auth/v1/signin/nonce": rateLimiter(60, 60_000), "/auth/v1/handoff/start": rateLimiter(20, 60_000),
-    "/auth/v1/websignin/start": rateLimiter(20, 60_000), "/auth/v1/websignin/callback": rateLimiter(20, 60_000), "/auth/v1/websignin/take": rateLimiter(60, 60_000),
-    "/auth/v1/prove/take": rateLimiter(60, 60_000), "/auth/v1/ticket/check": rateLimiter(60, 60_000),
-  };
+  // 接続元は手前のプロキシ（Caddy・cloudflared）が付けた X-Forwarded-For の最後の値。http.ts の clientKey と同じ。
+  const handler = createHandler(lb, { prefix: "/auth/v1", origins: [input.publicUrl], caller: (r) => r.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || undefined });
+  // signin/nonce・handoff/start・websignin/start・prove/take・ticket/check はライブラリが接続元ごとに絞る（0.10.1）。残る名前のない2つをここで絞る。
+  const limits: Record<string, (client: string) => boolean> = { "/auth/v1/websignin/callback": rateLimiter(20, 60_000), "/auth/v1/websignin/take": rateLimiter(60, 60_000) };
   return { lb, handler, storage, allow: (path: string, client: string) => limits[path]?.(client) ?? true };
 }
 export type Library = ReturnType<typeof createLibrary>;

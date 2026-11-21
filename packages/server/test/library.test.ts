@@ -159,13 +159,13 @@ test("受け口: signin/nonce と signin に答え、K は公開の deriveK と�
   assert.equal(bad.status, 401);
   assert.equal(bad.json.error, "signin_invalid");
   const statuses: number[] = [];
-  for (let i = 0; i < 61; i++) statuses.push((await x.call("POST", "/auth/v1/signin/nonce", { headers: { "x-forwarded-for": "7.7.7.7" } })).status);
-  assert.equal(statuses.filter((s) => s === 200).length, 60);
-  assert.equal(statuses[60], 429);
+  for (let i = 0; i < 31; i++) statuses.push((await x.call("POST", "/auth/v1/signin/nonce", { headers: { "x-forwarded-for": "7.7.7.7" } })).status);
+  assert.equal(statuses.filter((s) => s === 200).length, 30); // ライブラリの既定 30/分（0.10.1）
+  assert.equal(statuses[30], 429);
   assert.equal((await x.call("POST", "/auth/v1/signin/nonce", { headers: { "x-forwarded-for": "8.8.8.8" } })).status, 200);
-  for (let i = 0; i < 21; i++) statuses[i] = (await x.call("POST", "/auth/v1/handoff/start", { headers: { "x-forwarded-for": "7.7.7.7" }, body: { deviceLabel: "Chrome" } })).status;
-  assert.equal(statuses[19], 200);
-  assert.equal(statuses[20], 429);
+  for (let i = 0; i < 11; i++) statuses[i] = (await x.call("POST", "/auth/v1/handoff/start", { headers: { "x-forwarded-for": "7.7.7.7" }, body: { deviceLabel: "Chrome" } })).status;
+  assert.equal(statuses[9], 200);
+  assert.equal(statuses[10], 429); // 既定 10/分
 });
 
 test("G1: 契約の無い通行証は、申請と更新の知らせが402。/me・設定・写し・削除・セットアップ確認の申請は通る", async () => {
