@@ -22,7 +22,7 @@
     "@apple/app-store-server-library": "^3.1.0",
     "@hono/node-server": "^2.1.3",
     "@kitepon/login-billing": "file:../../vendor/kitepon-login-billing-0.17.0.tgz",
-    "@kitepon/peer-channel": "file:../../vendor/kitepon-peer-channel-0.5.2.tgz",
+    "@kitepon/peer-channel": "file:../../vendor/kitepon-peer-channel-0.5.3.tgz",
     "@modelcontextprotocol/sdk": "^1.31.0",
     "hono": "^4.13.12",
     "zod": "^4.4.3"

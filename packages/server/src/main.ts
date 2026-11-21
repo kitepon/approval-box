@@ -17,7 +17,7 @@ import { createApp } from "./http.ts";
 import { CallBridgeDeliverer, callBridgeSender, readHeaderFile } from "./callbridge.ts";
 import { type Library, createLibrary } from "./lb.ts";
 import { purgeLegacy, rekeyToK } from "./rekey.ts";
-import { type PeerChannel, createPeerChannel } from "./pc.ts";
+import { type PeerChannel, cloudflareTurn, createPeerChannel } from "./pc.ts";
 import { parseAppLinks } from "./applinks.ts";
 
 const env = process.env;
@@ -188,9 +188,13 @@ let peerChannel: PeerChannel | undefined;
 if (library) {
   const turnSecret = secretValue("PC_TURN_SECRET");
   const turnUrls = (env.PC_TURN_URLS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const cfKeyId = env.PC_TURN_CF_KEY_ID?.trim();
+  const cfToken = secretValue("PC_TURN_CF_API_TOKEN");
+  // Cloudflare TURN が揃っていればそれ、無ければ coturn の共有の秘密、どちらも無ければ TURN なし。
+  const turn = cfKeyId && cfToken ? cloudflareTurn(cfKeyId, cfToken) : turnSecret && turnUrls.length ? { secret: turnSecret, urls: turnUrls } : undefined;
   const waker = new Waker(db, { ...(apnsSend ? { apns: apnsSend } : {}), ...(fcm ? { fcm: fcm.send } : {}) });
-  peerChannel = createPeerChannel({ accounts, library, publicUrl, mirrorPath: join(dataDir, "pc-mirror.db"), wake: waker.wake, ...(turnSecret && turnUrls.length ? { turn: { secret: turnSecret, urls: turnUrls } } : {}) });
-  console.log(`approval-box-server: peer-channel を /pc/v1 に置きます（TURN ${turnSecret && turnUrls.length ? turnUrls.length : "なし"}）`);
+  peerChannel = createPeerChannel({ accounts, library, publicUrl, mirrorPath: join(dataDir, "pc-mirror.db"), wake: waker.wake, ...(turn ? { turn } : {}) });
+  console.log(`approval-box-server: peer-channel を /pc/v1 に置きます（TURN ${!turn ? "なし" : "generate" in turn ? "Cloudflare" : `coturn ${turnUrls.length}`}）`);
 }
 // アプリのリンク（/.well-known）。AB_ANDROID_APP_LINKS・AB_APPLE_APP_IDS が無ければ 404 で答える。
 const appLinks = parseAppLinks(env.AB_ANDROID_APP_LINKS, env.AB_APPLE_APP_IDS);

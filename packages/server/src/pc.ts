@@ -3,7 +3,7 @@
 import { createServer, type IncomingMessage, type RequestListener, type ServerOptions } from "node:http";
 import { randomBytes } from "node:crypto";
 import { LoginBillingError } from "@kitepon/login-billing/server";
-import { createServerPart, SqliteMirrorStore, type Identity, type ServerPart } from "@kitepon/peer-channel/server";
+import { createServerPart, SqliteMirrorStore, type Identity, type ServerPart, type TurnAnswer } from "@kitepon/peer-channel/server";
 import type { Accounts } from "./accounts.ts";
 import { ApiError } from "./errors.ts";
 import { type Library, PRODUCT_ID } from "./lb.ts";
@@ -16,8 +16,8 @@ export type PeerChannelInput = {
   mirrorPath: string;
   /** その K の端末へ、中身の無い起こしの知らせ（push.ts Waker）。 */
   wake: (k: string, alert: boolean) => void | Promise<void>;
-  /** TURN の設定がある時だけ。無ければ urls は空で答える（coturn はまだ無い）。 */
-  turn?: { secret: string; urls: string[] };
+  /** TURN の設定がある時だけ。coturn の共有の秘密か、Cloudflare TURN のような払い出し役。無ければ urls は空で答える。 */
+  turn?: { secret: string; urls: string[] } | { generate(): Promise<TurnAnswer> };
 };
 
 /** Node の要求を、ライブラリの authenticate が読む Request にする。通行証は Authorization にあるので本文は渡さない。 */
@@ -57,6 +57,26 @@ export function authenticate(accounts: Accounts, library: Library, publicUrl: st
       if (error instanceof ApiError) return null;
       throw error;
     }
+  };
+}
+
+/**
+ * Cloudflare Realtime TURN（家のルーターの転送なし）。端末の求めごとに、TURN 鍵の API トークンで短い期限の資格を払い出す。
+ * 中継は DTLS のままの中身しか見ない。53番のURLは外す（ブラウザ以外でも時間切れの元）。鍵とトークンは記録に出さない。
+ */
+export function cloudflareTurn(keyId: string, apiToken: string, fetchFn: typeof fetch = fetch, ttl = 600): { generate(): Promise<TurnAnswer> } {
+  return {
+    async generate() {
+      const r = await fetchFn(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`, {
+        method: "POST", headers: { authorization: `Bearer ${apiToken}`, "content-type": "application/json" }, body: JSON.stringify({ ttl }), signal: AbortSignal.timeout(5000),
+      });
+      if (!r.ok) throw new Error(`cloudflare_turn_${r.status}`);
+      const servers = ((await r.json()) as { iceServers?: { urls?: string[] | string; username?: string; credential?: string }[] }).iceServers ?? [];
+      const turn = servers.find((e) => e.username && e.credential);
+      if (!turn) throw new Error("cloudflare_turn_shape");
+      const urls = servers.flatMap((e) => (Array.isArray(e.urls) ? e.urls : e.urls ? [e.urls] : [])).filter((u) => !/:53(\?|$)/.test(u));
+      return { urls, username: turn.username!, credential: turn.credential!, ttl };
+    },
   };
 }
 
