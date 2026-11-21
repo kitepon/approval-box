@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Diagnostics } from "./diagnostics.ts";
-import { Apns, Fcm, Notifier } from "./push.ts";
+import { Apns, Fcm, Notifier, Waker } from "./push.ts";
 import { serve } from "@hono/node-server";
 import { existsSync, readFileSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
@@ -17,6 +17,7 @@ import { createApp } from "./http.ts";
 import { CallBridgeDeliverer, callBridgeSender, readHeaderFile } from "./callbridge.ts";
 import { type Library, createLibrary } from "./lb.ts";
 import { purgeLegacy, rekeyToK } from "./rekey.ts";
+import { type PeerChannel, createPeerChannel } from "./pc.ts";
 
 const env = process.env;
 const dataDir = resolve(env.APPROVAL_BOX_DATA ?? "data");
@@ -173,10 +174,20 @@ if (library) {
     else console.log(`approval-box-server: 旧いログインと契約の行（一度だけ消した数）: ${Object.entries(purged).map(([table, n]) => `${table} ${n}`).join("、")}`);
   }
 }
+// peer-channel の server part（/pc/v1）。端末の通行証にライブラリを使うので、ライブラリがある時だけ置く。
+// 起こしは今の APNs・FCM の送り手で、中身の無い決まった知らせだけ。TURN は PC_TURN_SECRET と PC_TURN_URLS が揃った時だけ。
+let peerChannel: PeerChannel | undefined;
+if (library) {
+  const turnSecret = secretValue("PC_TURN_SECRET");
+  const turnUrls = (env.PC_TURN_URLS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const waker = new Waker(db, { ...(apnsSend ? { apns: apnsSend } : {}), ...(fcm ? { fcm: fcm.send } : {}) });
+  peerChannel = createPeerChannel({ accounts, library, publicUrl, mirrorPath: join(dataDir, "pc-mirror.db"), wake: waker.wake, ...(turnSecret && turnUrls.length ? { turn: { secret: turnSecret, urls: turnUrls } } : {}) });
+  console.log(`approval-box-server: peer-channel を /pc/v1 に置きます（TURN ${turnSecret && turnUrls.length ? turnUrls.length : "なし"}）`);
+}
 const diagnosticsAdminToken = env.DIAGNOSTICS_ADMIN_KEY_FILE ? readFileSync(env.DIAGNOSTICS_ADMIN_KEY_FILE,"utf8").trim() : env.DIAGNOSTICS_ADMIN_KEY;
 // 停止の合図。開いたままの更新の知らせ（SSE）を正しく閉じてから終える。
 const shutdown = new AbortController();
-const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) }, ...(library ? { library } : {}) }, { staticHandler });
+const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) }, ...(library ? { library } : {}), ...(peerChannel ? { peerChannel: peerChannel.part } : {}) }, { staticHandler });
 
 setInterval(() => {
   new Diagnostics(db).prune();
@@ -187,7 +198,7 @@ setInterval(() => {
   events.prune(7);
 }, 3600_000).unref();
 
-const server = serve({ fetch: app.fetch, port }, () => {
+const server = serve({ fetch: app.fetch, port, ...(peerChannel ? { createServer: peerChannel.createServer } : {}) }, () => {
   console.log(`approval-box-server: ${publicUrl} (port ${port}, data ${dataDir}, billing ${billing}${webRoot ? "" : ", web未ビルド"})`);
 });
 
@@ -200,6 +211,7 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
     stopping = true;
     console.log(`approval-box-server: ${signal} を受けて停止します`);
     shutdown.abort();
+    peerChannel?.part.close(); // 合図の接続を閉じ、登録の写しの DB を閉じる
     const finish = () => { try { db.close(); } catch { /* 既に閉じている */ } process.exit(0); };
     server.close(finish);
     // 新しい要求は受けず、処理中の応答が終わるのを待つ。待ちすぎないよう上限を置く。

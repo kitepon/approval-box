@@ -21,7 +21,7 @@ import { getConnInfo } from "@hono/node-server/conninfo";
 import { type Library, PRODUCT_ID } from "./lb.ts";
 import { exportAccount } from "./export.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal; library?: Library };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal; library?: Library; peerChannel?: { forgetAccount(k: string): void } };
 
 /** 登録クライアント（BellTeamなど）のsessionが通れる `/v1` の経路。ここに無いものは403。 */
 const CLIENT_ROUTES: [string, RegExp][] = [
@@ -406,6 +406,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       accounts.deleteUser(userId);
       services.attachments?.eraseFiles(ids);
     });
+    services.peerChannel?.forgetAccount(userId); // peer-channel の登録の写し（公開鍵だけ）も消し、その K の接続を閉じる
     return c.json({ ok: true });
   });
   v1.get("/me/settings", (c) => c.json(accounts.settings(c.get("userId"))));
