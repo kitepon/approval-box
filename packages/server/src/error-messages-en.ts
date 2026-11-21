@@ -3,6 +3,7 @@ export const errorMessagesEn: Record<string, string> = {
   "ログインしてください。": "Please sign in.",
   "ログインの期限が切れました。もう一度ログインしてください。": "Your session has expired. Please sign in again.",
   "ログインの手続きの期限が切れました。最初からやり直してください。": "The sign-in process has expired. Please start again.",
+  "この入口はもう使えません。アプリを新しい版にしてください。": "This endpoint is no longer available. Please update the app.",
   "アカウントが見つかりません。": "Account not found.",
   "Approval Boxの契約がありません。iPhone・Mac・Android のアプリで契約してください。": "You have no active Approval Box subscription. Subscribe in the iPhone, Mac or Android app.",
   "セットアップ確認がまだです。AIに「Approval Boxのsetup_testを実行して」と言って、答えがAIまで届くことを確かめてから契約してください。": "Setup has not been verified. Ask your AI to run Approval Box setup_test, and check that your answer reaches it before subscribing.",
