@@ -284,3 +284,24 @@ test("setup-test/verified (c8c, Q8): only the passed bit for that client, no dec
     assert.equal((await x.call("POST", "/connector/v1/setup-test/verified", undefined, { client: "codex" })).status, 401);
   } finally { await x.close(); }
 });
+
+test("SEC-084: a sign-out closes that pass's open socket; removing a connection closes its connector socket", async () => {
+  const x = await setup();
+  try {
+    const { pass, k } = await x.signIn("frank");
+    x.accounts.ensureUser(k);
+    const closed = (ws: WebSocket) => new Promise<number>((ok) => { ws.onclose = (e) => ok(e.code); });
+    const device = await socket(x.base, pass);
+    const deviceClosed = closed(device.ws);
+    assert.equal((await x.call("POST", "/auth/v1/signout", pass)).status, 200);
+    assert.equal(await deviceClosed, 4401);
+    for (const path of ["/v1/connections/", "/v1/tokens/"]) {
+      const owner = await x.signIn("frank");
+      const conn = path === "/v1/tokens/" ? x.accounts.issueToken(k, "t", ORIGIN) : x.accounts.createConnection(k, "pc", "linux", []);
+      const connector = await socket(x.base, conn.token);
+      const connectorClosed = closed(connector.ws);
+      assert.equal((await x.call("DELETE", `${path}${conn.id}`, owner.pass)).status, 200, path);
+      assert.equal(await connectorClosed, 4403, path);
+    }
+  } finally { await x.close(); }
+});

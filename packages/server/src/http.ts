@@ -22,7 +22,7 @@ import { type Library, PRODUCT_ID } from "./lb.ts";
 import { exportAccount } from "./export.ts";
 import { type AppLinks, appleAppSiteAssociation, assetLinks } from "./applinks.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal; library?: Library; peerChannel?: { forgetAccount(k: string): void }; appLinks?: AppLinks };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal; library?: Library; peerChannel?: { forgetAccount(k: string): void; connectionRemoved(k: string, connectionId: string): void }; appLinks?: AppLinks };
 
 /** 登録クライアント（BellTeamなど）のsessionが通れる `/v1` の経路。ここに無いものは403。 */
 const CLIENT_ROUTES: [string, RegExp][] = [
@@ -367,7 +367,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   });
 
   v1.get("/connections", (c) => c.json(accounts.connections(c.get("userId"))));
-  v1.delete("/connections/:id", (c) => idempotent(c, services, c.get("userId"), () => { accounts.revokeConnection(c.get("userId"), c.req.param("id")); return { ok: true }; }));
+  v1.delete("/connections/:id", (c) => idempotent(c, services, c.get("userId"), () => { accounts.revokeConnection(c.get("userId"), c.req.param("id")); services.peerChannel?.connectionRemoved(c.get("userId"), c.req.param("id")); return { ok: true }; }));
 
   v1.post("/tokens", async (c) => {
     const input = await body(c, z.object({ label: z.string().trim().min(1).max(100) }));
@@ -375,7 +375,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(accounts.issueToken(c.get("userId"), input.label, services.publicUrl));
   });
   v1.get("/tokens", (c) => c.json(accounts.tokens(c.get("userId"))));
-  v1.delete("/tokens/:id", (c) => idempotent(c, services, c.get("userId"), () => { accounts.revokeToken(c.get("userId"), c.req.param("id")); return { ok: true }; }));
+  v1.delete("/tokens/:id", (c) => idempotent(c, services, c.get("userId"), () => { accounts.revokeToken(c.get("userId"), c.req.param("id")); services.peerChannel?.connectionRemoved(c.get("userId"), c.req.param("id")); return { ok: true }; }));
   v1.post("/devices", async (c) => {
     const input = await body(c, z.object({
       platform: z.enum(["ios", "android", "web"]),
@@ -469,7 +469,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   const routeChannel = (c: Context) => c.req.query("channel_id") || undefined;
 
   conn.get("/connection", (c) => c.json(accounts.connectionInfo(c.get("conn"))));
-  conn.delete("/connection", (c) => { const me = c.get("conn"); accounts.revokeConnection(me.user_id, me.id); sweep(); return c.json({ ok: true }); });
+  conn.delete("/connection", (c) => { const me = c.get("conn"); accounts.revokeConnection(me.user_id, me.id); services.peerChannel?.connectionRemoved(me.user_id, me.id); sweep(); return c.json({ ok: true }); });
   conn.put("/connection/clients", async (c) => {
     const input = await body(c, z.object({ clients: z.array(z.string().max(40)).max(10), os: z.string().max(20).optional() }));
     accounts.updateConnectionClients(c.get("conn"), input.clients, input.os);
