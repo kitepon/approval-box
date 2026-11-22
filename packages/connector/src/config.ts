@@ -12,6 +12,15 @@ export function readConfig(): Config | null {
   return JSON.parse(readFileSync(configFile(), "utf8")) as Config;
 }
 
+/** BellTeamの席のように、別の利用者が動かすデーモン（daemon --hosted）のソケットを使う印（use-hosted が書く、a514n）。 */
+export const hostedFile = () => join(home(), "hosted.json");
+export function hostedSocket(): string | undefined {
+  if (!existsSync(hostedFile())) return undefined;
+  const socket = (JSON.parse(readFileSync(hostedFile(), "utf8")) as { socket?: unknown }).socket;
+  if (typeof socket !== "string" || !socket) throw new Error(`${hostedFile()} に socket がありません。approval-box use-hosted --socket <path> をやり直してください。`);
+  return socket;
+}
+
 export function requireConfig(): Config & { token: string } {
   const config = readConfig();
   if (!config?.token) throw new Error("Approval Boxにつながっていません。npx approval-box setup を実行してください。");

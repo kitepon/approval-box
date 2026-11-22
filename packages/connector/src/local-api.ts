@@ -1,13 +1,12 @@
 // peer-channel の道（c8c）で、MCPの道具がデーモンの LocalBox を呼ぶ所。Api と同じ call(method, path, body) の形で、
 // 1行のJSONをデーモンのローカルソケット（Windowsは名前付きパイプ）へ送り、1行の答えを読む。本文はこの端末から出ない。
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { pcRoot } from "./pc-mode.ts";
 import { createConnection, createServer, type Server } from "node:net";
 import { join } from "node:path";
 import { ServerError } from "./api.ts";
 import { renameWithRetry } from "./config.ts";
-import { LocalBox } from "./local-box.ts";
+import type { LocalBox } from "./local-box.ts";
 import { stateRoot } from "./profile.ts";
 
 /** Windows のパイプ名: 状態の置き場のハッシュだけでは別のアカウントが導けるので、pc/pipe-id の乱数も入れる（SEC-087）。 */
@@ -45,13 +44,18 @@ export type DaemonStatusReply = { schema: "approval-box.daemon-status.v1"; mode:
  * デーモン側: LocalBox の経路を、ソケット越しに答える。`GET /status` は status() が答える。
  * box が無い間（--hosted で、まだつながっていない・起動中）は、申請の経路に 503 と status の reason の名前で答える（今の道へ黙って回さない）。
  */
-export function serveLocal(box: Pick<LocalBox, "route"> | null, path = socketPath(stateRoot(), true), status?: () => DaemonStatusReply): Promise<Server> {
+// 申請画像は1枚20MiB（base64で約27MiB）。1行をこの上限まで受ける。
+const MAX_LINE = 32 * 1024 * 1024;
+const ATTACHMENT = /^\/decisions\/[^/]+\/attachments\/[^/?]+$/;
+
+// shortcut: ソケットは呼び手を確かめない。開ける人は誰でもこのアカウントの申請を読める（今の席の共有 ~/.approval-box と同じ信頼）。誰が開けるかは置き場の権限と監督役（BellTeam）が決める。席ごとに分ける時に呼び手の印を足す。
+export function serveLocal(box: Pick<LocalBox, "route" | "download" | "stageUpload"> | null, path = socketPath(stateRoot(), true), status?: () => DaemonStatusReply): Promise<Server> {
   const server = createServer((socket) => {
     let buffer = "";
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => {
       buffer += chunk;
-      if (buffer.length > 1_000_000) return socket.destroy(); // 申請1件の上限（本文20,000字）より十分大きい
+      if (buffer.length > MAX_LINE) return socket.destroy();
       const end = buffer.indexOf("\n");
       if (end < 0) return;
       let reply: Reply;
@@ -59,6 +63,12 @@ export function serveLocal(box: Pick<LocalBox, "route"> | null, path = socketPat
         const { method, path: route, body } = JSON.parse(buffer.slice(0, end)) as { method: string; path: string; body?: unknown };
         if (method === "GET" && route === "/status" && status) reply = { ok: true, result: status() };
         else if (!box) { const st = status?.(); throw new ServerError(503, st?.mode === "starting" ? "starting" : "not_paired", `Approval Box の接続はまだ使えません（${st?.reason ?? "not_paired"}）。`, {}); }
+        else if (method === "GET" && ATTACHMENT.test(route)) reply = { ok: true, result: { data: box.download(route).toString("base64") } };
+        else if (method === "POST" && route === "/uploads") {
+          const b = (body ?? {}) as { name?: unknown; content_type?: unknown; data?: unknown };
+          if (typeof b.name !== "string" || typeof b.content_type !== "string" || typeof b.data !== "string") throw new ServerError(400, "validation_failed", "申請画像の形が正しくありません。", {});
+          reply = { ok: true, result: box.stageUpload(Buffer.from(b.data, "base64"), b.name, b.content_type) };
+        }
         else reply = { ok: true, result: box.route(method, route, body) };
       } catch (error) {
         const e = error instanceof ServerError ? error : new ServerError(500, "internal", (error as Error).message, {});
@@ -113,18 +123,18 @@ export class LocalApi {
     }
   }
 
-  /** 添付の中身。同じ端末・同じ利用者のデーモンが書いた 0600 のファイルを、ソケットを通さず読む（大きな画像を1行のJSONに載せない）。 */
+  /** 添付の中身。ソケットで受け取る（デーモンが別の利用者でも読める、a514n）。 */
   async download(path: string): Promise<Buffer> {
-    return new LocalBox(join(pcRoot(), "decisions.json")).download(path);
+    return Buffer.from((await this.call<{ data: string }>("GET", path)).data, "base64");
   }
 
-  /** 申請画像を state/pc/uploads に 0600 で置き、その印を返す。申請の時にデーモンが受け取って端末へ運ぶ（サーバーへは送らない）。 */
+  /** 申請画像をデーモンへ渡し、その印を返す。デーモンが state/pc/uploads に置き、申請の時に端末へ運ぶ（サーバーへは送らない）。 */
   async uploadRequestImage(data: Buffer, name: string, contentType: string): Promise<{ id: string }> {
-    const id = randomUUID();
-    const dir = join(pcRoot(), "uploads");
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
-    writeFileSync(join(dir, id), data, { mode: 0o600 });
-    writeFileSync(join(dir, `${id}.json`), JSON.stringify({ name, content_type: contentType }), { mode: 0o600 });
-    return { id };
+    return this.call<{ id: string }>("POST", "/uploads", { name, content_type: contentType, data: data.toString("base64") });
+  }
+
+  /** 席のデーモン（use-hosted）の受信: ソケットには知らせが無いので、2秒ごとに onEvent を呼び、配送待ちを読み直させる。 */
+  async stream(onEvent: (event: string) => void, signal: AbortSignal) {
+    while (!signal.aborted) { onEvent("deliveries"); await sleep(2000); }
   }
 }

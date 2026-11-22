@@ -367,7 +367,17 @@ export class LocalBox {
 
   // ---- 申請画像と答えの添付（この端末の 0600 のファイル。サーバーへは送らない）----
 
-  /** MCP が state/pc/uploads に置いた申請画像を受け取る（置いた側は LocalApi.uploadRequestImage）。 */
+  /** ソケットで届いた申請画像を state/pc/uploads に 0600 で置き、その印を返す（LocalApi.uploadRequestImage → POST /uploads）。 */
+  stageUpload(data: Buffer, name: string, contentType: string): { id: string } {
+    const id = randomUUID();
+    const dir = join(this.root, "uploads");
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    writeFileSync(join(dir, id), data, { mode: 0o600 });
+    writeFileSync(join(dir, `${id}.json`), JSON.stringify({ name, content_type: contentType }), { mode: 0o600 });
+    return { id };
+  }
+
+  /** MCP が置いた申請画像を受け取る（置いた側は stageUpload）。 */
   private takeUploads(ids: string[]): OutBlob[] {
     if (new Set(ids).size !== ids.length) error("validation_failed", "同じ申請画像が2回並んでいます。");
     const out = ids.map((id) => {

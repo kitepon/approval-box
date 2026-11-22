@@ -3,7 +3,9 @@
 // request → device answer → the answer reaches the AI's channel; the server database holds no title, context or answer.
 import assert from "node:assert/strict";
 import { createHash, createSign, generateKeyPairSync, randomBytes } from "node:crypto";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,7 +29,7 @@ import type { PeerChannelRuntime } from "../src/pc-daemon.ts";
 import { startDaemonPeerChannel, useLocalApi } from "../src/daemon.ts";
 import { rebindKeys } from "../src/pc-rebind.ts";
 import { admissionFile, pcPrepared, readMode, serverOffersPeerChannel } from "../src/pc-mode.ts";
-import { writeJsonFile } from "../src/config.ts";
+import { hostedSocket, writeJsonFile } from "../src/config.ts";
 import { startPairingBinding } from "@kitepon/peer-channel/pairing";
 import { loadOrCreateKeys } from "../src/pc-keys.ts";
 import { PROFILE } from "../src/profile.ts";
@@ -233,6 +235,62 @@ test("the setup test passes on the PC; the server gets only the passed bit (Q8)"
   for (let i = 0; i < 100 && !row; i++) { row = serverDb.prepare("select status, decision_id, code from setup_checks where connection_id = ? and client = ?").get(conn.id, "claude-code"); if (!row) await new Promise((r) => setTimeout(r, 30)); }
   assert.deepEqual([row.status, row.decision_id, row.code], ["passed", null, null]);
   assert.ok((serverDb.prepare("select setup_verified_at from users where id = ?").get(k) as any).setup_verified_at);
+});
+
+test("a seat on the hosted daemon (a514n): use-hosted, the seat's tools file into the hosted socket, the seat's own daemon delivers into the seat's channel", { timeout: 60_000 }, async () => {
+  const cli = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
+  const profileTs = fileURLToPath(new URL("../src/profile.ts", import.meta.url));
+  const seat = join(dir, "seat"); // another home (in BellTeam: another user) than the hosted daemon's
+  const sock = join(dir, "home", "state", "pc", "daemon.sock");
+  const env = { ...process.env, APPROVAL_BOX_HOME: seat };
+  const cliRun = (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { env, encoding: "utf8" });
+  // The seat's channel tools run in the seat's home: open the channel there, read it there.
+  const atSeat = (code: string) => {
+    const r = spawnSync(process.execPath, ["--input-type=module", "-e", `import * as steer from "aiterm-steer-delivery"; import { PROFILE } from ${JSON.stringify(profileTs)}; ${code}`], { env, encoding: "utf8", cwd: process.cwd() });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout.trim();
+  };
+
+  const on = cliRun("use-hosted", "--socket", sock);
+  assert.equal(on.status, 0, on.stderr);
+  assert.deepEqual(JSON.parse(on.stdout), { schema: "approval-box.use-hosted.v1", socket: sock });
+  const channelId = atSeat("process.stdout.write(steer.openChannel(PROFILE, null).channel_id)");
+  const relay = spawn(process.execPath, [cli, "daemon"], { env, stdio: ["ignore", "ignore", "pipe"] });
+  let log = "";
+  relay.stderr.on("data", (d) => { log += d; });
+  try {
+    const tools = new LocalApi(sock); // what the seat's MCP builds from hosted.json (no config.json, no keys in the seat's home)
+    const { id: upload } = await tools.uploadRequestImage(Buffer.from("relay-image-7e21"), "seat.png", "image/png");
+    const body = { title: "席から", context: "", options: [{ id: "ok", label: "OK" }, { id: "no", label: "NO" }], requester: "ナユタ", session_label: "relay", client: "claude-code", route: { channel_id: channelId, harness: "other" }, request_attachment_ids: [upload] };
+    const first = await tools.call("POST", "/decisions", body).catch((e: unknown) => e) as ServerError;
+    const d = await tools.call<{ decision_id: string }>("POST", "/decisions", { ...body, check_token: first.body.check_token });
+    const req = await device.next("request", 15_000);
+    assert.equal(req.body.content.decision_id, d.decision_id);
+    assert.equal(Buffer.from(req.blobs![0]!.bytes).toString(), "relay-image-7e21");
+    device.ack(req.body.id);
+    device.answer(req, { option_id: "ok" });
+    assert.equal((await device.next("ack")).body.result, "ok");
+
+    // The seat's daemon reads the hosted deliveries and puts the answer into the seat's channel; the AI reads it there.
+    let text = "";
+    for (let i = 0; i < 100 && !text; i++) {
+      text = atSeat(`const r = await steer.receiveFromChannel(PROFILE, ${JSON.stringify(channelId)}, { wait_ms: 0 }); if (r.outcome === "delivered") process.stdout.write(r.deliveries.map((x) => x.text).join("\\n"));`);
+      if (!text) await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.match(text, /答え: OK（option_id=ok）/, log);
+    let delivery = "";
+    for (let i = 0; i < 100 && delivery !== "delivered"; i++) { delivery = (await tools.call<{ delivery?: string }>("GET", `/decisions/${d.decision_id}`)).delivery ?? ""; if (delivery !== "delivered") await new Promise((r) => setTimeout(r, 100)); }
+    assert.equal(delivery, "delivered", log);
+    assert.match(log, /本体のデーモンのソケット/);
+    assert.ok(!existsSync(join(seat, "state", "pc")), "the seat holds no keys or decisions of its own");
+    assert.equal(hostedSocket(), undefined, "the hosted daemon's own home has no hosted.json");
+  } finally {
+    relay.kill("SIGTERM");
+  }
+  const off = cliRun("use-hosted", "--off");
+  assert.equal(off.status, 0, off.stderr);
+  assert.deepEqual(JSON.parse(off.stdout), { schema: "approval-box.use-hosted.v1", socket: null });
+  assert.ok(!existsSync(join(seat, "hosted.json")));
 });
 
 test("setup --rebind (0.5.3): a new key set without a new product pairing; requests keep flowing with the new key", { timeout: 60_000 }, async () => {
