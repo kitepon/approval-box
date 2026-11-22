@@ -10,7 +10,8 @@ import type { DaemonStatusReply } from "./local-api.ts";
 import { VERSION } from "./version.ts";
 import { type Wakes, queueWake, sendWake, wakeMessage } from "./bellteam-wake.ts";
 import { type AttachmentMeta, pruneAttachments, saveAll } from "./attachments.ts";
-import { readConfig, requireConfig, writeJsonFile } from "./config.ts";
+import { LocalApi } from "./local-api.ts";
+import { hostedSocket, readConfig, requireConfig, writeJsonFile } from "./config.ts";
 import { PROFILE, stateRoot } from "./profile.ts";
 import { runtimeEntry } from "./runtime.ts";
 import { backgroundReceiverRunning } from "./background-receiver.ts";
@@ -109,6 +110,7 @@ export function abandoned(entry: Entry, receiver: Receiver, now = Date.now()): b
  * デーモンが起きて道を決めるまで（10秒まで）は待つ。決まらなければ peer-channel の道として扱い、ソケットにつながらなければ daemon_unreachable の名前で失敗する。
  */
 export async function useLocalApi(wait = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<boolean> {
+  if (hostedSocket()) return true;
   if (!pcPrepared()) return false;
   for (let i = 0; i < 50; i++) {
     const mode = readMode();
@@ -158,7 +160,7 @@ export async function startDaemonPeerChannel(config: { server: string; token: st
 /** 配送デーモンが動いていなければ起動する。利用者ごとに1つ。 */
 export function ensureDaemon() {
   try {
-    if (!readConfig()?.token) return;
+    if (!readConfig()?.token && !hostedSocket()) return;
     const status = daemonStatus();
     if (status.running && !shouldReplaceDaemon(status.entry, runtimeEntry("cli"))) return;
     if (status.running && status.pid) { try { process.kill(status.pid); } catch { /* 既に終わっている */ } }
@@ -220,10 +222,13 @@ export async function runDaemon(options: { hosted?: boolean } = {}) {
   const log = (message: string) => process.stderr.write(`${new Date().toISOString()} ${message}\n`);
   const self: DaemonStatusReply = { schema: "approval-box.daemon-status.v1", mode: "starting", paired: false, reason: "starting", version: VERSION, pid: process.pid };
   const hostedStart = options.hosted ? await startHosted(log, self) : undefined;
-  const config = hostedStart?.config ?? requireConfig();
-  const pc = hostedStart?.pc ?? await startDaemonPeerChannel(config, log, sleep, undefined, () => self);
-  if (pc && !hostedStart) Object.assign(self, { mode: "pc", paired: true, reason: "running", server: config.server, ...(readConfig()?.connection_id ? { connection_id: readConfig()!.connection_id } : {}) });
-  const api: DaemonApi = pc ? pc.api : new Api(config);
+  // use-hosted の席（a514n）: 申請は本体のデーモンが持つ。このデーモンは鍵も接続も持たず、そのソケットから配送待ちを読んで席の会話へ届けるだけ。
+  const relay = options.hosted ? undefined : hostedSocket();
+  if (relay) log(`本体のデーモンのソケット（${relay}）から配送待ちを読み、この席へ届けます`);
+  const config = relay ? undefined : hostedStart?.config ?? requireConfig();
+  const pc = relay ? undefined : hostedStart?.pc ?? await startDaemonPeerChannel(config!, log, sleep, undefined, () => self);
+  if (pc && !hostedStart) Object.assign(self, { mode: "pc", paired: true, reason: "running", server: config!.server, ...(readConfig()?.connection_id ? { connection_id: readConfig()!.connection_id } : {}) });
+  const api: DaemonApi = relay ? new LocalApi(relay) : pc ? pc.api : new Api(config!);
   let journal: Journal = existsSync(journalFile()) ? (JSON.parse(readFileSync(journalFile(), "utf8")) as Journal) : {};
   const save = () => writeJsonFile(journalFile(), journal);
   let wakes: Wakes = {};
@@ -413,6 +418,13 @@ export async function runDaemon(options: { hosted?: boolean } = {}) {
   const stop = () => { stopping = true; releaseLock(); controller.abort(); void pc?.stop(); };
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
+
+  // --hosted は申請の置き場と端末との道だけを持つ。配送は use-hosted の席のデーモンがする（別の利用者の会話へは書けない、a514n）。
+  if (options.hosted) {
+    while (!stopping) await sleep(2000);
+    releaseLock();
+    process.exit(0);
+  }
 
   (async () => {
     let backoff = 1000;

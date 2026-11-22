@@ -71,7 +71,7 @@ AIへの執筆指示のため、文章の品質を機械的に保証するもの
 
 ## Hosted daemon and the peer-channel preview (`next`)
 
-`approval-box@next` (0.2.0-pc.x) carries the peer-channel connector (requests stay on the PC, the server only introduces peers) and the hosted daemon (`daemon --hosted`, `GET /status`, `pair --json`, `pair status --json`). `latest` users are not moved. On Windows the file modes (0600/0700) are not enforced, so the local pipe's random id in `state/pc/pipe-id` is protected only by the folder's ACL: keep `APPROVAL_BOX_HOME` (default `%USERPROFILE%\.approval-box`) in a folder other accounts cannot read.
+`approval-box@next` (0.2.0-pc.x) carries the peer-channel connector (requests stay on the PC, the server only introduces peers) and the hosted daemon (`daemon --hosted`, `GET /status`, `pair --json`, `pair status --json`). `latest` users are not moved. Since 0.2.0-pc.2 a seat whose supervisor hosts that daemon under another user runs `approval-box use-hosted --socket <path>` (undo: `use-hosted --off`): its MCP tools then file into the hosted daemon's socket, and the seat's own daemon only delivers the answers to the seat's sessions (no pairing, keys or token in the seat's home). Switch only after the hosted daemon is paired; before that every request tool answers `not_paired`. On Windows the file modes (0600/0700) are not enforced, so the local pipe's random id in `state/pc/pipe-id` is protected only by the folder's ACL: keep `APPROVAL_BOX_HOME` (default `%USERPROFILE%\.approval-box`) in a folder other accounts cannot read.
 
 ## Local connection handoff
 

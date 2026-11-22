@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { createInterface } from "node:readline/promises";
 import QRCode from "qrcode";
 import { Api, ServerError } from "./api.ts";
-import { OFFICIAL_SERVER, readConfig, renameWithRetry, requireConfig, writeConfig, writeJsonFile } from "./config.ts";
+import { OFFICIAL_SERVER, hostedFile, readConfig, renameWithRetry, requireConfig, writeConfig, writeJsonFile } from "./config.ts";
 import { renameSync } from "node:fs";
 import { admissionFile, pcPrepared, serverOffersPeerChannel } from "./pc-mode.ts";
 import { daemonStatus, ensureDaemon, runDaemon } from "./daemon.ts";
@@ -413,11 +413,22 @@ const commands: Record<string, () => Promise<void> | void> = {
   register: registerTargets,
   "cursor-context": cursorContext,
   mcp: runMcp,
+  // BellTeamの席（a514n）: 本体のデーモン（daemon --hosted）のソケットを使う。ペアリングは本体だけ。--off で今の道へ戻す。
+  "use-hosted": () => {
+    const socket = option("socket");
+    if (!(argv.length === 3 && socket && !socket.startsWith("--")) && !(argv.length === 2 && flag("off"))) throw new Error("Usage: approval-box use-hosted --socket <path> | use-hosted --off");
+    if (socket) writeJsonFile(hostedFile(), { socket });
+    else rmSync(hostedFile(), { force: true });
+    // 動いている席のデーモンを止める。次の道具の呼び出しで、新しい道のデーモンが起きる。
+    const running = daemonStatus();
+    if (running.running && running.pid) { try { process.kill(running.pid, "SIGTERM"); } catch { /* 既に終わっている */ } }
+    out(JSON.stringify({ schema: "approval-box.use-hosted.v1", socket: socket ?? null }));
+  },
   daemon: () => runDaemon({ hosted: flag("hosted") }),
   pair: () => { if (!flag("json")) throw new Error("Usage: approval-box pair --json [--server URL] [--name NAME] | pair --json --rebind | pair status --json"); return pairJson(); },
   version: () => {
     if (argv.length === 2 && argv[1] === "--json") {
-      out(JSON.stringify({ schema: "approval-box.version.v1", version: VERSION, capabilities: ["bellteam-requester-wake"] }));
+      out(JSON.stringify({ schema: "approval-box.version.v1", version: VERSION, capabilities: ["bellteam-requester-wake", "use-hosted"] }));
       return;
     }
     out(VERSION);

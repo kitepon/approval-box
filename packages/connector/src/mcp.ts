@@ -8,7 +8,7 @@ import { Api, ServerError } from "./api.ts";
 import { LocalApi } from "./local-api.ts";
 import { type AttachmentMeta, saveAttachment } from "./attachments.ts";
 import { bellteamBotId, rememberRequester } from "./bellteam-wake.ts";
-import { requireConfig, writeJsonFile } from "./config.ts";
+import { hostedSocket, requireConfig, writeJsonFile } from "./config.ts";
 import { ensureDaemon, useLocalApi } from "./daemon.ts";
 import { uploadImagePaths } from "./request-images.ts";
 import { runtimeEntry } from "./runtime.ts";
@@ -260,10 +260,12 @@ export async function runMcp() {
     const clientName = server.getClientVersion()?.name;
     const harness = harnessOf(clientName);
     try {
-      const config = requireConfig();
+      // use-hosted の席（a514n）は本体のデーモンのソケットへ。接続の資格は持たない。席のデーモンは配送のために起こす。
+      const hosted = hostedSocket();
+      const config = hosted ? undefined : requireConfig();
       // peer-channel の道（c8c）では、同じ形の呼び出しをデーモンの手元の申請へ送る（本文をサーバーへ送らない）。
       ensureDaemon();
-      const api = (await useLocalApi()) ? new LocalApi() : new Api(config);
+      const api = hosted ? new LocalApi(hosted) : (await useLocalApi()) ? new LocalApi() : new Api(config!);
       const channelQuery = lastChannel ? `?channel_id=${encodeURIComponent(lastChannel)}` : "";
 
       if (name === "list_my_decisions") {
