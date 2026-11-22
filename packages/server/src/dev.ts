@@ -18,7 +18,7 @@ import { createLibrary, PRODUCT_ID } from "./lb.ts";
 import { createPeerChannel } from "./pc.ts";
 
 export const DEV_BUNDLE = "dev.kitepon.approvalbox";
-export const DEV_GOOGLE_CLIENT = "dev-google-client.apps.local";
+export const DEV_GOOGLE_CLIENT = "dev-google-client.apps.googleusercontent.com";
 
 /** ループバックの URL だけを通す（127.0.0.0/8、::1、localhost）。それ以外は投げる。 */
 export function assertLoopback(publicUrl: string): URL {
