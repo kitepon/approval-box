@@ -16,7 +16,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "node --watch src/main.ts",
     "test": "node --test 'test/**/*.test.ts'",
-    "dev:server": "node src/dev.ts"
+    "dev:server": "node src/dev.ts",
+    "dev:approve": "node src/dev-approve.ts"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",

@@ -113,6 +113,11 @@ Built in c8c part 1: LocalBox, LocalApi and the socket, the daemon running the C
   curl -s :8788/auth/v1/receipt -H "authorization: Bearer <pass>" -d '{"receipts":[...]}'  # -> entitlements
   ```
 - Then everything else is the real server: `/v1`, `/connector/v1`, pairing, `/pc/v1` (signaling, mirror, TURN with an empty list). A wake is one local log line (`wake alert=1|0`), nothing is sent.
+- Lab pairing (c8h, for a hosted connector without a phone): `packages/server/src/dev-approve.ts` is a fake approver device, so the connector's pairing (contract 5.4) can run once with no phone and no Owner. Never on the test or production server: it takes only a loopback `DEV_URL` (default `http://127.0.0.1:8788`, checked with `assertLoopback`) and needs the dev server's `/dev/id-token`.
+  1. Start the dev server: `cd packages/server && npm run dev:server` (data in `DEV_DATA`).
+  2. On the connector side: `APPROVAL_BOX_SERVER=http://127.0.0.1:8788 approval-box pair --json` (or `--server URL`); take `qr_text` (`PC1PAIR:<code>:<fp>:<secret>`) from its `waiting` line.
+  3. Within the 5 minutes of the claim: `cd packages/server && npm run dev:approve -- '<PC1PAIR text>'`. It signs in as `DEV_SUBJECT` through the fake sign-in above, reads the code in the text and claims the pairing as that account (looked up at `GET /v1/pairing/lookup`, claimed at `POST /v1/pairing/{id}/claim`; an empty code, i.e. `pair --json --rebind`, skips the claim), then approves the connector's keys with `TestDevice.approveConnector`. It prints one JSON line, `{approved:true, connection_id, k}` or `{approved:false, error}` (exit 1); no key and no pass is printed.
+  4. `DEV_DATA/lab-approver.json` (0600) keeps the approver's own device keys (signing and seal private scalars) and the latest registry snapshot it signed, so a second pairing or a `--rebind` builds on the same registry. Delete it together with the dev database, never alone.
 - Not covered: real Apple/Google sign-in and stores, real APNs/FCM pushes, TURN, and anything a public URL needs (verified app links, the web sign-in return through `https://<origin>/app/websignin`).
 - Test: packages/server/test/dev.test.ts (a non-loopback `PUBLIC_URL` is refused; a fake sign-in gets a pass that passes a paid route).
 
