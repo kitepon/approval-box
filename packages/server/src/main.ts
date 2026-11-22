@@ -186,7 +186,8 @@ if (library) {
 // peer-channel の server part（/pc/v1）。端末の通行証にライブラリを使うので、ライブラリがある時だけ置く。
 // 起こしは今の APNs・FCM の送り手で、中身の無い決まった知らせだけ。TURN は PC_TURN_SECRET と PC_TURN_URLS が揃った時だけ。
 let peerChannel: PeerChannel | undefined;
-if (library) {
+// PC_OFFER=off は /pc/v1 を置かず peer_channel を名乗らない。今のアプリは名乗りを見て /v1 の申請を出さなくなるので、つなぎ先がそろうまで止めておく道。
+if (library && env.PC_OFFER?.trim() !== "off") {
   const turnSecret = secretValue("PC_TURN_SECRET");
   const turnUrls = (env.PC_TURN_URLS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const cfKeyId = env.PC_TURN_CF_KEY_ID?.trim();
