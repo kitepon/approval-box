@@ -178,8 +178,9 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function startHosted(log: (message: string) => void, status: DaemonStatusReply): Promise<{ config: { server: string; token: string }; pc: PeerChannelRuntime }> {
   const { serveLocal, socketPath } = await import("./local-api.ts");
   mkdirSync(join(stateRoot(), "pc"), { recursive: true, mode: 0o700 });
-  rmSync(socketPath(), { force: true }); // 前のデーモンが残した印（lock を持つのはこのデーモンだけ）
-  let pre: import("node:net").Server | undefined = await serveLocal(null, socketPath(), () => status);
+  const path = socketPath(stateRoot(), true); // Windows のパイプ名の乱数（pc/pipe-id）は、ここで作ってから serve する
+  rmSync(path, { force: true }); // 前のデーモンが残した印（lock を持つのはこのデーモンだけ）
+  let pre: import("node:net").Server | undefined = await serveLocal(null, path, () => status);
   const onStop = () => { pre?.close(); process.exit(0); };
   process.once("SIGTERM", onStop);
   process.once("SIGINT", onStop);

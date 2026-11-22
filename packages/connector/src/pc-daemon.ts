@@ -11,6 +11,7 @@ import { ANSWER_SCHEMA, DECISION_SCHEMA, LocalBox } from "./local-box.ts";
 import { serveLocal, socketPath } from "./local-api.ts";
 import { keysFile, loadOrCreateKeys } from "./pc-keys.ts";
 import { pcRoot } from "./pc-mode.ts";
+import { stateRoot } from "./profile.ts";
 
 /** デーモンが Api の代わりに使う形（申請の経路は手元、受信は答えが来た時の合図）。 */
 export type DaemonApi = Pick<Api, "call" | "stream" | "download">;
@@ -55,7 +56,7 @@ export async function startPeerChannel(o: PcOptions) {
     }
   })();
   connector.start();
-  const path = o.socket ?? socketPath();
+  const path = o.socket ?? socketPath(stateRoot(), true);
   if (process.platform !== "win32") rmSync(path, { force: true }); // 前のデーモンが残した印（席の lock を持つのはこのデーモンだけ）
   const server: Server = await serveLocal(box, path, o.status);
 

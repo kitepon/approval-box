@@ -1,16 +1,39 @@
 // peer-channel の道（c8c）で、MCPの道具がデーモンの LocalBox を呼ぶ所。Api と同じ call(method, path, body) の形で、
 // 1行のJSONをデーモンのローカルソケット（Windowsは名前付きパイプ）へ送り、1行の答えを読む。本文はこの端末から出ない。
-import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { pcRoot } from "./pc-mode.ts";
 import { createConnection, createServer, type Server } from "node:net";
 import { join } from "node:path";
 import { ServerError } from "./api.ts";
+import { renameWithRetry } from "./config.ts";
 import { LocalBox } from "./local-box.ts";
 import { stateRoot } from "./profile.ts";
 
-export const socketPath = (root = stateRoot()) => process.platform === "win32"
-  ? `\\\\.\\pipe\\approval-box-${createHash("sha256").update(root).digest("hex").slice(0, 16)}`
+/** Windows のパイプ名: 状態の置き場のハッシュだけでは別のアカウントが導けるので、pc/pipe-id の乱数も入れる（SEC-087）。 */
+export const pipeName = (root: string, id: string) => `\\\\.\\pipe\\approval-box-${createHash("sha256").update(root).digest("hex").slice(0, 16)}-${id}`;
+
+const pipeIdFile = (root: string) => join(root, "pc", "pipe-id");
+
+/** pc/pipe-id（乱数16バイトの16進、0600）。create が真なら無い時に作る（デーモンだけ）。読むだけで無ければ undefined。 */
+export function pipeId(root: string, { create = false } = {}): string | undefined {
+  const file = pipeIdFile(root);
+  try { const text = readFileSync(file, "utf8").trim(); if (/^[0-9a-f]{32}$/.test(text)) return text; } catch { /* 無い */ }
+  if (!create) return undefined;
+  const id = randomBytes(16).toString("hex");
+  mkdirSync(join(root, "pc"), { recursive: true, mode: 0o700 });
+  const temp = `${file}.${process.pid}.tmp`;
+  writeFileSync(temp, `${id}\n`, { mode: 0o600 });
+  renameWithRetry(temp, file);
+  return id;
+}
+
+/**
+ * デーモンの入口。Unix は state/pc/daemon.sock。Windows は pipeName(root, pipeId)。
+ * create はデーモンだけが真にする。クライアントで id が無い時は、誰も開けない乱数の名前にする（今のパイプ無しと同じ ENOENT になり、他人が置いた名前へはつながない）。
+ */
+export const socketPath = (root = stateRoot(), create = false) => process.platform === "win32"
+  ? pipeName(root, pipeId(root, { create }) ?? randomBytes(16).toString("hex"))
   : join(root, "pc", "daemon.sock");
 
 type Reply = { ok: true; result: unknown } | { ok: false; status: number; code: string; message: string; body: Record<string, unknown> };
@@ -22,7 +45,7 @@ export type DaemonStatusReply = { schema: "approval-box.daemon-status.v1"; mode:
  * デーモン側: LocalBox の経路を、ソケット越しに答える。`GET /status` は status() が答える。
  * box が無い間（--hosted で、まだつながっていない・起動中）は、申請の経路に 503 と status の reason の名前で答える（今の道へ黙って回さない）。
  */
-export function serveLocal(box: Pick<LocalBox, "route"> | null, path = socketPath(), status?: () => DaemonStatusReply): Promise<Server> {
+export function serveLocal(box: Pick<LocalBox, "route"> | null, path = socketPath(stateRoot(), true), status?: () => DaemonStatusReply): Promise<Server> {
   const server = createServer((socket) => {
     let buffer = "";
     socket.setEncoding("utf8");
