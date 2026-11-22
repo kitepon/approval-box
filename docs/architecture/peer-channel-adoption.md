@@ -34,6 +34,7 @@ AI → MCP (stdio) → connector outbox (local, 0600) → `wake(K)` (server → 
 ## 4. What goes from the server (by step, never before the step that replaces it ships)
 - `POST /mcp` (remote MCP) and the connector API that carries bodies (`/connector/v1/decisions*`, attachments): a cloud AI without a local connector can no longer reach Approval Box; this follows from the Owner's ruling that content flows AI ↔ device directly.
 - `/v1/decisions*`, `/v1/events` with content, attachment routes, push text.
+- What stays after the close (no content): sign-in and passes (`/auth/v1`), `/v1/me` (account and `plan`, the entitlement source for every client including BellTeam's session), the product pairing and connection routes (`POST /connector/v1/pairing` with `client: "bellteam"`, its claim and the session it yields, `/connector/v1/connection`, connection removal), `/pc/v1`, billing, diagnostics. A BellTeam session keeps only `GET /me` from its allowed list; its decision, answer, hold, attachment and SSE rows go with the content routes.
 - Tables `decisions`, `decision_events` content, attachment files; purged once, with `secure_delete` and vacuum, and the NAS backup generation replaced (one generation, Owner ruling d04).
 
 ## 5. Order
