@@ -80,3 +80,25 @@ for (const scenario of ["reroute", "fetched", "already-emitted", "claimed", "jou
     }
   });
 }
+
+test("実デーモン: 報告先の申請が無い（404）なら控えを消し、2秒ごとに送り直さない（t33）", async t => {
+  const root = mkdtempSync(join(tmpdir(), "ab-gone-"));
+  const journal = join(root, "state", "deliveries.json");
+  writeJsonFile(journal, { "K-GONE": { delivery_id: randomUUID(), channel_id: "c-gone", harness: "grok", state: "report", result: "delivered", at: new Date().toISOString() } });
+  let posts = 0;
+  const server = createServer((req, res) => {
+    if (req.url?.endsWith("/stream")) { res.writeHead(200, { "content-type": "text/event-stream" }); return; }
+    res.setHeader("content-type", "application/json");
+    if (req.method === "POST") { posts++; res.statusCode = 404; res.end(JSON.stringify({ error: { code: "not_found", message: "この申請は見つかりません" } })); }
+    else res.end(JSON.stringify({ items: [] }));
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  writeJsonFile(join(root, "config.json"), { server: `http://127.0.0.1:${(server.address() as { port: number }).port}`, token: "isolated-test" });
+  const child = spawn(process.execPath, ["--input-type=module", "-e", `import { runDaemon } from ${JSON.stringify(new URL("../src/daemon.ts", import.meta.url).href)}; await runDaemon();`], { env: { ...process.env, APPROVAL_BOX_HOME: root }, stdio: ["ignore", "ignore", "pipe"] });
+  let stderr = ""; child.stderr.on("data", x => stderr += x);
+  t.after(() => { child.kill("SIGKILL"); server.closeAllConnections(); server.close(); rmSync(root, { recursive: true, force: true }); });
+  await until(() => existsSync(journal) && !JSON.parse(readFileSync(journal, "utf8"))["K-GONE"], 300);
+  await delay(4500); // 次の見回り（2秒おき）を2回待っても送り直さない
+  assert.equal(posts, 1, stderr);
+  assert.match(stderr, /報告先の申請がありません（not_found）/);
+});
