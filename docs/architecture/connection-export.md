@@ -47,7 +47,7 @@ Use synthetic profiles only. Exercise the public source/built CLI and package bu
 
 ## Installed bundle capabilities (since 0.1.36)
 
-Invoke the same stable executable with argv `version --json`. Stdout is exactly one JSON object and newline: `{"schema":"approval-box.version.v1","version":"0.1.36","capabilities":["bellteam-requester-wake"]}` (version tracks the installed package). Plain `version` remains the existing version line. The query reads no config, state or processes, makes no network request and changes nothing.
+Invoke the same stable executable with argv `version --json`. Stdout is exactly one JSON object and newline: `{"schema":"approval-box.version.v1","version":"0.1.36","capabilities":["bellteam-requester-wake"]}` (version tracks the installed package; 0.2.0-pc.2 and later also list `"use-hosted"`). Plain `version` remains the existing version line. The query reads no config, state or processes, makes no network request and changes nothing.
 
 The capability declares the installed bundle's requester-wake support documented since 0.1.34: a BellTeam-origin request whose receiver is lost gets one public sendmessage wake with resume_decision guidance. It is not a receipt for an individual wake or answer, nor a promise about a historical running process's ancestry. BellTeam's existing deployment owns installing supported MCP/daemon versions; a local runtime install alone does not restart previously registered processes.
 
