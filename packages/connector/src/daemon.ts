@@ -261,6 +261,13 @@ export async function runDaemon(options: { hosted?: boolean } = {}) {
       delete journal[id];
       save();
     } catch (error) {
+      // 申請がもう無い（削除・期限の片付け）なら、報告は二度と通らない。控えを消し、名前付きの1行で終える（fox 0.1.26 で2秒ごとに繰り返していた、t33）。
+      if (error instanceof ServerError && error.status === 404) {
+        delete journal[id];
+        save();
+        log(`報告先の申請がありません（not_found）。控えを消します: ${id}`);
+        return;
+      }
       log(`報告に失敗（あとで送り直す）: ${id} ${(error as Error).message}`);
     }
   }
