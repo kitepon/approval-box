@@ -17,7 +17,7 @@ const run = (file, args) => {
 };
 try {
   const version = run(cli, ["version"]).trim();
-  const capabilities = { schema: "approval-box.version.v1", version, capabilities: ["bellteam-requester-wake"] };
+  const capabilities = { schema: "approval-box.version.v1", version, capabilities: ["bellteam-requester-wake", "use-hosted"] };
   assert.equal(run(cli, ["version", "--json"]), `${JSON.stringify(capabilities)}\n`);
   const launcher = join(profile, "bin", "approval-box");
   assert.equal(run(cli, ["install-runtime"]), launcher + "\n");
