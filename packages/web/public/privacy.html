@@ -64,6 +64,7 @@
 <li>アプリまたはWeb版の「設定」の「保存されている情報の写しを受け取る」で、アカウント番号に結びつけて保存している情報（設定、申請と答え、添付、接続した端末、通知を登録した端末の種類と言語）を、1つのファイルで受け取れます。</li>
 <li>アプリまたはWeb版の「設定」から、答えた申請と取り下げられた申請（既決の履歴）を、添付も含めてすぐに削除できます。</li>
 <li>同じく「設定」から、アカウントと、申請・答え・添付・接続した端末・通知の登録を含むすべての情報を削除できます。</li>
+<li>アカウントを削除すると、そのアカウントでログインしているすべての端末のログインも終わります。ほかの端末を締め出すため、サーバーはアカウントの番号とログインを終えた時刻だけを、最長14日間残し、その後は自動で消します。</li>
 <li>端末の接続は、アプリの「接続」または端末の <code>npx approval-box uninstall</code> で解除できます。</li>
 <li>開示と削除は、ログインした端末から、ご自身で行ってください。運営者はメールアドレスを持たないため、メールでのご依頼や、番号をお知らせいただくだけでは、ご本人の確認になりません。</li>
 </ul>
@@ -99,7 +100,7 @@
 <p>Data is stored on a server managed by the operator in Japan and transmitted over HTTPS. Answered and cancelled requests are deleted automatically after 30 days by default; you can choose 7, 30, 90 or 365 days in Settings. Pending and held requests remain until you answer them or the AI cancels them. Attachments are deleted together with their request, on the same schedule; uploaded files that are not used in an answer are deleted after 24 hours. The connector on your computer saves attachments to <code>~/.approval-box/attachments/</code> before handing them to the AI and deletes them after 30 days; those files stay on your computer and are not handled by the operator.</p>
 <h2>Access and deletion</h2>
 <p>In Settings in the app or the web app, choose "Get a copy of the information we keep" to download, as one file, what is stored under your account number (settings, requests and answers, attachments, connected computers, and the type and language of devices registered for notifications).</p>
-<p>In Settings, you can delete answered and cancelled requests (including their attachments) immediately, or delete your account, which removes all associated data, including requests, answers, attachments, connected computers and notification registrations. You can disconnect a computer from the Connections screen or by running <code>npx approval-box uninstall</code> on it.</p>
+<p>In Settings, you can delete answered and cancelled requests (including their attachments) immediately, or delete your account, which removes all associated data, including requests, answers, attachments, connected computers and notification registrations. Deleting the account also ends the login on every device signed in to it; to keep those devices out, the server keeps only the account number and the time the logins ended for at most 14 days, then removes them automatically. You can disconnect a computer from the Connections screen or by running <code>npx approval-box uninstall</code> on it.</p>
 <p>Please make access and deletion requests yourself from a signed-in device. The operator holds no email address, so a request by email, or telling us your number, does not prove who you are.</p>
 <h2>Contact</h2>
 <p>For questions about this policy, write to quolu@kitepon.dev. If you prefer to ask in public, you can also open an issue on GitHub (<a href="https://github.com/kitepon/approval-box/issues">https://github.com/kitepon/approval-box/issues</a>), but issues are public, so do not include personal information. You can delete your account and data in Settings in the app or the web app (<a href="/support#delete-account-en">steps</a>). See also the <a href="/terms">annex terms</a>.</p>

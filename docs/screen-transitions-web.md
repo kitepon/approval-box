@@ -56,7 +56,7 @@ Both modes share one S1 (login.tsx `Login`). Differences are marked L (phone app
 
 **S1b** banner on S1, only after a signed-in browser got a 401 (a first visit shows no banner). The text follows the library error code of the 401 (api.ts `errorBody` -> `onUnauthorized(code)` -> login.tsx `Reason`):
 - `pass_refused` (stopped from the phone, or "stop all other devices"): `この端末のログインは、承認したスマホから止められました。もう一度ログインしてください。` [390](screenshots/web/login-library-banner-stopped-390.png) [1280](screenshots/web/login-library-banner-stopped-1280.png)
-- `pass_expired` (14 days unused): `しばらく使われなかったため、ログインが切れました。もう一度ログインしてください。` [390](screenshots/web/login-library-banner-expired-390.png) [1280](screenshots/web/login-library-banner-expired-1280.png)
+- `pass_expired` (unused for 13 days 23 hours, login-billing 1.33): `しばらく使われなかったため、ログインが切れました。もう一度ログインしてください。` [390](screenshots/web/login-library-banner-expired-390.png) [1280](screenshots/web/login-library-banner-expired-1280.png)
 - any other 401 (`pass_invalid`, an ID-login session that ended, account deleted elsewhere): `ログインが切れました。もう一度ログインしてください。` [390](screenshots/web/login-library-banner-other-390.png) [1280](screenshots/web/login-library-banner-other-1280.png)
 (Source of the codes: the library's `errors.ts` in `@kitepon/login-billing`; `server/http.ts` lets `pass_invalid` fall through to the old session check and returns the others as they are. The Web does not invent a distinction the code does not carry.)
 

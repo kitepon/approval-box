@@ -194,9 +194,11 @@ test("G1: 契約の無い通行証は、申請と更新の知らせが402。/me�
   const id = started.json.decision_id as string;
   assert.equal((await x.call("GET", `/v1/decisions/${id}`, { token: pass })).status, 200);
   assert.equal((await x.call("POST", `/v1/decisions/${id}/answer`, { token: pass, body: { option_id: "ok", version: 1 } })).status, 200);
+  const other = (await x.signIn("sub-g1")).pass; // 同じアカウントの別の端末
   assert.equal((await x.call("DELETE", "/v1/me", { token: pass })).status, 200);
-  // 消した後、同じ通行証では入れない（空のアカウントを作り直さない）。
+  // 消した後、同じ通行証でも別の端末の通行証でも入れない（空のアカウントを作り直さない、契約 1.32）。
   assert.equal((await x.call("GET", "/v1/me", { token: pass })).status, 401);
+  assert.equal((await x.call("GET", "/v1/me", { token: other })).status, 401);
   assert.equal(get(x.db, "select 1 from users where id = ?", k), undefined);
 });
 
