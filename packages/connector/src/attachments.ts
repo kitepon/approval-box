@@ -19,7 +19,7 @@ export function safeFileName(name: string): string {
 }
 
 /** 1つ保存して場所を返す。同じ中身が既にあれば取り直さない。中身のSHA-256がサーバーの値と合わなければ保存しない。 */
-export async function saveAttachment(api: Api, decisionId: string, meta: AttachmentMeta, index: number): Promise<string> {
+export async function saveAttachment(api: Pick<Api, "download">, decisionId: string, meta: AttachmentMeta, index: number): Promise<string> {
   const dir = join(attachmentsRoot(), safeFileName(decisionId));
   const file = join(dir, `${index + 1}_${safeFileName(meta.name)}`);
   if (existsSync(file) && sha256(readFileSync(file)) === meta.sha256) return file;
@@ -31,7 +31,7 @@ export async function saveAttachment(api: Api, decisionId: string, meta: Attachm
 }
 
 /** 答えの文に書き足す、保存した場所の一覧。保存できなかったものは get_attachment を案内する。 */
-export async function saveAll(api: Api, decisionId: string, items: AttachmentMeta[]): Promise<string> {
+export async function saveAll(api: Pick<Api, "download">, decisionId: string, items: AttachmentMeta[]): Promise<string> {
   const lines = ["", "添付はこの端末に保存しました:"];
   for (const [i, meta] of items.entries()) {
     try {

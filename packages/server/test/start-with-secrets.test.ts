@@ -87,3 +87,12 @@ test("書けない置き場ではサーバーを起こさず、値を出さず�
   assert.equal(failed.stderr.includes(adminKey), false);
   assert.equal(existsSync(marker), false);
 }));
+
+test("Cloudflare TURN の API トークンもファイルへ移し、値を環境から外す（peer-channel の中継）", posix, () => withDir((dir) => {
+  const { status, seen } = start({ SECRETS_DIR: dir, PC_TURN_CF_API_TOKEN: "cf-token", PC_TURN_CF_KEY_ID: "key-id" });
+  assert.equal(status, 0);
+  assert.equal(readFileSync(join(dir, "pc-turn-cf-api-token"), "utf8"), "cf-token\n");
+  assert.equal("PC_TURN_CF_API_TOKEN" in seen, false);
+  assert.equal(seen.PC_TURN_CF_API_TOKEN_FILE, join(dir, "pc-turn-cf-api-token"));
+  assert.equal(seen.PC_TURN_CF_KEY_ID, "key-id"); // 鍵の ID は秘密ではない
+}));

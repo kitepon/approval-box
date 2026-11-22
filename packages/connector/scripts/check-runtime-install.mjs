@@ -45,6 +45,15 @@ try {
   assert.equal(run(join(profile, "runtime", version, "cli.mjs"), ["install-runtime"]), launcher + "\n");
   assert.equal(run(launcher, ["version"]).trim(), version);
   assert.deepEqual(readdirSync(join(profile, "bin")), ["approval-box"]);
+  // peer-channel mode (c8c): node-datachannel and this platform's prebuilt binary resolve from the installed runtime and load.
+  const runtime = join(profile, "runtime", version);
+  assert.deepEqual(readdirSync(join(runtime, "node_modules", "@node-datachannel")).sort(), ["darwin-arm64", "darwin-x64", "linux-arm64-gnu", "linux-x64-gnu", "win32-x64-msvc"]);
+  const probe = `const { createRequire } = await import("node:module"); const { pathToFileURL } = await import("node:url");
+    const at = createRequire(${JSON.stringify(join(runtime, "chunks", "x.mjs"))}).resolve("node-datachannel");
+    const m = await import(pathToFileURL(at).href); process.stdout.write(m.default.getLibraryVersion());`;
+  const loaded = spawnSync(process.execPath, ["--input-type=module", "-e", probe], { env, encoding: "utf8" });
+  assert.equal(loaded.status, 0, loaded.stderr);
+  assert.match(loaded.stdout, /^\d+\.\d+\.\d+$/);
   assert.equal(readFileSync(config, "utf8"), fixture);
   console.log("runtime installation and stable CLI export passed with synthetic profile");
 } finally { rmSync(profile, { recursive: true, force: true }); }

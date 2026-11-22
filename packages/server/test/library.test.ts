@@ -136,7 +136,7 @@ test("ライブラリを使わない時は今までどおり: /auth/v1 は無く
   const userId = accounts.createUser();
   const { session } = accounts.issueSession(userId, "test");
   assert.equal((await app.request("/auth/v1/signin/nonce", { method: "POST" })).status, 404);
-  assert.deepEqual(await (await app.request("/v1/auth/config")).json(), { library_login: false });
+  assert.deepEqual(await (await app.request("/v1/auth/config")).json(), { library_login: false, peer_channel: false });
   const me = await app.request("/v1/me", { headers: { authorization: `Bearer ${session}` } });
   assert.equal(me.status, 200);
   const body = await me.json() as Record<string, unknown>;
@@ -467,4 +467,13 @@ test("webSignIn: unset means the provider is unknown to websignin/start; set mea
     webSignIn: { google: { clientId: "web-client", clientSecret: "s" } },
   });
   assert.notEqual(((await ((await start(on))!).json()) as { error?: string }).error, "provider_unknown");
+});
+
+test("LB_OLD_HANDOFF=off: handoff/start without a pass is refused (contract 1.20 product duty); default stays on", async () => {
+  const off = createLibrary({
+    db: openDb(":memory:"), publicUrl: ORIGIN, billing: "off", kKey: K_KEY, passKey: { id: "p1", key: PASS_KEY }, appleAudiences: [BUNDLE], googleAudiences: [GOOGLE_ID], exemptK: [], oldHandoff: "off",
+  });
+  const res = await off.handler.handle(new Request(`${ORIGIN}/auth/v1/handoff/start`, { method: "POST", headers: { "content-type": "application/json", origin: ORIGIN }, body: JSON.stringify({ deviceLabel: "Chrome" }) }));
+  assert.notEqual(res!.status, 200);
+  assert.equal((await setup().call("POST", "/auth/v1/handoff/start", { body: { deviceLabel: "Chrome" } })).status, 200);
 });
