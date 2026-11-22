@@ -30,7 +30,7 @@
     "test:bundle": "node scripts/check-runtime-install.mjs"
   },
   "devDependencies": {
-    "@kitepon/peer-channel": "file:../../vendor/kitepon-peer-channel-0.5.3.tgz",
+    "@kitepon/peer-channel": "file:../../vendor/kitepon-peer-channel-0.5.5.tgz",
     "@modelcontextprotocol/sdk": "^1.31.0",
     "@types/node": "^25.9.1",
     "@types/qrcode": "^1.5.5",
