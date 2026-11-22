@@ -39,5 +39,8 @@ jobs:
       - run: npm test -w packages/connector
       - run: npm run build -w packages/connector
       - run: npm run test:bundle -w packages/connector
-      - run: npm publish --access public
+      # 試し版（0.2.0-pc.1 のように - の付く版）は next に出す。latest の利用者には届かない。
+      - run: |
+          version=$(node -p "require('./package.json').version")
+          case "$version" in *-*) npm publish --access public --tag next ;; *) npm publish --access public ;; esac
         working-directory: packages/connector

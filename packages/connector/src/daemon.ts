@@ -4,6 +4,10 @@ import { sendChannelAnswer, channelAnswerState } from "./channel-delivery.ts";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Api, ServerError } from "./api.ts";
+import { admissionFile, modeFile, pcPrepared, readMode, serverOffersPeerChannel } from "./pc-mode.ts";
+import type { DaemonApi, PeerChannelRuntime } from "./pc-daemon.ts";
+import type { DaemonStatusReply } from "./local-api.ts";
+import { VERSION } from "./version.ts";
 import { type Wakes, queueWake, sendWake, wakeMessage } from "./bellteam-wake.ts";
 import { type AttachmentMeta, pruneAttachments, saveAll } from "./attachments.ts";
 import { readConfig, requireConfig, writeJsonFile } from "./config.ts";
@@ -100,6 +104,57 @@ export function abandoned(entry: Entry, receiver: Receiver, now = Date.now()): b
   return now - Date.parse(entry.orphaned_at) >= ORPHAN_GRACE_MS;
 }
 
+/**
+ * MCPが peer-channel の道を使うか。鍵と登録が無ければ今の道。あれば、いま動いているデーモンが書いた道（state/pc/mode.json）に従う。
+ * デーモンが起きて道を決めるまで（10秒まで）は待つ。決まらなければ peer-channel の道として扱い、ソケットにつながらなければ daemon_unreachable の名前で失敗する。
+ */
+export async function useLocalApi(wait = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<boolean> {
+  if (!pcPrepared()) return false;
+  for (let i = 0; i < 50; i++) {
+    const mode = readMode();
+    const status = daemonStatus();
+    if (mode && status.running && mode.pid === status.pid) return mode.mode === "pc";
+    await wait(200);
+  }
+  return true;
+}
+
+/**
+ * peer-channel の道（c8c）: サーバーが peer_channel を出していて、鍵とペアリングの登録がある時だけ、申請と配送の記録を手元で持ち、
+ * 答えは端末から直接受ける。どちらの道にしたかは名前付きの1行と state/pc/mode.json に出し、MCPはそれに従う（道を決めるのはデーモンだけ）。
+ * 確かめられない・起こせない間は、今の道へ黙って戻らない。名前付きの行を出して時間を空けて試し直す（その間MCPは daemon_unreachable で待つ）。
+ */
+export async function startDaemonPeerChannel(config: { server: string; token: string }, log: (message: string) => void, pause: (ms: number) => Promise<unknown> = sleep,
+  hosted?: { reason(reason: string): void; beforeStart(): Promise<void> }, status?: () => DaemonStatusReply): Promise<PeerChannelRuntime | undefined> {
+  if (!pcPrepared()) return undefined;
+  const setMode = (mode: "pc" | "server", reason: string) => writeJsonFile(modeFile(), { mode, reason, pid: process.pid, at: new Date().toISOString() });
+  for (let wait = 5000; ; wait = Math.min(wait * 2, 60_000)) {
+    try {
+      if (!(await serverOffersPeerChannel(config.server))) {
+        // --hosted は peer-channel だけで動く。今の道へは回さず、名前を出して待つ。
+        if (hosted) throw Object.assign(new Error("サーバーが peer_channel を出していません"), { reason: "server_flag_off" });
+        log("peer-channel の鍵と登録はありますが、サーバーが peer_channel を出していないので、今の道で動きます");
+        setMode("server", "server_flag_off");
+        return undefined;
+      }
+      let info: { connection_id: string; me: { user_id: string } };
+      try { info = await new Api(config).call<{ connection_id: string; me: { user_id: string } }>("GET", "/connection"); }
+      catch (error) { throw Object.assign(error as Error, { reason: error instanceof ServerError && error.status === 401 ? "connection_removed" : "server_unreachable" }); }
+      const { startPeerChannel } = await import("./pc-daemon.ts"); // ネイティブのモジュール（node-datachannel）はこの道でだけ読む
+      const admission = existsSync(admissionFile()) ? JSON.parse(readFileSync(admissionFile(), "utf8")) : undefined;
+      await hosted?.beforeStart();
+      const pc = await startPeerChannel({ server: config.server, token: config.token, connectionId: info.connection_id, account: info.me.user_id, ...(admission ? { admission } : {}), log, ...(status ? { status } : {}) });
+      setMode("pc", "server_flag_on_and_admitted");
+      log("peer-channel の道で動きます");
+      return pc;
+    } catch (error) {
+      hosted?.reason((error as { reason?: string }).reason ?? "endpoint_failed");
+      log(`peer-channel の道を確かめられません・起こせません（${(error as Error).message}）。${wait / 1000}秒後に試し直します`);
+      await pause(wait);
+    }
+  }
+}
+
 /** 配送デーモンが動いていなければ起動する。利用者ごとに1つ。 */
 export function ensureDaemon() {
   try {
@@ -116,7 +171,42 @@ export function ensureDaemon() {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function runDaemon() {
+/**
+ * --hosted（c8h、BellTeam の本体のような監督役の下）: つながるまで、ローカルソケットで GET /status と not_paired だけを答える。
+ * 2秒ごとにペアリングが置いた設定と鍵を見て、そろったら自分で peer-channel の道を起こす。今の道へは回さない。
+ */
+async function startHosted(log: (message: string) => void, status: DaemonStatusReply): Promise<{ config: { server: string; token: string }; pc: PeerChannelRuntime }> {
+  const { serveLocal, socketPath } = await import("./local-api.ts");
+  mkdirSync(join(stateRoot(), "pc"), { recursive: true, mode: 0o700 });
+  const path = socketPath(stateRoot(), true); // Windows のパイプ名の乱数（pc/pipe-id）は、ここで作ってから serve する
+  rmSync(path, { force: true }); // 前のデーモンが残した印（lock を持つのはこのデーモンだけ）
+  let pre: import("node:net").Server | undefined = await serveLocal(null, path, () => status);
+  const onStop = () => { pre?.close(); process.exit(0); };
+  process.once("SIGTERM", onStop);
+  process.once("SIGINT", onStop);
+  let said = "";
+  for (;;) {
+    const config = readConfig();
+    if (!config?.token || !pcPrepared()) {
+      Object.assign(status, { mode: "not_paired", paired: false, reason: "not_paired" });
+      if (said !== "not_paired") { log("つながっていません（approval-box pair --json でつないでください）。つながるまで not_paired で答えます"); said = "not_paired"; }
+      await sleep(2000);
+      continue;
+    }
+    Object.assign(status, { mode: "starting", paired: true, reason: "starting", server: config.server, ...(config.connection_id ? { connection_id: config.connection_id } : {}) });
+    const pc = await startDaemonPeerChannel({ server: config.server, token: config.token }, log, sleep, {
+      reason: (reason) => { status.reason = reason; },
+      beforeStart: () => new Promise<void>((done) => { if (!pre) return done(); pre.close(() => done()); pre = undefined; }),
+    }, () => status);
+    if (!pc) continue; // 鍵が消えた（pcPrepared が偽になった）: 最初から
+    process.off("SIGTERM", onStop);
+    process.off("SIGINT", onStop);
+    Object.assign(status, { mode: "pc", reason: "running" });
+    return { config: { server: config.server, token: config.token }, pc };
+  }
+}
+
+export async function runDaemon(options: { hosted?: boolean } = {}) {
   // 版の入れ替えでは、止められた前のデーモンが終わるまで数秒かかる。待たずに「もう動いている」と見て終わると、
   // 前のデーモンも終わってデーモンがいなくなり、次にMCPが起こすまで答えが届かない（2026-10-03 の実測）。
   for (let i = 0; i < 50; i++) {
@@ -127,13 +217,18 @@ export async function runDaemon() {
   const status = daemonStatus();
   if (status.running && status.pid !== process.pid) return;
   writeJsonFile(lockFile(), { pid: process.pid, entry: runtimeEntry("cli"), started_at: new Date().toISOString() });
-  const api = new Api(requireConfig());
+  const log = (message: string) => process.stderr.write(`${new Date().toISOString()} ${message}\n`);
+  const self: DaemonStatusReply = { schema: "approval-box.daemon-status.v1", mode: "starting", paired: false, reason: "starting", version: VERSION, pid: process.pid };
+  const hostedStart = options.hosted ? await startHosted(log, self) : undefined;
+  const config = hostedStart?.config ?? requireConfig();
+  const pc = hostedStart?.pc ?? await startDaemonPeerChannel(config, log, sleep, undefined, () => self);
+  if (pc && !hostedStart) Object.assign(self, { mode: "pc", paired: true, reason: "running", server: config.server, ...(readConfig()?.connection_id ? { connection_id: readConfig()!.connection_id } : {}) });
+  const api: DaemonApi = pc ? pc.api : new Api(config);
   let journal: Journal = existsSync(journalFile()) ? (JSON.parse(readFileSync(journalFile(), "utf8")) as Journal) : {};
   const save = () => writeJsonFile(journalFile(), journal);
   let wakes: Wakes = {};
   try { if (existsSync(wakesFile())) wakes = JSON.parse(readFileSync(wakesFile(), "utf8")) as Wakes; } catch { /* 読めなければ空から */ }
   const saveWakes = () => writeJsonFile(wakesFile(), wakes);
-  const log = (message: string) => process.stderr.write(`${new Date().toISOString()} ${message}\n`);
 
   // 送信の途中で止まった起こし知らせは、届いたか分からない。再送しない。
   for (const [id, wake] of Object.entries(wakes)) {
@@ -315,7 +410,7 @@ export async function runDaemon() {
   };
   // 止められたら、すぐ席（lock）を空ける。終わるまでの数秒の間に起こされた次のデーモン（待たない古い版も含む）が、
   // 「もう動いている」と見て終わってしまわないように。
-  const stop = () => { stopping = true; releaseLock(); controller.abort(); };
+  const stop = () => { stopping = true; releaseLock(); controller.abort(); void pc?.stop(); };
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
 
@@ -346,7 +441,7 @@ export async function runDaemon() {
         const { items } = await api.call<{ items: { status: string }[] }>("GET", "/decisions");
         const open = items.some((d) => d.status === "pending" || d.status === "held");
         if (open || Object.keys(journal).length || Object.keys(wakes).length) idleSince = Date.now();
-        else if (Date.now() - idleSince > IDLE_EXIT_MS) stop();
+        else if (!options.hosted && Date.now() - idleSince > IDLE_EXIT_MS) stop(); // --hosted は監督役が止めるまで動く
       } catch { idleSince = Date.now(); }
     }
   }

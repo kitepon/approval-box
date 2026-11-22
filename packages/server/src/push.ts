@@ -146,3 +146,42 @@ export class Notifier {
     }));
   }
 }
+
+/**
+ * peer-channel の起こし（契約 6.3）。その K の端末へ、決まった中身の無い知らせだけを送る。題名・依頼元・ID・バッジは載せない。
+ * alert（新しい申請・直し）: APNs は loc-key PC_NEW の固定文（アプリの中の訳）と mutable-content（Notification Service Extension が中身を読んで差し替える）、
+ * それ以外は content-available だけ。FCM はデータだけ { pc: "1", a: "1" | "0" }。今の経路の Notifier はそのまま。
+ */
+export class Waker {
+  private readonly db: Db;
+  private readonly apns?: Send;
+  private readonly fcm?: FcmSend;
+
+  constructor(db: Db, senders: { apns?: Send; fcm?: FcmSend }) {
+    this.db = db;
+    this.apns = senders.apns;
+    this.fcm = senders.fcm;
+  }
+
+  readonly wake = async (userId: string, alert: boolean) => {
+    const devices = all<{ id: string; platform: string; apns_token: string | null; apns_env: string | null; fcm_token: string | null }>(this.db,
+      "select id, platform, apns_token, apns_env, fcm_token from devices where user_id = ? and ((platform = 'ios' and apns_token is not null) or (platform = 'android' and fcm_token is not null))", userId)
+      .filter((d) => (d.platform === "ios" ? this.apns : this.fcm));
+    await Promise.all(devices.map(async (device) => {
+      if (device.platform === "android") {
+        const result = await this.fcm!(device.fcm_token!, { pc: "1", a: alert ? "1" : "0" }, alert ? "high" : "normal");
+        if (result.status !== 200) console.log(`approval-box-server: wake fcm → ${result.status}${result.reason ? ` ${result.reason}` : ""}`); // K と端末は出さない
+        if (result.status === 404 || result.reason === "UNREGISTERED") run(this.db, "delete from devices where id = ?", device.id);
+        return;
+      }
+      const [headers, payload] = alert
+        ? [{ "apns-push-type": "alert", "apns-priority": "10" }, { aps: { alert: { "loc-key": "PC_NEW" }, "mutable-content": 1, sound: "default" }, pc: 1 }]
+        : [{ "apns-push-type": "background", "apns-priority": "5" }, { aps: { "content-available": 1 }, pc: 1 }];
+      const result = await this.apns!(device.apns_env === "sandbox" ? "sandbox" : "production", device.apns_token!, headers, payload);
+      if (result.status !== 200) console.log(`approval-box-server: wake apns → ${result.status}${result.reason ? ` ${result.reason}` : ""}`);
+      if (result.status === 410 || (result.status === 400 && (result.reason === "BadDeviceToken" || result.reason === "DeviceTokenNotForTopic"))) {
+        run(this.db, "delete from devices where id = ?", device.id);
+      }
+    }));
+  };
+}

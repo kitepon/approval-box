@@ -572,6 +572,24 @@ export class Decisions {
     });
   }
 
+  /**
+   * peer-channel の道（c8c、契約 Q8）: 接続テストはAIの端末で答えと確認コードを確かめる。サーバーへ届くのは「このAIの確認が済んだ」の印だけで、
+   * 申請・答え・コードは来ない。印は接続トークンの持ち主（コネクタ）の自己申告で、今の購入の前の確認（setup.verified）にだけ使う。
+   */
+  setupVerified(conn: Connection, client: string, os: string | undefined) {
+    return tx(this.db, () => {
+      const at = now();
+      run(this.db, `insert into setup_checks (id, user_id, connection_id, client, os, status, decision_id, code, tested_at, passed_at)
+          values (?, ?, ?, ?, ?, 'passed', null, null, ?, ?)
+          on conflict (connection_id, client) do update set os = coalesce(excluded.os, os), status = 'passed', decision_id = null, code = null,
+          tested_at = excluded.tested_at, passed_at = excluded.passed_at, failed_step = null, detail = null`,
+        uuid(), conn.user_id, conn.id, client, os ?? null, at, at);
+      run(this.db, "update users set setup_verified_at = coalesce(setup_verified_at, ?) where id = ?", at, conn.user_id);
+      this.events.publish(conn.user_id, "setup.updated", {});
+      return { status: "passed", client };
+    });
+  }
+
   confirmSetupTest(conn: Connection, id: string, code: string) {
     return tx(this.db, () => {
       const row = this.forConnection(conn, id);

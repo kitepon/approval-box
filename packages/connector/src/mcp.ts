@@ -5,10 +5,11 @@ import * as steer from "aiterm-steer-delivery";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { Api, ServerError } from "./api.ts";
+import { LocalApi } from "./local-api.ts";
 import { type AttachmentMeta, saveAttachment } from "./attachments.ts";
 import { bellteamBotId, rememberRequester } from "./bellteam-wake.ts";
 import { requireConfig, writeJsonFile } from "./config.ts";
-import { ensureDaemon } from "./daemon.ts";
+import { ensureDaemon, useLocalApi } from "./daemon.ts";
 import { uploadImagePaths } from "./request-images.ts";
 import { runtimeEntry } from "./runtime.ts";
 import { claudeChannelIsCurrent } from "./claude-channel.ts";
@@ -260,8 +261,9 @@ export async function runMcp() {
     const harness = harnessOf(clientName);
     try {
       const config = requireConfig();
-      const api = new Api(config);
+      // peer-channel の道（c8c）では、同じ形の呼び出しをデーモンの手元の申請へ送る（本文をサーバーへ送らない）。
       ensureDaemon();
+      const api = (await useLocalApi()) ? new LocalApi() : new Api(config);
       const channelQuery = lastChannel ? `?channel_id=${encodeURIComponent(lastChannel)}` : "";
 
       if (name === "list_my_decisions") {

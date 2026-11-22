@@ -23,7 +23,7 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/server/package.json packages/server/
 COPY packages/web/package.json packages/web/
 COPY packages/connector/package.json packages/connector/
-# 共有ライブラリ（login-billing）の配布物。npm ci が package-lock の integrity で確かめる。
+# 共有ライブラリ（login-billing・peer-channel）の配布物。npm ci が package-lock の integrity で確かめる。
 COPY vendor/ vendor/
 RUN npm ci --no-audit --no-fund
 COPY packages/server packages/server

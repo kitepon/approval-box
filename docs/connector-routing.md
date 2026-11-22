@@ -151,3 +151,11 @@ Scope: the connector MCP and daemon on Linux in BellTeam seats, all channel kind
 ## BellTeam acceptance label (0.1.35)
 
 BellTeam public sendmessage returns `queued` for a durably accepted wake of a sleeping seat. `sendWake` classifies this as accepted and retains `queued` in its detail. This changes the daemon log label only; accepted/unknown still terminate the existing wake journal without duplicate send. The earlier a49 live wake/fetch acceptance remains valid and is not repeated.
+
+## peer-channel mode (c8c, test-server line)
+
+When the connector runs on peer-channel (design: [peer-channel-adoption.md](architecture/peer-channel-adoption.md) section 7), the same `/connector/v1` request forms stay the contract between the MCP tools and whoever answers them, but the answerer is the local daemon, not the server:
+- MCP processes send `{ method, path, body }` lines over the daemon's local socket (`state/pc/daemon.sock`; a named pipe on Windows); the daemon answers with the same JSON and error codes the server would (`confirm_required` with `check_token`, `duplicate_suspected`, `conflict`, `not_found`, `rate_limited`).
+- Routes, `resume` and `amend` with `route` behave exactly as above; the delivery journal (`deliveries.json`) and its reconciliation are unchanged, and a delivery report updates the local record instead of the server.
+- Request bodies, answers and delivery texts live only in `state/pc/decisions.json` (0600) and the peer-channel outbox (`state/pc/connector/connector-state.json`, 0600).
+
