@@ -59,6 +59,7 @@ services:
       AB_ANDROID_APP_LINKS: ${AB_ANDROID_APP_LINKS:-}
       AB_APPLE_APP_IDS: ${AB_APPLE_APP_IDS:-}
       # peer-channel の TURN（/pc/v1/turn）。両方そろった時だけ。無ければ urls は空。docs/architecture/peer-channel-adoption.md
+      PC_OFFER: ${PC_OFFER:-}
       PC_TURN_SECRET: ${PC_TURN_SECRET:-}
       PC_TURN_SECRET_FILE: ${PC_TURN_SECRET_FILE:-}
       PC_TURN_URLS: ${PC_TURN_URLS:-}
