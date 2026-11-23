@@ -52,3 +52,35 @@ test("a non-exempt person gets a store pass from /dev/store-purchase through the
     assert.equal((await post("/dev/store-purchase", { provider: "x" })).status, 400);
   } finally { await s.close(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("pcOffer false is production's PC_OFFER=off: peer_channel false, no /pc/v1, and a client works over /v1 end to end", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ab-dev-"));
+  const lines: string[] = [];
+  const s = await startDevServer({ port: 0, dataDir: dir, pcOffer: false, log: (l) => lines.push(l) });
+  try {
+    const post = (path: string, body: unknown, token?: string) => fetch(`${s.url}${path}`, { method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
+    assert.equal(((await (await fetch(`${s.url}/v1/auth/config`)).json()) as { peer_channel: boolean }).peer_channel, false);
+    assert.notEqual((await fetch(`${s.url}/pc/v1/registry`)).status, 200);
+    assert.match(lines.join("\n"), /peer_channel off/);
+    // the client signs in (fake Google web identity's K is exempt, as in the other tests)
+    const { nonce } = await (await post("/auth/v1/signin/nonce", {})).json() as { nonce: string };
+    const { id_token } = await (await post("/dev/id-token", { provider: "google", nonce })).json() as { id_token: string };
+    const { pass } = await (await post("/auth/v1/signin", { provider: "google", idToken: id_token, nonce })).json() as { pass: string };
+    // an AI of the same account files one request through a connection token (two steps: check_token)
+    const { token } = await (await post("/v1/tokens", { label: "lab AI" }, pass)).json() as { token: string };
+    const ask = { title: "試験の申請", options: [{ id: "ok", label: "はい" }, { id: "no", label: "いいえ" }], session_label: "lab", client: "claude-code", requester: "lab" };
+    const first = await post("/connector/v1/decisions", ask, token);
+    const check = ((await first.json()) as { error?: { check_token?: string }; check_token?: string });
+    const checkToken = check.error?.check_token ?? check.check_token;
+    assert.ok(checkToken, "first call returns a check token");
+    const filed = await (await post("/connector/v1/decisions", { ...ask, check_token: checkToken }, token)).json() as { decision_id?: string; id?: string };
+    const id = filed.decision_id ?? filed.id;
+    assert.ok(id);
+    // the client reads and answers it over /v1
+    const list = await (await fetch(`${s.url}/v1/decisions?status=pending,held`, { headers: { authorization: `Bearer ${pass}` } })).json() as { items: { id: string; version: number }[] };
+    const item = list.items.find((d) => d.id === id);
+    assert.ok(item);
+    const answered = await fetch(`${s.url}/v1/decisions/${id}/answer`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${pass}`, "idempotency-key": "lab-1" }, body: JSON.stringify({ option_id: "ok", version: item.version }) });
+    assert.equal(answered.status, 200);
+  } finally { await s.close(); rmSync(dir, { recursive: true, force: true }); }
+});
