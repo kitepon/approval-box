@@ -31,7 +31,8 @@ export function assertLoopback(publicUrl: string): URL {
   return url;
 }
 
-export type DevServerOptions = { port?: number; publicUrl?: string; dataDir?: string; subject?: string; log?: (line: string) => void };
+/** pcOffer false = production's PC_OFFER=off: no /pc/v1 and peer_channel false, so clients take their /v1 path. */
+export type DevServerOptions = { port?: number; publicUrl?: string; dataDir?: string; subject?: string; pcOffer?: boolean; log?: (line: string) => void };
 
 export async function startDevServer(o: DevServerOptions = {}) {
   const port = o.port ?? 8788;
@@ -62,8 +63,9 @@ export async function startDevServer(o: DevServerOptions = {}) {
   accounts.contract = (userId) => library.lb.known(userId);
   library.lb.onNone((userId) => decisions.endForNoContract(userId));
   // 起こしは送らない。1行だけ出す（K は出さない）。
-  const peerChannel = createPeerChannel({ accounts, library, publicUrl, mirrorPath: join(dataDir, "pc-mirror.db"), wake: (_k, alert) => log(`wake alert=${alert ? 1 : 0} (not sent: dev server)`) });
-  const app = createApp({ db, accounts, decisions, events, publicUrl, library, peerChannel: peerChannel.part, appleAudiences: [DEV_BUNDLE], googleAudiences: [DEV_GOOGLE_CLIENT] });
+  const peerChannel = o.pcOffer === false ? undefined
+    : createPeerChannel({ accounts, library, publicUrl, mirrorPath: join(dataDir, "pc-mirror.db"), wake: (_k, alert) => log(`wake alert=${alert ? 1 : 0} (not sent: dev server)`) });
+  const app = createApp({ db, accounts, decisions, events, publicUrl, library, ...(peerChannel ? { peerChannel: peerChannel.part } : {}), appleAudiences: [DEV_BUNDLE], googleAudiences: [DEV_GOOGLE_CLIENT] });
 
   // 開発だけの入口: 偽の人の id token を作る（アプリは /auth/v1/signin/nonce の nonce で頼み、/auth/v1/signin に渡す）と、
   // Webサインインの提供元の画面の代わり（websignin/start の providerUrl を渡すと、ブラウザが戻る先の URL を返す）。
@@ -103,13 +105,13 @@ export async function startDevServer(o: DevServerOptions = {}) {
   const fetchHandler = async (request: Request, env: unknown) => (await dev(request)) ?? app.fetch(request, env as never);
 
   const server = await new Promise<ReturnType<typeof serve>>((ok) => {
-    const s = serve({ fetch: fetchHandler, port, hostname: "127.0.0.1", createServer: peerChannel.createServer }, () => ok(s));
+    const s = serve({ fetch: fetchHandler, port, hostname: "127.0.0.1", ...(peerChannel ? { createServer: peerChannel.createServer } : {}) }, () => ok(s));
   });
   const actualPort = (server.address() as { port: number }).port;
-  log(`listening on http://127.0.0.1:${actualPort} (fake sign-in for subject "${subject}"; Apple aud ${DEV_BUNDLE}, Google aud ${DEV_GOOGLE_CLIENT}; data ${dataDir})`);
+  log(`listening on http://127.0.0.1:${actualPort} (fake sign-in for subject "${subject}"; Apple aud ${DEV_BUNDLE}, Google aud ${DEV_GOOGLE_CLIENT}; peer_channel ${peerChannel ? "on" : "off"}; data ${dataDir})`);
   return {
     url: `http://127.0.0.1:${actualPort}`,
-    close: () => new Promise<void>((ok) => { peerChannel.part.close(); server.close(() => { db.close(); ok(); }); (server as { closeAllConnections?: () => void }).closeAllConnections?.(); }),
+    close: () => new Promise<void>((ok) => { peerChannel?.part.close(); server.close(() => { db.close(); ok(); }); (server as { closeAllConnections?: () => void }).closeAllConnections?.(); }),
   };
 }
 
@@ -120,5 +122,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     ...(env.PUBLIC_URL ? { publicUrl: env.PUBLIC_URL } : {}),
     ...(env.DEV_DATA ? { dataDir: env.DEV_DATA } : {}), // not APPROVAL_BOX_DATA: never the real server's data
     ...(env.DEV_SUBJECT ? { subject: env.DEV_SUBJECT } : {}),
+    ...(env.DEV_PC_OFFER?.trim() === "off" ? { pcOffer: false } : {}),
   }).catch((error: Error) => { console.error(`approval-box-dev: ${error.message}`); process.exit(1); });
 }
