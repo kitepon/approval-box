@@ -413,7 +413,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   v1.delete("/me", async (c) => {
     const userId = c.get("userId");
     // 通行証で入った時は、消す前にこのアカウントの全端末のログインを止める（契約 1.32 endAllLogins、ミント 2026-11-23）。端末の後追いのサインアウトが失敗しても、他の端末が残っていても、消したアカウントの通行証は残らない。止められなければ何も消さない。
-    const token = c.get("pass") && library ? bearer(c) ?? getCookie(c, "lb_pass") : undefined;
+    const token = c.get("pass") && library ? bearer(c) ?? getCookie(c, "__Host-lb_pass") : undefined;
     if (token) await library!.lb.endAllLogins(token);
     const ids = services.attachments?.userFileIds(userId) ?? [];
     tx(services.db, () => {
