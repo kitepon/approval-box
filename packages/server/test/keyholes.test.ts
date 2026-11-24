@@ -158,7 +158,7 @@ test("/pc/v1 authenticate: a signed request is a device of the entry with endpoi
   assert.ok(Math.abs(late.body.now - Date.now()) < 60_000);
 });
 
-test("keys: a parent added by another parent joins its whole entry into the signer's; rows move", async () => {
+test("keys: a parent of another entry added as a child brings its whole entry into the signer's; rows move (11.12)", async () => {
   const x = setup();
   const a = await startParent(x.app, ORIGIN);
   const b = await startParent(x.app, ORIGIN);
@@ -168,10 +168,11 @@ test("keys: a parent added by another parent joins its whole entry into the sign
     assert.equal((await x.app.request("/v1/devices", { method: "POST", body, headers: { ...(await signed(device, "POST", "/v1/devices", body)), "content-type": "application/json" } })).status, 200);
   }
   insertDecision(x.db, b.entry, "K-B");
-  // A's parent adds B's parent: B's entry (its child too) joins A's.
-  const add = await parentAdd(a.device, b.device.publicKey, "parent");
+  // A's parent adds B's parent as a child (the Owner's case, 11.12): B's entry (its child too) joins A's; A stays the one parent.
+  const add = await parentAdd(a.device, b.device.publicKey, "child");
   const res = await keysCall(x.app, b.device, "accept", { add });
-  assert.deepEqual(res, { status: 200, json: { entry: a.entry, role: "parent" } });
+  assert.deepEqual(res, { status: 200, json: { entry: a.entry, role: "child" } });
+  assert.deepEqual(all<{ key: string }>(x.db, "select key from keyholes where entry = ? and role = 'parent'", a.entry).map((r) => r.key), [a.device.publicKey]);
   assert.deepEqual(all<{ key: string }>(x.db, "select key from keyholes where entry = ? order by key", a.entry).map((r) => r.key), [a.device.publicKey, b.device.publicKey, bChild.publicKey].sort());
   assert.equal(get(x.db, "select 1 from users where id = ?", b.entry), undefined);
   assert.equal(get<{ user_id: string }>(x.db, "select user_id from decisions where id = 'K-B'")?.user_id, a.entry);
