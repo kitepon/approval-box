@@ -21,7 +21,7 @@ export async function rebindKeys(config: { server: string; token: string }, o: {
   const fresh = await newKeys();
   const binding = startPairingBinding(fresh.keys);
   await o.show(binding.qrText(""), binding.typedCode);
-  const admission = await binding.complete({ server: { url: config.server, headers: { authorization: `Bearer ${config.token}` } }, account: info.me.user_id, connectionId: info.connection_id, ...(o.timeoutMs ? { timeoutMs: o.timeoutMs } : {}) });
+  const admission = await binding.complete({ server: { url: config.server, headers: { authorization: `Bearer ${config.token}` } }, connectionId: info.connection_id, ...(o.timeoutMs ? { timeoutMs: o.timeoutMs } : {}) });
   // 結べた: 鍵を置き換え、新しい登録を起点にする。outbox の申請と墓標は残す（端末へは新しい鍵で送り直す）。
   saveKeys(fresh.saved);
   writeJsonFile(admissionFile(), admission);

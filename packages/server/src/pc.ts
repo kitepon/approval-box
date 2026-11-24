@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type RequestListener, type ServerOp
 import { Readable } from "node:stream";
 import { randomBytes } from "node:crypto";
 import { LoginBillingError } from "@kitepon/login-billing/server";
-import { createServerPart, SqliteMirrorStore, type Identity, type ServerPart, type TurnAnswer } from "@kitepon/peer-channel/server";
+import { createServerPart, SqliteMirrorStore, type Identity, type Refusal, type ServerPart, type TurnAnswer } from "@kitepon/peer-channel/server";
 import type { Accounts } from "./accounts.ts";
 import { ApiError } from "./errors.ts";
 import { type Library, PRODUCT_ID, rateLimiter } from "./lb.ts";
@@ -49,17 +49,17 @@ const bearer = (req: IncomingMessage) => /^Bearer\s+(\S+)$/i.exec(req.headers.au
  */
 export function authenticate(accounts: Accounts, library: Library, publicUrl: string, keyholes?: AppKeyholes) {
   const allowSigned = rateLimiter(240, 60_000);
-  return async (req: IncomingMessage): Promise<Identity | { refused: string } | null> => {
-    // The new form first: a signed request (the WebSocket GET is signed over an empty body). peer-channel answers only 401 or 403 + code, so every
-    // refusal goes back as its code (time_off included); `now` of time_off is not carried. pass_kind "keyhole" is outside peer-channel 0.5.7's PassKind (t04).
+  return async (req: IncomingMessage): Promise<Identity | Refusal | null> => {
+    // The new form first: a signed request (the WebSocket GET is signed over an empty body). A refusal goes back with the library's status and body
+    // (peer-channel 0.6.0), so time_off carries the server's `now`. Only a parent approves an AI connection's key binding (local-form.md section 5).
     if (keyholes && isSigned(req)) {
-      if (!allowSigned(sourceOf(req))) return { refused: "rate_limited" }; // before the signature check (the body cap is in the mount)
+      if (!allowSigned(sourceOf(req))) return { refused: "rate_limited", status: 429 }; // before the signature check (the body cap is in the mount)
       try {
         const request = { method: req.method ?? "GET", path: req.url ?? "/", headers: req.headers, body: signedBodies.get(req) ?? new Uint8Array() };
         const who = await keyholes.entries.serial(async () => { const found = await keyholes.verify(request); keyholes.entries.signedIn(found.entry); return found; });
-        return { k: who.entry, kind: "device", endpoint_ref: who.key, pass_kind: "keyhole" as Identity["pass_kind"] & string };
+        return { k: who.entry, kind: "device", endpoint_ref: who.key, pass_kind: "keyhole", ...(who.role === "parent" ? {} : { binding_refused: "parent_required" }) };
       } catch (error) {
-        if (error instanceof KeyholeError) return { refused: error.code };
+        if (error instanceof KeyholeError) return { refused: error.code, status: error.status, body: error.body() };
         throw error;
       }
     }

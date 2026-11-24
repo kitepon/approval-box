@@ -342,6 +342,7 @@ setup: {
 | 404 | `not_found` | 一覧から消す |
 | 409 | `setup_not_verified` | セットアップ確認の画面へ |
 | 403 | `forbidden` | 登録クライアントのsessionで許可表の外のAPIを呼んだ（v0.38）。再試行しない |
+| 403 | `parent_required` | 署名つきの要求（login-billing の鍵穴、local-form.md）で、子の鍵が `POST /pairing/{id}/claim` を呼んだ（switch t04）。再試行せず「スマホのアプリでQRを読み取ってください」と出す。通行証の道は変わらない |
 | 409 | `conflict` | 既に答え済み・取り下げ済み・version違い。`error.decision` で差し替える |
 | 413 | `too_large` | 添付が大きすぎる・多すぎる（v0.23） |
 | 415 | `unsupported_type` | 添付できない形式（v0.23） |

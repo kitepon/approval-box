@@ -96,10 +96,11 @@ before(async () => {
   assert.equal(await serverOffersPeerChannel(base), true);
   const binding = startPairingBinding(await loadOrCreateKeys());
   const [admission] = await Promise.all([
-    binding.complete({ server: { url: base, headers: { authorization: `Bearer ${conn.token}` } }, account: k, connectionId: conn.id }),
+    binding.complete({ server: { url: base, headers: { authorization: `Bearer ${conn.token}` } }, connectionId: conn.id }),
     approver.approveConnector({ text: binding.qrText("ABCD-EFGH"), registry: { body: genesisBody, hash: snapshotHash(genesis) } }),
   ]);
   approver.close();
+  assert.equal(admission.account, k); // peer-channel 0.6.0: the registry label comes from the device's tag-checked pc1-admit, not from the server
   writeJsonFile(admissionFile(), admission); // what setup's finishBinding writes
   admitted = admission;
   phone = { access: phoneAccess, sign: devSign, seal: devSeal };

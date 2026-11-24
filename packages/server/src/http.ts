@@ -26,6 +26,8 @@ import { type AppLinks, appleAppSiteAssociation, assetLinks } from "./applinks.t
 
 export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal; library?: Library; peerChannel?: { forgetAccount(k: string): void; connectionRemoved(k: string, connectionId: string): void }; appLinks?: AppLinks; keyholes?: AppKeyholes };
 
+const PARENT_REQUIRED = "AIとの接続は、スマホ（iPhone・iPad・Android）のアプリでQRコードを読み取って承認してください。";
+
 /** 登録クライアント（BellTeamなど）のsessionが通れる `/v1` の経路。ここに無いものは403。 */
 const CLIENT_ROUTES: [string, RegExp][] = [
   ["GET", /^\/decisions$/],
@@ -297,7 +299,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(accounts.redeemAppCode(input.code, input.code_verifier));
   });
 
-  const v1 = new Hono<{ Variables: { userId: string; clientSessionId: string | undefined; pass: Checked | undefined; keyhole: string | undefined } }>();
+  const v1 = new Hono<{ Variables: { userId: string; clientSessionId: string | undefined; pass: Checked | undefined; keyhole: string | undefined; role: "parent" | "child" | undefined } }>();
   v1.use("*", async (c, next) => {
     const path = c.req.path.slice("/v1".length);
     // The new form: a request signed with the device's library key -> the entry is the account. No paid gate: the paid check is on each device.
@@ -306,7 +308,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       if (!allowSigned(clientKey(c))) throw new ApiError("rate_limited", "回数が多すぎます。少し待ってから試してください。");
       const upload = c.req.method === "POST" && SIGNED_UPLOAD.test(c.req.path);
       const request = keyholeRequest(c, await takeBody(c, upload ? MAX_FILE_BYTES : KEYS_BODY_MAX, upload ? "1つのファイルは20MBまでです。" : "本文は16KBまでです。"));
-      let who: { entry: string; key: string };
+      let who: { entry: string; key: string; role: "parent" | "child" };
       try {
         // verify and the users row on the same chain as the library's changes: the entry is still current when its row is written.
         who = await keyholes.entries.serial(async () => {
@@ -320,6 +322,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       }
       c.set("userId", who.entry);
       c.set("keyhole", who.key);
+      c.set("role", who.role);
       return next();
     }
     // ライブラリを使う時は、先にライブラリの通行証（Bearerかcookie）として確かめる。通行証でなければ（pass_invalid）、今までのsessionとして扱う。
@@ -458,6 +461,8 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
 
   v1.get("/pairing/lookup", (c) => c.json(accounts.lookupPairing(c.req.query("code") ?? "")));
   v1.post("/pairing/:id/claim", async (c) => {
+    // Only a parent device approves an AI connection (local-form.md section 5); the old pass path is unchanged.
+    if (c.get("role") === "child") throw new ApiError("parent_required", PARENT_REQUIRED);
     const input = await body(c, z.object({ confirm_client: z.string().max(40).optional() }));
     return idempotent(c, services, c.get("userId"), () => accounts.claimPairing(c.get("userId"), c.req.param("id"), input.confirm_client));
   });

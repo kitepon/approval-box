@@ -14,6 +14,7 @@ export const errorMessagesEn: Record<string, string> = {
   "そのコードは見つからないか、期限が切れています。PCで npx -y approval-box@latest setup をやり直してください。": "The code was not found or has expired. Run npx -y approval-box@latest setup on your computer again.",
   "このペアリングは期限が切れています。PCで npx -y approval-box@latest setup をやり直してください。": "Pairing has expired. Run npx -y approval-box@latest setup on your computer again.",
   "そのペアリングは見つかりません。": "Pairing request not found.",
+  "AIとの接続は、スマホ（iPhone・iPad・Android）のアプリでQRコードを読み取って承認してください。": "Approve AI connections by scanning the QR code with the app on your phone (iPhone, iPad or Android).",
   "購入の情報（jws）の形が正しくありません。": "The purchase information (jws) is not in the correct format.",
   "この環境の購入は受け付けていません（App StoreのSandboxと本番だけ）。": "Purchases from this environment are not supported. Only App Store Sandbox and production purchases are accepted.",
   "Appleのルート証明書がありません。": "The Apple root certificate is missing.",
