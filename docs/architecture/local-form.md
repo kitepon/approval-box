@@ -8,17 +8,7 @@ Inputs (all the Owner's, through Mint, 2026-11-23/24): login-billing contract 1.
 
 ## 1. The account
 
-An account is an **Apple account** or a **Google account**. Nothing in any screen, text or code path compares or links the two.
-
-| | Apple account | Google account |
-|---|---|---|
-| Parents (check payment themselves, hold key A) | the iPhone, iPad and Mac of that Apple ID | the Android phones and tablets of that Google account |
-| Children (own key B, admitted by a parent) | every other device: Android, Windows, Linux | every other device: iPhone, iPad, Mac, Windows, Linux |
-| Where A lives | iCloud Keychain, synchronizable (end to end), one access group shared by the iOS/iPadOS app and the Mac app | the app's own storage, wrapped by an Android Keystore key, plus the app's Block Store entry with end-to-end backup |
-| A new parent gets A | by itself, through iCloud Keychain; no exchange | from an existing Android parent over the direct path (section 4) |
-| A new phone after losing every parent | a new Apple device of the same Apple ID gets A from iCloud Keychain | a new Android restored from the same Google account gets A from Block Store |
-
-Keys and the family id R: as login-billing contract section 11 (A shared by the parents, own keys for children and connectors, R = SHA-256 of A's genesis public key). The server knows the account only as R; R names no person, no provider and no subject.
+**Withdrawn 2026-11-24 (the Owner rejected the base of login-billing section 11: 「iCloudで揃えろなんて言ってない」).** No key is shared through iCloud Keychain or Block Store, and no server hands out the list. Mint is rewriting section 11: every device makes its own key and it never leaves the device; each parent is a root of its own and only its key adds a keyhole; the list goes device to device; a server only holds keyholes. Everything on this page about A, parents, admission, rebuild and the list (rows marked **[family]**, sections 4 to 6) is void until the new section 11 is settled; consumers are drawn again from it. Still valid: an account is Apple or Google and never both; the server keeps no sign-in, provider, subject, purchase or paid state; the web pages and the connector's use of the family follow.
 
 ## 2. Function diagram (target)
 
