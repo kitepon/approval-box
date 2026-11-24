@@ -2,7 +2,7 @@
 
 基準はmain501c880（0.1.31/0.1.32の受け口判定は[配送経路](../connector-routing.md)末尾）。レヴィアタンの2026-11-06容量是正指導に従い、PR15/current（基準90066748）の改善前全域図を現用コードへ対応させた。PR15/finalのHTTP分割・SSE修理・親channel抽出は未採用である。
 
-移行中の目標図（peer-channel、相談と答えをサーバーに置かない形）: [peer-channel-adoption.md](peer-channel-adoption.md)。ログイン・課金をサーバーなしの形（login-billing 契約10節、親の鍵Aと子の鍵B、端末どうしの直接の受け渡し）へ移す目標図: [local-form.md](local-form.md)。これが通行証・K・/auth/v1・ペアリングのコードを置き換える。各段が出るまで、この表は今動いている形を書く。
+移行中の目標図（peer-channel、相談と答えをサーバーに置かない形）: [peer-channel-adoption.md](peer-channel-adoption.md)。ログイン・課金を login-billing 0.21.1（契約10節ローカルの形、11節鍵穴）へ切り替える目標図: [local-form.md](local-form.md)。entry id と署名つきの要求が K と通行証を置き換える。各段が出るまで、この表は今動いている形を書く。
 
 | 全体機能・入口 | 担当実装と所有状態 | 入力→出力・接続先 | 失敗・回収 |
 | --- | --- | --- | --- |
