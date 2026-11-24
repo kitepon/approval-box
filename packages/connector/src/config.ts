@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { dirname, join } from "node:path";
 import { home } from "./profile.ts";
 
-export type Config = { server: string; token?: string; connection_id?: string; device_name?: string };
+/** path "v1": この接続は peer-channel を使わず、サーバーの /connector/v1 で申請と答えを受ける（pair --json --v1 が書く。鍵が手元に残っていても peer-channel の道へ入らない）。 */
+export type Config = { server: string; token?: string; connection_id?: string; device_name?: string; path?: "v1" };
 
 export const OFFICIAL_SERVER = "https://approval-box.kitepon.dev";
 export const configFile = () => join(home(), "config.json");
