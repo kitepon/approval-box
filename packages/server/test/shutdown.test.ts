@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Accounts } from "../src/accounts.ts";
-import { openDb } from "../src/db.ts";
+import { openDb, run } from "../src/db.ts";
 import { Decisions } from "../src/decisions.ts";
 import { EventHub } from "../src/events.ts";
 import { createApp } from "../src/http.ts";
@@ -14,7 +14,7 @@ function setup(shutdown?: AbortSignal) {
   const app = createApp({ db, accounts, decisions, events, publicUrl: "https://kb.test", ...(shutdown ? { shutdown } : {}) });
   const userId = accounts.createUser();
   const { session } = accounts.issueSession(userId, "test");
-  return { app, events, userId, session };
+  return { app, db, events, userId, session };
 }
 
 /** 流れが閉じるまで読む。閉じなければ時間切れで落とす。 */
@@ -63,4 +63,19 @@ test("停止の合図が無ければ、流れは開いたまま", async () => {
   const ctx = setup();
   const response = await ctx.app.request("/v1/events", { headers: { authorization: `Bearer ${ctx.session}` } });
   await assert.rejects(readToEnd(response, 300), /流れが閉じませんでした/);
+});
+
+test("Last-Event-ID なしで張ると古い履歴は流さず直近の分だけ、ありなら続きから流す", async () => {
+  const stop = new AbortController();
+  const ctx = setup(stop.signal);
+  ctx.events.publish(ctx.userId, "decision.created", { decision_id: "K-OLD001" });
+  run(ctx.db, "update events set at = ?", new Date(Date.now() - 3600_000).toISOString());
+  ctx.events.publish(ctx.userId, "decision.created", { decision_id: "K-NEW001" });
+  const fresh = await ctx.app.request("/v1/events", { headers: { authorization: `Bearer ${ctx.session}` } });
+  const resumedFromFirst = await ctx.app.request("/v1/events", { headers: { authorization: `Bearer ${ctx.session}`, "last-event-id": "1" } });
+  setTimeout(() => stop.abort(), 50);
+  const freshText = await readToEnd(fresh);
+  assert.match(freshText, /K-NEW001/);
+  assert.doesNotMatch(freshText, /K-OLD001/);
+  assert.match(await readToEnd(resumedFromFirst), /K-NEW001/);
 });

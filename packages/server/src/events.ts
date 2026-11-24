@@ -37,6 +37,12 @@ export class EventHub {
       .map((row) => ({ id: row.id, type: row.type, data: JSON.parse(row.data) }));
   }
 
+  /** Last-Event-ID の無い接続の始まり。全履歴は流さず、直近 windowMs の分だけ（一覧を読んでから張るまでの隙間を埋める）。 */
+  recent(userId: string, windowMs: number): UserEvent[] {
+    return all<{ id: number; type: string; data: string }>(this.db, "select id, type, data from events where user_id = ? and at >= ? order by id", userId, new Date(Date.now() - windowMs).toISOString())
+      .map((row) => ({ id: row.id, type: row.type, data: JSON.parse(row.data) }));
+  }
+
   subscribe(userId: string, listener: (event: UserEvent) => void) {
     this.bus.on(`user:${userId}`, listener);
     return () => this.bus.off(`user:${userId}`, listener);

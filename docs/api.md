@@ -233,7 +233,7 @@ Attachment {
   - FCM: 全部データメッセージ（`notification` ブロックは使わない）。`data` の値は全部文字列で `{ type, change?, decision_id, version, badge, title? }`。`title` がある時だけアプリが通知を出す。鳴らす時は priority=high、音なしは normal。Androidの通知チャンネルは「新しい申請」「修正」の2つ。
   - アプリのバッジ: pending の件数。payload の `badge` に入れる。Androidのランチャーバッジは表示中の通知に結び付くため、音なしの更新だけでは数を変えられない（OSの制約。アプリ内の件数と、既存の通知の件数・削除は更新する）。
 - 前面にいる時: 前面へ戻った時に一覧を取り直す。即時に反映したい場合は `/events` を張ってよい。
-- `/events`（SSE）: `event: decision.created | decision.updated | decision.deleted | setup.updated`、`data: { decision_id, version, change? }`。`Last-Event-ID` で再開できる。切れたら1秒から最大60秒まで間隔を延ばして張り直す。
+- `/events`（SSE）: `event: decision.created | decision.updated | decision.deleted | setup.updated`、`data: { decision_id, version, change? }`。`Last-Event-ID` で再開できる。`Last-Event-ID` なしで張ると、直近60秒の分だけ流してから新しい知らせを流す（古い履歴は流さない。一覧は張る前に取る）。切れたら1秒から最大60秒まで間隔を延ばして張り直す。
 
 ## 接続（接続画面）
 
