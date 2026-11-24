@@ -16,6 +16,7 @@ import { EventHub } from "./events.ts";
 import { createApp } from "./http.ts";
 import { createLibrary, PRODUCT_ID } from "./lb.ts";
 import { createPeerChannel } from "./pc.ts";
+import { createAppKeyholes, createEntries } from "./keyholes.ts";
 
 export const DEV_BUNDLE = "dev.kitepon.approvalbox";
 export const DEV_GOOGLE_CLIENT = "dev-google-client.apps.googleusercontent.com";
@@ -63,9 +64,13 @@ export async function startDevServer(o: DevServerOptions = {}) {
   accounts.contract = (userId) => library.lb.known(userId);
   library.lb.onNone((userId) => decisions.endForNoContract(userId));
   // 起こしは送らない。1行だけ出す（K は出さない）。
-  const peerChannel = o.pcOffer === false ? undefined
-    : createPeerChannel({ accounts, library, publicUrl, mirrorPath: join(dataDir, "pc-mirror.db"), wake: (_k, alert) => log(`wake alert=${alert ? 1 : 0} (not sent: dev server)`) });
-  const app = createApp({ db, accounts, decisions, events, publicUrl, library, ...(peerChannel ? { peerChannel: peerChannel.part } : {}), appleAudiences: [DEV_BUNDLE], googleAudiences: [DEV_GOOGLE_CLIENT] });
+  // login-billing keyholes, as main.ts mounts them (local mod for the Swift client E2E)
+  let peerChannel: ReturnType<typeof createPeerChannel> | undefined;
+  const entries = createEntries({ db, accounts, peerChannel: () => peerChannel?.part });
+  const keyholes = createAppKeyholes({ db, origin: publicUrl, entries });
+  peerChannel = o.pcOffer === false ? undefined
+    : createPeerChannel({ accounts, library, publicUrl, mirrorPath: join(dataDir, "pc-mirror.db"), wake: (_k, alert) => log(`wake alert=${alert ? 1 : 0} (not sent: dev server)`), keyholes });
+  const app = createApp({ db, accounts, decisions, events, publicUrl, library, keyholes, ...(peerChannel ? { peerChannel: peerChannel.part } : {}), appleAudiences: [DEV_BUNDLE], googleAudiences: [DEV_GOOGLE_CLIENT] });
 
   // 開発だけの入口: 偽の人の id token を作る（アプリは /auth/v1/signin/nonce の nonce で頼み、/auth/v1/signin に渡す）と、
   // Webサインインの提供元の画面の代わり（websignin/start の providerUrl を渡すと、ブラウザが戻る先の URL を返す）。
