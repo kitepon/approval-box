@@ -1,5 +1,7 @@
 # Approval Box on peer-channel (c8): target function and data flow
 
+**2026-11-24:** the account number K, passes and the relay admission (5.2-5.4) are replaced by [local-form.md](local-form.md) (R, parent key A, direct-path admission). The content flow below stays.
+
 Status: design 0.1, 2026-11-22, Nayuta; steps 1 and 2 (c8b, c8c, c8h) merged into main for the final form (Owner 2026-11-22 17:50 JST: the only user, go to the final form at once); sections 6 and 7 describe what runs. Source of truth for the move; [README.md](README.md) keeps describing the running product until each step ships, and is updated in the same diff as the step that changes it.
 Inputs: the Owner's rulings of 2026-11-21 (content never stored on the server, only devices decrypt, a decided item goes to the deciding device's history and leaves the server; the server only introduces, content flows AI ↔ device directly; no server-served Web device), peer-channel contract 0.5.1 (kitepon/peer-channel `docs/contract.md`, diagrams `docs/diagrams.md`), login-billing contract 1.20/1.21 (reading 3).
 
