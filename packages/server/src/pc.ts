@@ -24,8 +24,8 @@ export type PeerChannelInput = {
   keyholes?: AppKeyholes;
 };
 
-/** Body cap of a signed /pc/v1 request, checked before the signature (Mint's t03 review; the same 16 KiB as /v1). */
-const PC_BODY_MAX = 16 * 1024;
+/** Body cap of a /pc/v1 request, checked before the signature (Mint's t03 review): 64 KiB, the largest registry snapshot peer-channel allows (contract 4.5). */
+const PC_BODY_MAX = 64 * 1024;
 /** The caller as http.ts clientKey sees it: the last X-Forwarded-For hop, else the socket's peer. Memory only. */
 const sourceOf = (req: IncomingMessage) => String(req.headers["x-forwarded-for"] ?? "").split(",").at(-1)!.trim() || (req.socket?.remoteAddress ?? "");
 /** Raw bodies of signed /pc/v1 requests, read once in the mount for the signature check (the part reads the copy). */
