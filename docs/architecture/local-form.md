@@ -1,91 +1,86 @@
-# Approval Box on the login-billing local form: target function, data flow and states
+# Approval Box on login-billing version 1 (0.21.1): target function, data flow and states
 
-Status: design 1.1, 2026-11-24, Nayuta (chart approval-box/local-form-20261124/t01-design). This is the source of truth for the move; [README.md](README.md), [login-pass.md](login-pass.md) and [peer-channel-adoption.md](peer-channel-adoption.md) keep describing what runs until each step ships, and each step updates them in the same diff.
+Status: design 2.0, 2026-11-24, Nayuta (chart approval-box/switch-20261124/t02-design). Replaces design 1.x of this page (withdrawn with contract section 11 drafts 1 to 4). Source of truth for the switch; [README.md](README.md), [login-pass.md](login-pass.md) and [peer-channel-adoption.md](peer-channel-adoption.md) keep describing what runs until each step ships, and each step updates them in the same diff.
 
-Inputs (all the Owner's, through Mint, 2026-11-23/24): login-billing contract 1.42 section 10 (no server takes part in sign-in or payment; "課金ってクライアントだけ"); his key model 「スマホ（全ての契約ログインとしての親）の鍵A」「Windows（…認めてもらった子）の鍵B」; "an account is Apple or Google, never both" (「片方の親って何…なぜ混ぜてるの？」); "nothing for login or admission goes through our relay" (「何でそんなに混ぜたがるのか分からない…」); "Approval Box is not responsible for the Apple ID or Google account" (「ここに俺のプロダクトが責任持つの？」); content never stored on the server and only devices decrypt (2026-11-21); no Web device (2026-11-21).
+Inputs: the Owner, 2026-11-24 ~14:0x JST: 「ミントに連絡し、新しい仕組みに切り替えろ」; his scope line (12:0x JST): the library ends where our server knows a signed-in device, everything from there to the AI is ours; 「ログイン基盤自体のコードの変更の権限はお前にはない。要望があればミントへ伝えろ。」. Mint's ruling for Approval Box: /srv/bellteam/bots/bot-137fd092/docs/login-billing/rulings/approval-box.md. Library contract 1.48 sections 10 (local form) and 11 (keyholes), release v0.21.1 (merge 2cf4037). Earlier rulings still in force: content never stored on the server, only devices decrypt (2026-11-21); no Web device (2026-11-21); the Owner is the only user and we may go to the final form at once (2026-11-22).
 
-**Scope line (2026-11-24 12:0x JST, the Owner: 「俺ずっっっっとログインと課金の話しかしてないんだけど。…そこからAIに繋ぐのは、お前の責任範囲ではないだろ。」):** the library (Mint designs, Purika builds; login-billing contract section 11, "Keyholes") ends where our server knows "this device is signed in to this account": each device's own key, a parent signing a child's keyhole at the QR, the server holding keyholes only, a device proving itself with its key. Everything from there to the AI is Approval Box's and peer-channel's: connectors and their pairing, the content, whom an AI sends to, and whether connectors trust our server's keyhole list or check the signed statements themselves. Approval Box's requirements on section 11 (stable entry id, keyhole events, a one-shot signed request) went to Mint on 2026-11-24. Section 11 is a draft; nothing is built on it until it is reviewed.
+## 0. Boundary (who owns what)
+
+| Part | Owner | Approval Box uses it through |
+|---|---|---|
+| Sign-in on every device, the paid check, device keys, start / add / leave / sign out my other devices, the QR exchange, the signed request, the JS server part (check, accept, events) | login-billing (Mint designs, Purika builds). **Approval Box never edits it**; a gap goes to Mint as one requirement message | the parts' public API, pinned at 0.21.1 |
+| Storage of entries, keyholes and used numbers (the library's storage interface) | Approval Box server (`packages/server`, SQLite) | implements the interface the JS server part defines |
+| Everything from "this request comes from a device of entry E" to the AI: connections and pairing, the peer-channel registry and sessions, push wakes, content, retention | Approval Box and peer-channel (Nayuta) | this page |
 
 ## 1. The account
 
-**Withdrawn 2026-11-24 (the Owner rejected the base of login-billing section 11: 「iCloudで揃えろなんて言ってない」).** No key is shared through iCloud Keychain or Block Store, and no server hands out the list. Mint is rewriting section 11: every device makes its own key and it never leaves the device; each parent is a root of its own and only its key adds a keyhole; the list goes device to device; a server only holds keyholes. Everything on this page about A, parents, admission, rebuild and the list (rows marked **[family]**, sections 4 to 6) is void until the new section 11 is settled; consumers are drawn again from it. Still valid: an account is Apple or Google and never both; the server keeps no sign-in, provider, subject, purchase or paid state; the web pages and the connector's use of the family follow.
+- The account on our server is the library's **entry id E** (a random id the JS server part makes at start; it never changes). It replaces K everywhere on the server: connections, pairings, devices / push tokens, settings, events, the peer-channel mirror and waits.
+- The server never learns the provider, subject, purchase or payment state. A request that the JS server part accepts gives `{ entry, key, role }`; nothing else identifies a person.
+- Billing is unchanged (App Store and Google Play only, same product and price, no Stripe). The paid check is on each device (section 10). The Owner's account is free through each app's `freeAccounts` (SHA-256 hex of `provider:subject`), filled from his own sign-ins on the new builds.
 
 ## 2. Function diagram (target)
 
 | Function | Part | Input -> output | Failure / exit |
 |---|---|---|---|
-| First sign-in and paid check on a parent | app + login-billing local form (`signInLocal`, `ownPurchase`, `purchase`) on the device | Apple: native sign-in and StoreKit; Google: Google sign-in and Play -> paid until when, kept on the device | not paid: the app shows "subscribe" and no requests (it can still sign in and see settings); the Owner's account counts as paid by `freeAccounts` (pending his answer, login-billing t10s0) |
-| Account creation **[family]** | first parent | no A in the platform store -> makes A, its device key, genesis snapshot (signer A, its own device entry) -> uploads to the mirror under R | upload failure: retried; nothing is lost on the device |
-| A new parent of the same store account **[family]** | Apple: iCloud Keychain brings A; Google: direct path from an Android parent | holds A -> signs n+1 adding its own device key -> uploads | Google, no other Android parent present and no Block Store entry: it is a new account (section 6, start over) |
-| Admitting a child **[family]** | the child shows a QR; a parent scans it; direct path (section 4) | child's public keys -> parent's confirm screen -> parent signs n+1 with A -> sealed admission to the child -> the parent uploads n+1 | different networks: "put both on the same Wi-Fi"; local network denied: "allow local network access in Settings" (library messages) |
-| Paid check on a child | login-billing `makeRequest` / `accept` with a parent's reply (the same exchange as the admission at first, later alone) | the parent's store proof -> paid until when on the child | period ended: the child asks for a new QR (about once a month) |
-| Pairing an AI connection **[family]**, the connector as a member | the connector shows its QR on its PC; a parent scans it; direct path | connector's public keys and connection label -> parent signs n+1 adding the connector entry -> sealed admission to the connector | as for a child; the AI's waiting requests stay in its outbox until a device can answer |
-| Relay authentication | server `/pc/v1` | endpoint signs the server's challenge with its device or connector key -> server accepts if the key is active in R's mirror (peer-channel 4.3 rules) | not active: refused (401); a removed key can never come back |
-| Asking, deciding, answering | connector outbox, peer-channel sessions (unchanged from peer-channel-adoption.md 2-3) | AI -> outbox -> wake(R) -> device dials -> request -> answer -> AI | unchanged |
-| Push wake | server Waker | wake(R) -> APNs/FCM tokens registered by R's devices (each registration signed by the device key) | unchanged |
-| Notice of every new keyhole | every device and every connector | each new key in the mirror that this device did not add -> "a device / an AI connection was added" (who, when, platform) | the Owner removes it (parent) or rebuilds (section 6) |
-| Removing a device or connection **[family]** | a parent | signs n+1 with a tombstone -> uploads | a child can remove only itself (self-removal signed with its own device key) |
-| Rebuild after a leak of A **[family]** | a remaining parent | closing snapshot on R (every key tombstoned, A included) -> new A', R' -> children and connections admitted again over the direct path | see section 6 |
-| Account deletion | a parent | closing snapshot on R, then a delete request for R signed with A -> the server forgets R's mirror, connections and push tokens | the server also forgets an R unused for 90 days |
+| Device authentication on every route | server: the JS server part's signed-request check, called first in the `/v1` middleware and in `/pc/v1` authenticate | signed request -> `{ entry, key, role }` -> `userId = entry` | refused by the library: its code (401); a key in no entry: "not signed in"; wrong time: the library's retry rule |
+| Start, accept an add, leave, sign out my other devices | JS server part, mounted by Approval Box under `/keys/v1` | library wire | library codes |
+| Edge limits | server, before the library is called | body cap (16 KiB on `/keys/v1`), calls per source (existing `rateLimiter`) | 413 / 429 |
+| Keyhole events | server handler of the library's events | added: nothing; removed: close that key's peer-channel sockets and drop its push token; entries joined (A into B): move every row of A to B in one transaction; entry emptied: erase every row of E (connections, mirror, push tokens, settings) | a handler failure is logged with a code and never fails the change (library rule); the next use repairs nothing silently: an orphan row of a gone entry is erased by the retention sweep |
+| Retention of an entry no device reaches | server sweep (daily, existing scheduler) | `entries_seen.last_used_at` written at each accepted signed request; an entry unused for 90 days -> erase its rows | none (the person signs in again and starts a new entry) |
+| Paid check | each app (local form): `ownPurchase` on a parent, `accept` of a parent's reply on a child, `freeAccounts` | -> paid until when, kept on the device | not paid: the app shows "subscribe"; the server never refuses for payment |
+| Pairing an AI connection | connector shows `PC1PAIR` (code + connector key fingerprint + secret); **a parent device** scans it and claims it with a signed request; peer-channel 5.4 key binding | -> `connections` row under E, connector key in the registry | a child cannot claim (refused `parent_required`; the way out: scan with the phone) |
+| peer-channel device identity | device: its own peer-channel key set (sig + seal, P-256, unchanged); server: binds each registry device key to the keyhole that uploaded it | registry snapshot upload by a signed request -> accepted only if the signer key's binding is a keyhole of E now | key of a removed keyhole: refused, and the mirror drops its slots |
+| Who an AI sends to | connector | the devices active in E's registry (peer-channel 4.3) whose keyhole is still in E (server says so at `join`) | none listed: `no_device` as today |
+| Migration of the Owner's existing data | server, one route used once per device | a request carrying both the old pass (K) and a signed request (E) -> rows of K move to E; the old pass is then ended | no old pass: nothing to move (a new account) |
+| Old form beside the new | server | `/auth/v1` and passes stay mounted until the switch date, then removed with the library's server part config | — |
 
 ## 3. Data flow (target)
 
 ```
-Parent (Apple ID devices, or Google account Androids)
-  holds: A (platform store), device keys, paid-until, on-device history
-  -> mirror PUT (signed snapshots only)                       -> server: R's mirror
-  -> push token PUT (signed by device key)                    -> server: R's push tokens
-  <-> relay sessions with connectors (sealed, peer-channel)    via server /pc/v1 (ciphertext only)
-  <-> child / new parent / connector: direct path on the same Wi-Fi (never the server)
-        child -> parent:  hello { device public keys, platform, label }       (sealed, QR key)
-        parent -> child:  reply { store proof, admission (snapshot version, A's public key, R) [, A for a new Android parent] }
-Child (other devices)
-  holds: its device keys, paid-until (from a parent's reply), on-device history
-  -> relay sessions; push token PUT (signed)
-Connector (AI's PC)
-  holds: connector keys, outbox (request bodies until decided)
-  -> wait.open(R), relay sessions; reads R's mirror before trusting a device key
-Server
-  keeps: per R: mirror slots (signed snapshots, public keys, platform, dates), push tokens, open waits (memory), diagnostics (no content)
-  keeps nothing of: sign-in, provider, subject, purchase, paid state, A, any private key, request or answer content
+Device (any)                      signs every call with its library key
+  -> /keys/v1 start | add | leave | sign-out-others     (library wire, JS server part)
+  -> /v1/*  and  /pc/v1/*                               (signed request -> entry E)
+  -> /pc/v1/registry PUT                                (signed request; server binds the pc device key to the keyhole)
+  -> push token PUT                                     (signed request -> devices row under E, keyed by the keyhole key)
+Parent device <-> new device                            QR + direct Wi-Fi (library, section 10/11), never our server
+Parent device <-> connector                             PC1PAIR scanned by the parent, then peer-channel 5.4 binding
+Connector  -> /connector/v1, /pc/v1 with its connection token (bound to E)
+Server keeps per E: keyholes (library store), connections, pairings, devices/push tokens, settings, peer-channel mirror, entries_seen.last_used_at
+Server keeps nothing of: provider, subject, sign-in, purchase, paid state, request or answer content
 ```
 
-What the server no longer has after the move: K, passes, `/auth/v1`, web sign-in, store notifications, `billing.verify`, the paid gate on `/v1` and `/pc/v1`, `FREE_ACCOUNT_IDS`, the `LB_*` keys, the `/pairing` code and claim, connection tokens (a connector authenticates with its key).
-
-## 4. The direct path (admission and handover of A) **[family]**
-
-Login-billing contract section 11 (admit, parentJoin, remove, leave, rebuild, verify). Approval Box supplies only its confirm screen and notice texts, uploads the signed family list the part exports, and keeps nothing of the exchange. Nothing of the admission touches our server.
-
-## 5. States of an account
+## 4. States
 
 | State | Entered by | Leaves by |
 |---|---|---|
-| none (device signed in, no A in its store) | first launch | the first parent makes A and the genesis -> active |
-| active (R, A on the parents) | genesis, or a rebuild | a keyhole added -> active (notice on every device); leak suspected -> rebuilding; deletion -> closed |
-| rebuilding | the Owner chooses "rebuild" on a parent | closing snapshot on R uploaded -> closed (R) + active (R') |
-| closed (R) | closing snapshot, or deletion | none; the server forgets R after 90 days without upload or at once on a signed delete |
+| no entry (device signed in, key in no entry) | first sign-in on a parent; a removed keyhole | parent: start -> active; child: a parent's QR -> active |
+| active (E has keyholes) | start, accept | keyholes removed one by one; entries joined -> the other E; last keyhole gone -> emptied |
+| emptied / unused 90 days | event or sweep | rows erased; final for E |
+| old form (pass, K) | today's apps | the migration route moves K -> E; the old part is unmounted on the switch date |
 
-Exit from every guard: a refused relay authentication ends when a parent adds the key or the device signs in again and is admitted; "not paid" ends when the store answers paid (or a new QR on a child); "same Wi-Fi" ends when both devices are on one network.
+Every refusal above has its way out in the same row; no guard waits for a person except the paid check, whose way out is the store.
 
-## 6. Leak, loss and their limits (stated plainly)
+## 5. Decisions taken here (mine), and what they cost
 
-- **Leak of B (a child)**: B can read and answer the requests it receives until a parent removes it. B cannot add anyone. One removal ends it.
-- **Leak of A** (a parent is stolen and unlocked, or a store backup is broken): whoever holds A can add devices and read and answer. The only way out is the **rebuild** on a remaining parent: it signs the closing snapshot on R (every key, A included, tombstoned; a removal is never undone, so the thief cannot reopen R), makes A' and R', and the children and AI connections are admitted again over the direct path. Every connector that reads R's closing snapshot refuses every device on R and shows "this account was rebuilt; pair again" on its PC. Window: from the theft until the rebuild. Reading alone adds nothing and shows no notice.
-- **The Apple ID or Google account itself** (Find My, removing a device from it) is Apple's, Google's and the person's, like his passwords and passkeys. Approval Box does not guide or wait for it. Limit: a device still on his Apple ID receives the synchronized A as it receives his passwords; a rebuild made while the stolen device is still on the Apple ID sends A' to it too.
-- **Every parent lost**: a new device of the same store account gets A back from iCloud Keychain or Block Store and continues. If the store backup is gone, it is a new account (genesis): requests not yet answered stay on the PCs, on-device history is gone, children and AI connections are admitted again.
-- **Same network**: admission and a child's paid check need both devices on one local network (the library's limit). An AI connection on a PC outside the home network cannot be paired.
-- **Child's period**: a child is paid until the end of the period in the parent's proof (Google: 31 days); then it asks for a new QR.
+- **Connectors trust our server's keyhole list** for which peer-channel device keys belong to E, and peer-channel keeps its device-signed registry for everything else (removals, forks, notices). Why: the library keeps no signed adds at the server (11.3), and a second QR per device to run peer-channel's own admission would double what the Owner does. Cost, stated plainly: a fully compromised running server could add a keyhole and a device key of its own and receive new requests until a device sees the "a device was added" notice and removes it. A leak of the stored data still reveals no content (nothing is stored).
+- **Only a parent approves an AI connection.** Same rule as keyholes; a Linux PC pairs its AI by scanning `PC1PAIR` with the phone.
+- **Retention period 90 days** for an entry no device reaches, the same period as the existing unused-pairing expiry.
+- **Switch date**: when the Owner's own devices run the new builds and the migration route has moved his data. Then `/auth/v1` and passes are unmounted in one server release.
 
-## 7. What changes where (tasks)
+## 6. Limits (from the library, stated plainly)
+
+- The server does not know who has paid; anyone can start an entry. AI requests to an unpaid entry are delivered, and the apps refuse to show them.
+- A phone replaced or lost with no other parent starts a new entry. AI connections are paired again, children show their QR again, and requests not yet answered stay on the PCs.
+- A stolen only-parent cannot be cut off by our server; it is erased through Apple or Google, which is not the product's duty.
+- A Mac cannot scan a QR; on an Apple account the iPhone or iPad scans.
+- An Apple sign-in on Linux or Android needs https://login-billing.kitepon.dev/apple-return registered on Approval Box's own Services ID.
+
+## 7. Tasks
 
 | Part | Change | Task |
 |---|---|---|
-| device family | keys A/B, keyhole list, direct-path admission (devices and AI connections, a Node part for the connector), rebuild | login-billing t10x (Purika), via approval-box t02 |
-| peer-channel contract | R instead of K; its own registry (section 4) and admission (5.2-5.4) replaced by the family list it consumes; relay authentication by key signature against the keyhole list; `onPassEnded`, pass ids and `not_entitled` removed | t03 (0.6), after section 11 is built |
-| server | remove the library server part and its routes, the paid gate, pairing codes and connection tokens; `/pc/v1` authenticates by key; mirror, waits and push tokens per R; delete by signed request | t04 |
-| web | sign-in, pairing and subscription pages go; public pages stay | t05 |
-| connector (and BellTeam's module) | joins as a family member, key authentication | t06 |
-| Apple apps | consume the family; screens for parent, scan, notices, rebuild | t07 (Red Shoes) |
-| Android and Linux apps | consume the family; Android parent screens, Linux child | t08 (Indivilia) |
-
-Still from the library (Mint): the device family (t10x); `freeAccounts` after the Owner's answer.
+| server | vendor 0.21.1 tgz; keyhole storage in SQLite; signed request on `/v1`, `/pc/v1`; `/keys/v1`; events; edge limits; migration route; drop the paid gate; retention sweep; later unmount `/auth/v1` | switch t03 (Mint reviews before deploy) |
+| peer-channel contract and connector | K -> E; registry device key bound to a keyhole; `join` reports keyhole membership; parent-only claim; `onPassEnded` replaced by the keyhole events | switch t04 |
+| Apple apps (Red Shoes) | 0.21.1 Swift part; start / add / sign-in on every device; signed request instead of the pass; `freeAccounts`; QR scan on iPhone/iPad; migration call once; register apple-return on the Services ID | switch t05 |
+| Android and Linux apps (Indivilia) | 0.21.1 Kotlin / .NET parts; the same; Linux is a child (QR) | switch t06 |
+| release | store builds, the Owner's devices on the new form, `freeAccounts` filled, old form unmounted, message to Mint | switch t07 |
