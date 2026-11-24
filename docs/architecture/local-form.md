@@ -1,8 +1,10 @@
 # Approval Box on the login-billing local form: target function, data flow and states
 
-Status: design 1.0, 2026-11-24, Nayuta (chart approval-box/local-form-20261124/t01-design). This is the source of truth for the move; [README.md](README.md), [login-pass.md](login-pass.md) and [peer-channel-adoption.md](peer-channel-adoption.md) keep describing what runs until each step ships, and each step updates them in the same diff.
+Status: design 1.1, 2026-11-24, Nayuta (chart approval-box/local-form-20261124/t01-design). This is the source of truth for the move; [README.md](README.md), [login-pass.md](login-pass.md) and [peer-channel-adoption.md](peer-channel-adoption.md) keep describing what runs until each step ships, and each step updates them in the same diff.
 
 Inputs (all the Owner's, through Mint, 2026-11-23/24): login-billing contract 1.42 section 10 (no server takes part in sign-in or payment; "課金ってクライアントだけ"); his key model 「スマホ（全ての契約ログインとしての親）の鍵A」「Windows（…認めてもらった子）の鍵B」; "an account is Apple or Google, never both" (「片方の親って何…なぜ混ぜてるの？」); "nothing for login or admission goes through our relay" (「何でそんなに混ぜたがるのか分からない…」); "Approval Box is not responsible for the Apple ID or Google account" (「ここに俺のプロダクトが責任持つの？」); content never stored on the server and only devices decrypt (2026-11-21); no Web device (2026-11-21).
+
+**Owner of the device family (2026-11-24 10:2x JST, the Owner: 「基盤技術なんだからプリカに作らせるものでは？」):** parents and children, key A and keys B, the A-signed keyhole list, admission over the direct path and the rebuild are built by the login-billing library (Purika, login-billing t10x), not by Approval Box or peer-channel. Below, every row marked **[family]** is that external part, drawn here only as Approval Box sees it; its own function, data-flow and state diagrams are Purika's. The boundary with peer-channel (registry snapshots, peer-channel 4.3 and 5.3) is agreed between Purika and Nayuta before either builds. Approval Box builds only what consumes the family: routing by R, the screens, the connector, the server.
 
 ## 1. The account
 
@@ -27,17 +29,17 @@ Keys:
 | Function | Part | Input -> output | Failure / exit |
 |---|---|---|---|
 | First sign-in and paid check on a parent | app + login-billing local form (`signInLocal`, `ownPurchase`, `purchase`) on the device | Apple: native sign-in and StoreKit; Google: Google sign-in and Play -> paid until when, kept on the device | not paid: the app shows "subscribe" and no requests (it can still sign in and see settings); the Owner's account counts as paid by `freeAccounts` (pending his answer, login-billing t10s0) |
-| Account creation | first parent | no A in the platform store -> makes A, its device key, genesis snapshot (signer A, its own device entry) -> uploads to the mirror under R | upload failure: retried; nothing is lost on the device |
-| A new parent of the same store account | Apple: iCloud Keychain brings A; Google: direct path from an Android parent | holds A -> signs n+1 adding its own device key -> uploads | Google, no other Android parent present and no Block Store entry: it is a new account (section 6, start over) |
-| Admitting a child | the child shows a QR; a parent scans it; direct path (section 4) | child's public keys -> parent's confirm screen -> parent signs n+1 with A -> sealed admission to the child -> the parent uploads n+1 | different networks: "put both on the same Wi-Fi"; local network denied: "allow local network access in Settings" (library messages) |
+| Account creation **[family]** | first parent | no A in the platform store -> makes A, its device key, genesis snapshot (signer A, its own device entry) -> uploads to the mirror under R | upload failure: retried; nothing is lost on the device |
+| A new parent of the same store account **[family]** | Apple: iCloud Keychain brings A; Google: direct path from an Android parent | holds A -> signs n+1 adding its own device key -> uploads | Google, no other Android parent present and no Block Store entry: it is a new account (section 6, start over) |
+| Admitting a child **[family]** | the child shows a QR; a parent scans it; direct path (section 4) | child's public keys -> parent's confirm screen -> parent signs n+1 with A -> sealed admission to the child -> the parent uploads n+1 | different networks: "put both on the same Wi-Fi"; local network denied: "allow local network access in Settings" (library messages) |
 | Paid check on a child | login-billing `makeRequest` / `accept` with a parent's reply (the same exchange as the admission at first, later alone) | the parent's store proof -> paid until when on the child | period ended: the child asks for a new QR (about once a month) |
-| Pairing an AI connection | the connector shows `PC1PAIR` on its PC; a parent scans it; direct path | connector's public keys and connection label -> parent signs n+1 adding the connector entry -> sealed admission to the connector | as for a child; the AI's waiting requests stay in its outbox until a device can answer |
+| Pairing an AI connection **[family]**, the connector as a member | the connector shows its QR on its PC; a parent scans it; direct path | connector's public keys and connection label -> parent signs n+1 adding the connector entry -> sealed admission to the connector | as for a child; the AI's waiting requests stay in its outbox until a device can answer |
 | Relay authentication | server `/pc/v1` | endpoint signs the server's challenge with its device or connector key -> server accepts if the key is active in R's mirror (peer-channel 4.3 rules) | not active: refused (401); a removed key can never come back |
 | Asking, deciding, answering | connector outbox, peer-channel sessions (unchanged from peer-channel-adoption.md 2-3) | AI -> outbox -> wake(R) -> device dials -> request -> answer -> AI | unchanged |
 | Push wake | server Waker | wake(R) -> APNs/FCM tokens registered by R's devices (each registration signed by the device key) | unchanged |
 | Notice of every new keyhole | every device and every connector | each new key in the mirror that this device did not add -> "a device / an AI connection was added" (who, when, platform) | the Owner removes it (parent) or rebuilds (section 6) |
-| Removing a device or connection | a parent | signs n+1 with a tombstone -> uploads | a child can remove only itself (self-removal signed with its own device key) |
-| Rebuild after a leak of A | a remaining parent | closing snapshot on R (every key tombstoned, A included) -> new A', R' -> children and connections admitted again over the direct path | see section 6 |
+| Removing a device or connection **[family]** | a parent | signs n+1 with a tombstone -> uploads | a child can remove only itself (self-removal signed with its own device key) |
+| Rebuild after a leak of A **[family]** | a remaining parent | closing snapshot on R (every key tombstoned, A included) -> new A', R' -> children and connections admitted again over the direct path | see section 6 |
 | Account deletion | a parent | closing snapshot on R, then a delete request for R signed with A -> the server forgets R's mirror, connections and push tokens | the server also forgets an R unused for 90 days |
 
 ## 3. Data flow (target)
@@ -64,17 +66,14 @@ Server
 
 What the server no longer has after the move: K, passes, `/auth/v1`, web sign-in, store notifications, `billing.verify`, the paid gate on `/v1` and `/pc/v1`, `FREE_ACCOUNT_IDS`, the `LB_*` keys, the `/pairing` code and claim, connection tokens (a connector authenticates with its key).
 
-## 4. The direct path (admission and handover of A)
+## 4. The direct path (admission and handover of A) **[family]**
 
-One login-billing local-form exchange (contract section 10, docs/local-form.md of the library). Approval Box adds only product payloads, which the library carries sealed under the QR's one-time key and never reads (requested from Mint 2026-11-24; library work under login-billing t10t):
-
-1. The new device (child, connector, or new Android parent) calls `makeRequest` and shows the QR.
-2. A parent scans it and connects directly to the new device on the same network.
-3. The new device sends the sealed hello with the product payload `ab1-join` = `{ v, sig_pub, seal_pub, platform, label }` (at most 1 KB).
-4. `answer()` hands `ab1-join` to the app before the confirm step. The parent's confirm screen shows what is being admitted: platform, name, the key fingerprint, and for a new Android parent "this phone becomes a parent and will hold the account key".
-5. The parent signs n+1 with A (adding the new key), then replies with its store proof and the payload `ab1-admit` = `{ v, R, A_pub, version n+1, snapshot hash }` plus, only for a new Android parent, A itself (at most 4 KB). A new parent that checks its own store gets a reply with no store proof ("joined, not paid" in the library; it checks Play itself).
-6. The new device accepts, checks the snapshot it receives from the mirror against the hash in `ab1-admit`, and keeps R, A_pub and its place. The parent uploads n+1.
-Nothing of steps 1 to 5 touches our server.
+Built inside the library (t10x) on the local-form exchange of contract section 10; the two-way payload is internal to it. What Approval Box needs from the family's interface, to be agreed with Purika:
+- on a parent: start "add a device / add an AI connection" (scan), with a confirm step that hands the app what is being admitted (platform, name, key fingerprint, parent or child) so the app shows its own confirm screen;
+- on a new device or connector: "join" (show the QR), ending with R and the device's place in the keyhole list;
+- everywhere: R, the current keyhole list (active device and connector keys, who added each, when), a change signal (a new keyhole -> the app's notice), remove (parent), self-removal (child), rebuild (parent, giving R');
+- the device's own key set for sessions and relay authentication, or an agreed way for peer-channel to bind its device keys to a keyhole.
+Nothing of the admission touches our server; the server only stores the signed keyhole list (the mirror) and checks relay authentication against it.
 
 ## 5. States of an account
 
@@ -100,11 +99,12 @@ Exit from every guard: a refused relay authentication ends when a parent adds th
 
 | Part | Change | Task |
 |---|---|---|
-| peer-channel contract | R instead of K; only A signs snapshots (plus a child's self-removal); relay authentication by key signature; mirror per R; 5.2/5.3/5.4 relay admission replaced by section 4; `onPassEnded`, pass ids and `not_entitled` removed; closing snapshot | t03 (0.6) |
-| server | remove the library server part and its routes, the paid gate, pairing codes and connection tokens; `/pc/v1` authenticates by key; push tokens per R; delete by signed request | t04 |
+| device family | keys A/B, keyhole list, direct-path admission (devices and AI connections, a Node part for the connector), rebuild | login-billing t10x (Purika), via approval-box t02 |
+| peer-channel contract | R instead of K; registry and admission handed to the family at the agreed boundary; relay authentication by key signature against the keyhole list; `onPassEnded`, pass ids and `not_entitled` removed | t03 (0.6), after the boundary with Purika |
+| server | remove the library server part and its routes, the paid gate, pairing codes and connection tokens; `/pc/v1` authenticates by key; mirror, waits and push tokens per R; delete by signed request | t04 |
 | web | sign-in, pairing and subscription pages go; public pages stay | t05 |
-| connector (and BellTeam's module) | connector keys, `PC1PAIR` on the direct path, key authentication | t06 |
-| Apple apps | A in iCloud Keychain, parent screens, scanning a child's QR, direct path both roles, notices, rebuild | t07 (Red Shoes) |
-| Android and Linux apps | Android: A wrapped + Block Store, parent screens and direct path; Linux: child (QR, paid-until) | t08 (Indivilia) |
+| connector (and BellTeam's module) | joins as a family member, key authentication | t06 |
+| Apple apps | consume the family; screens for parent, scan, notices, rebuild | t07 (Red Shoes) |
+| Android and Linux apps | consume the family; Android parent screens, Linux child | t08 (Indivilia) |
 
-Still to come from the library (Mint): the payloads of section 4 (both directions), and a wanting-side part for Node so that the connector can be admitted over the direct path; `freeAccounts` after the Owner's answer.
+Still from the library (Mint): the device family (t10x); `freeAccounts` after the Owner's answer.
