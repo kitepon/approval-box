@@ -8,7 +8,7 @@ Inputs: the Owner, 2026-11-24 ~14:0x JST: 「ミントに連絡し、新しい�
 
 | Part | Owner | Approval Box uses it through |
 |---|---|---|
-| Sign-in on every device, the paid check, device keys, start / add / leave / sign out my other devices, the QR exchange, the signed request, the JS server part (check, accept, events) | login-billing (Mint designs, Purika builds). **Approval Box never edits it**; a gap goes to Mint as one requirement message | the parts' public API, pinned at 0.22.2 (contract 1.51) |
+| Sign-in on every device, the paid check, device keys, start / add / leave / sign out my other devices, the QR exchange, the signed request, the JS server part (check, accept, events) | login-billing (Mint designs, Purika builds). **Approval Box never edits it**; a gap goes to Mint as one requirement message | the parts' public API, pinned at 0.22.4 (contract 1.52+) |
 | Storage of entries, keyholes and used numbers (the library's storage interface) | Approval Box server (`packages/server`, SQLite) | implements the interface the JS server part defines |
 | Everything from "this request comes from a device of entry E" to the AI: connections and pairing, the peer-channel registry and sessions, push wakes, content, retention | Approval Box and peer-channel (Nayuta) | this page |
 
