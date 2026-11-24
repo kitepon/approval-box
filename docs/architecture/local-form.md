@@ -1,6 +1,6 @@
 # Approval Box on login-billing version 1 (0.21.1): target function, data flow and states
 
-Status: design 2.0, 2026-11-24, Nayuta (chart approval-box/switch-20261124/t02-design). Replaces design 1.x of this page (withdrawn with contract section 11 drafts 1 to 4). Source of truth for the switch; [README.md](README.md), [login-pass.md](login-pass.md) and [peer-channel-adoption.md](peer-channel-adoption.md) keep describing what runs until each step ships, and each step updates them in the same diff.
+Status: design 2.1, 2026-11-24, Nayuta (chart approval-box/switch-20261124/t02-design). Replaces design 1.x of this page (withdrawn with contract section 11 drafts 1 to 4). Source of truth for the switch; [README.md](README.md), [login-pass.md](login-pass.md) and [peer-channel-adoption.md](peer-channel-adoption.md) keep describing what runs until each step ships, and each step updates them in the same diff.
 
 Inputs: the Owner, 2026-11-24 ~14:0x JST: 「ミントに連絡し、新しい仕組みに切り替えろ」; his scope line (12:0x JST): the library ends where our server knows a signed-in device, everything from there to the AI is ours; 「ログイン基盤自体のコードの変更の権限はお前にはない。要望があればミントへ伝えろ。」. Mint's ruling for Approval Box: /srv/bellteam/bots/bot-137fd092/docs/login-billing/rulings/approval-box.md. Library contract 1.48 sections 10 (local form) and 11 (keyholes), release v0.21.1 (merge 2cf4037). Earlier rulings still in force: content never stored on the server, only devices decrypt (2026-11-21); no Web device (2026-11-21); the Owner is the only user and we may go to the final form at once (2026-11-22).
 
@@ -23,22 +23,22 @@ Inputs: the Owner, 2026-11-24 ~14:0x JST: 「ミントに連絡し、新しい�
 | Function | Part | Input -> output | Failure / exit |
 |---|---|---|---|
 | Device authentication on every route | server: the JS server part's signed-request check, called first in the `/v1` middleware and in `/pc/v1` authenticate | signed request -> `{ entry, key, role }` -> `userId = entry` | refused by the library: its code (401); a key in no entry: "not signed in"; wrong time: the library's retry rule |
-| Start, accept an add, leave, sign out my other devices | JS server part, mounted by Approval Box under `/keys/v1` | library wire | library codes |
-| Edge limits | server, before the library is called | body cap (16 KiB on `/keys/v1`), calls per source (existing `rateLimiter`) | 413 / 429 |
+| Start, accept an add, leave, sign out my other devices | JS server part, mounted by Approval Box at `/v1/keys/{start,accept,others,leave}` (base `https://approval-box.kitepon.dev/v1`, ahead of the `/v1` device check) | library wire | library codes |
+| Edge limits | server, before the library is called | body cap (16 KiB on `/v1/keys/*`), calls per source (existing `rateLimiter`) | 413 / 429 |
 | Keyhole events | server handler of the library's events | added: nothing; removed: close that key's peer-channel sockets and drop its push token; entries joined (A into B): move every row of A to B in one transaction; entry emptied: erase every row of E (connections, mirror, push tokens, settings) | a handler failure is logged with a code and never fails the change (library rule); the next use repairs nothing silently: an orphan row of a gone entry is erased by the retention sweep |
 | Retention of an entry no device reaches | server sweep (daily, existing scheduler) | `entries_seen.last_used_at` written at each accepted signed request; an entry unused for 90 days -> erase its rows | none (the person signs in again and starts a new entry) |
 | Paid check | each app (local form): `ownPurchase` on a parent, `accept` of a parent's reply on a child, `freeAccounts` | -> paid until when, kept on the device | not paid: the app shows "subscribe"; the server never refuses for payment |
 | Pairing an AI connection | connector shows `PC1PAIR` (code + connector key fingerprint + secret); **a parent device** scans it and claims it with a signed request; peer-channel 5.4 key binding | -> `connections` row under E, connector key in the registry | a child cannot claim (refused `parent_required`; the way out: scan with the phone) |
-| peer-channel device identity | device: its own peer-channel key set (sig + seal, P-256, unchanged); server: binds each registry device key to the keyhole that uploaded it | registry snapshot upload by a signed request -> accepted only if the signer key's binding is a keyhole of E now | key of a removed keyhole: refused, and the mirror drops its slots |
+| peer-channel device identity | device: its own peer-channel key set (sig + seal, P-256, unchanged); parent: signs a new device's keys into the registry only after checking the new device's statement against the library key it added | statement relayed by the server (integrity by signature, the server cannot swap it) -> parent signs n+1 -> mirror | statement does not verify: nothing signed |
 | Who an AI sends to | connector | the devices active in E's registry (peer-channel 4.3) whose keyhole is still in E (server says so at `join`) | none listed: `no_device` as today |
-| Migration of the Owner's existing data | server, one route used once per device | a request carrying both the old pass (K) and a signed request (E) -> rows of K move to E; the old pass is then ended | no old pass: nothing to move (a new account) |
+| Migration of the Owner's existing data | server, `POST /v1/me/move-to-entry`, empty body | old pass (Authorization: Bearer) and a signed request in the same request -> rows of K move to E -> 200 `{ entry, moved: true }` | no valid pass, or K already moved: 200 `{ entry, moved: false }` (idempotent) |
 | Old form beside the new | server | `/auth/v1` and passes stay mounted until the switch date, then removed with the library's server part config | — |
 
 ## 3. Data flow (target)
 
 ```
 Device (any)                      signs every call with its library key
-  -> /keys/v1 start | add | leave | sign-out-others     (library wire, JS server part)
+  -> /v1/keys/start | accept | others | leave         (library wire, JS server part)
   -> /v1/*  and  /pc/v1/*                               (signed request -> entry E)
   -> /pc/v1/registry PUT                                (signed request; server binds the pc device key to the keyhole)
   -> push token PUT                                     (signed request -> devices row under E, keyed by the keyhole key)
@@ -62,7 +62,7 @@ Every refusal above has its way out in the same row; no guard waits for a person
 
 ## 5. Decisions taken here (mine), and what they cost
 
-- **Connectors trust our server's keyhole list** for which peer-channel device keys belong to E, and peer-channel keeps its device-signed registry for everything else (removals, forks, notices). Why: the library keeps no signed adds at the server (11.3), and a second QR per device to run peer-channel's own admission would double what the Owner does. Cost, stated plainly: a fully compromised running server could add a keyhole and a device key of its own and receive new requests until a device sees the "a device was added" notice and removes it. A leak of the stored data still reveals no content (nothing is stored).
+- **Our server's word is never enough to make a device** (the Owner, 2026-11-24 14:2x JST, on the trade-off of design 2.0: 「致命的なこと言ってる？代償って。」; that trade-off is withdrawn). Connectors accept a device key only from peer-channel's device-signed registry. A new device's peer-channel keys enter it only when a parent signs them, after checking a statement the new device signed with its library key against the key the parent itself added at the QR. This needs two library functions requested from Mint on 2026-11-24 (the added key given to the parent's app; sign and check a product statement with the device key). t04 waits on Mint's answer. The Owner still scans one QR per device.
 - **Only a parent approves an AI connection.** Same rule as keyholes; a Linux PC pairs its AI by scanning `PC1PAIR` with the phone.
 - **Retention period 90 days** for an entry no device reaches, the same period as the existing unused-pairing expiry.
 - **Switch date**: when the Owner's own devices run the new builds and the migration route has moved his data. Then `/auth/v1` and passes are unmounted in one server release.
@@ -80,7 +80,7 @@ Every refusal above has its way out in the same row; no guard waits for a person
 | Part | Change | Task |
 |---|---|---|
 | server | vendor 0.21.1 tgz; keyhole storage in SQLite; signed request on `/v1`, `/pc/v1`; `/keys/v1`; events; edge limits; migration route; drop the paid gate; retention sweep; later unmount `/auth/v1` | switch t03 (Mint reviews before deploy) |
-| peer-channel contract and connector | K -> E; registry device key bound to a keyhole; `join` reports keyhole membership; parent-only claim; `onPassEnded` replaced by the keyhole events | switch t04 |
+| peer-channel contract and connector | K -> E; a device key enters the registry only by a parent's signature after the statement check (section 5); `join` reports keyhole membership; parent-only claim; `onPassEnded` replaced by the keyhole events | switch t04, after Mint's answer |
 | Apple apps (Red Shoes) | 0.21.1 Swift part; start / add / sign-in on every device; signed request instead of the pass; `freeAccounts`; QR scan on iPhone/iPad; migration call once; register apple-return on the Services ID | switch t05 |
 | Android and Linux apps (Indivilia) | 0.21.1 Kotlin / .NET parts; the same; Linux is a child (QR) | switch t06 |
 | release | store builds, the Owner's devices on the new form, `freeAccounts` filled, old form unmounted, message to Mint | switch t07 |
