@@ -36,6 +36,8 @@ const CLIENT_ROUTES: [string, RegExp][] = [
 ];
 
 /** 共有ライブラリの通行証で、契約が要る経路（G1）。申請の一覧・開く・答える・保留・消す・添付、更新の知らせ。 */
+/** /events を Last-Event-ID なしで張った時に流す直近の幅。知らせは一覧を取り直す合図なので、古い履歴は要らない。 */
+const FRESH_CONNECT_WINDOW_MS = 60_000;
 const PAID_ROUTES = [/^\/decisions(\/|$)/, /^\/events$/];
 /** 契約が無くても通す、セットアップ確認の申請を読む・答える経路。 */
 const SETUP_ROUTES: [string, RegExp][] = [["GET", /^\/decisions\/([^/]+)$/], ["POST", /^\/decisions\/([^/]+)\/answer$/]];
@@ -341,7 +343,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     const clientSessionId = c.get("clientSessionId");
     const last = Number(c.req.header("last-event-id") ?? c.req.query("last_event_id") ?? 0) || 0;
     return streamSSE(c, async (stream) => {
-      const queue: UserEvent[] = events.since(userId, last);
+      const queue: UserEvent[] = last ? events.since(userId, last) : events.recent(userId, FRESH_CONNECT_WINDOW_MS);
       let wake: (() => void) | null = null;
       const unsubscribe = events.subscribe(userId, (event) => { queue.push(event); wake?.(); });
       stream.onAbort(() => { unsubscribe(); wake?.(); });
