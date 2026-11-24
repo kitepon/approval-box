@@ -281,7 +281,7 @@ test("auth_flows.redirect_uri の移行: 列の無いDBを開くと列が足さ�
     const db = openDb(dir);
     assert.ok(all<{ name: string }>(db, "select name from pragma_table_info('auth_flows')").some((c) => c.name === "redirect_uri"));
     assert.deepEqual(all(db, "select state, redirect_uri from auth_flows").map((r) => ({ ...r })), [{ state: "s1", redirect_uri: null }]);
-    assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 17);
+    assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 18);
     db.close();
     openDb(dir).close(); // 二度目は何も変えない
   }

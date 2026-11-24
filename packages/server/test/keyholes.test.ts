@@ -27,7 +27,7 @@ function setup(options: { now?: () => number } = {}) {
   const entries = createEntries({ db, accounts, attachments, peerChannel: () => part, ...(options.now ? { now: options.now } : {}) });
   const keyholes = createAppKeyholes({ db, origin: ORIGIN, entries });
   const app = createApp({ db, accounts, decisions, events, publicUrl: ORIGIN, attachments, keyholes, peerChannel: part });
-  return { db, accounts, decisions, attachments, entries, keyholes, app, pc };
+  return { db, events, accounts, decisions, attachments, entries, keyholes, app, pc };
 }
 
 function insertDecision(db: ReturnType<typeof openDb>, userId: string, id: string) {
@@ -215,14 +215,12 @@ test("events: removed drops that key's push tokens and closes its endpoint; join
 
   insertDecision(x.db, "A", "K-A");
   const conn = x.accounts.createConnection("A", "pc", "linux", ["codex"]);
-  run(x.db, "insert into k_moved (k, entry, at) values ('K-old', 'A', 'now')");
   x.entries.seen("A");
   x.entries.onEvent({ type: "joined", from: "A", into: "B" });
   assert.equal(get(x.db, "select 1 from users where id = 'A'"), undefined);
   assert.equal(get<{ user_id: string }>(x.db, "select user_id from decisions where id = 'K-A'")?.user_id, "B");
   assert.equal(get<{ user_id: string }>(x.db, "select user_id from connections where id = ?", conn.id)?.user_id, "B");
   assert.deepEqual(all<{ keyhole: string }>(x.db, "select keyhole from devices where user_id = 'B' order by keyhole").map((r) => r.keyhole), ["ka", "kb"]); // the colliding token keeps B's row
-  assert.equal(get<{ entry: string }>(x.db, "select entry from k_moved where k = 'K-old'")?.entry, "B");
   assert.ok(get(x.db, "select 1 from entries_seen where entry = 'B'"));
   assert.equal(get(x.db, "select 1 from entries_seen where entry = 'A'"), undefined);
   assert.deepEqual(x.pc.forgotten, ["A"]);
@@ -232,10 +230,11 @@ test("events: removed drops that key's push tokens and closes its endpoint; join
   run(x.db, "insert into attachments (id, user_id, decision_id, name, content_type, kind, size, sha256, created_at) values ('att-1', 'B', 'K-A', 'a.png', 'image/png', 'image', 1, 'h', 'now')");
   run(x.db, "insert into keyholes (key, entry, role) values ('left', 'B', 'child')");
   x.entries.onEvent({ type: "emptied", entry: "B" });
-  for (const [table, column] of [["users", "id"], ["decisions", "user_id"], ["connections", "user_id"], ["devices", "user_id"], ["attachments", "user_id"], ["keyholes", "entry"], ["entries_seen", "entry"], ["k_moved", "entry"]]) {
+  for (const [table, column] of [["users", "id"], ["decisions", "user_id"], ["connections", "user_id"], ["devices", "user_id"], ["attachments", "user_id"], ["entries_seen", "entry"]]) {
     assert.equal(get(x.db, `select 1 from ${table} where ${column} = 'B'`), undefined, table);
   }
   assert.equal(existsSync(file), false);
+  assert.ok(get(x.db, "select 1 from keyholes where key = 'left'")); // keyholes are the library's: never written by the product
   assert.deepEqual(x.pc.forgotten, ["A", "B"]);
 });
 
@@ -251,7 +250,7 @@ test("events: a failing handler is logged as one code line and not thrown", () =
   assert.deepEqual(lines, ["approval-box-server: keyhole_event_failed emptied"]);
 });
 
-test("retention: entries unused for 90 days are erased with their keyholes; recent ones stay", () => {
+test("retention: the content of entries unused for 90 days is erased, never their keyholes; recent ones stay", () => {
   let at = Date.parse("2026-11-24T00:00:00Z");
   const x = setup({ now: () => at });
   for (const e of ["OLD", "NEW"]) { x.entries.signedIn(e); insertDecision(x.db, e, `K-${e}`); run(x.db, "insert into keyholes (key, entry, role) values (?, ?, 'parent')", `k-${e}`, e); }
@@ -260,8 +259,79 @@ test("retention: entries unused for 90 days are erased with their keyholes; rece
   at += 31 * 86400_000;
   assert.equal(x.entries.sweep(), 1);
   assert.equal(get(x.db, "select 1 from users where id = 'OLD'"), undefined);
-  assert.equal(get(x.db, "select 1 from keyholes where entry = 'OLD'"), undefined);
+  assert.ok(get(x.db, "select 1 from keyholes where entry = 'OLD'"));
   assert.ok(get(x.db, "select 1 from decisions where id = 'K-NEW'"));
   assert.ok(get(x.db, "select 1 from keyholes where entry = 'NEW'"));
   assert.deepEqual(x.pc.forgotten, ["OLD"]);
+});
+
+test("review fixes: a signed /me has no payment fields; a signed DELETE /me is 409 and erases nothing; k_moved is gone", async () => {
+  const x = setup();
+  let expired = 0;
+  x.accounts.onExpired = () => { expired++; };
+  const { device, entry } = await startParent(x.app, ORIGIN);
+  const me = (await (await x.app.request("/v1/me", { headers: await signed(device, "GET", "/v1/me") })).json()) as Record<string, unknown>;
+  assert.equal(me.user_id, entry);
+  for (const field of ["plan", "store", "expires_at"]) assert.equal(field in me, false, field);
+  assert.equal(expired, 0);
+  insertDecision(x.db, entry, "K-1");
+  const del = await x.app.request("/v1/me", { method: "DELETE", headers: await signed(device, "DELETE", "/v1/me") });
+  assert.equal(del.status, 409);
+  assert.ok(get(x.db, "select 1 from decisions where id = 'K-1'"));
+  assert.ok(get(x.db, "select 1 from keyholes where entry = ?", entry));
+  assert.equal(get(x.db, "select 1 from sqlite_master where name = 'k_moved'"), undefined);
+  assert.equal(get<{ user_version: number }>(x.db, "pragma user_version")?.user_version, 18);
+});
+
+test("review fixes: calls per source and the 16 KiB cap come before verify on signed /v1 (the upload keeps its file cap) and /pc/v1", async () => {
+  const x = setup();
+  const { device } = await startParent(x.app, ORIGIN);
+  const used = () => get<{ n: number }>(x.db, "select count(*) n from keyhole_used")!.n;
+  const before = used();
+  const body = "x".repeat(16 * 1024 + 1);
+  const big = await x.app.request("/v1/devices", { method: "POST", body, headers: { ...(await signed(device, "POST", "/v1/devices", body)), "x-forwarded-for": "4.4.4.4" } });
+  assert.equal(big.status, 413);
+  assert.equal(used(), before); // verify never ran
+  const path = "/v1/decisions/K-none/attachments?name=a.png";
+  const upload = await x.app.request(path, { method: "POST", body, headers: { ...(await signed(device, "POST", path, body)), "x-forwarded-for": "4.4.4.4", "idempotency-key": "i1", "content-type": "image/png" } });
+  assert.notEqual(upload.status, 413);
+  assert.equal(used(), before + 1);
+  for (let i = 0; i < 240; i++) assert.equal((await x.app.request("/v1/me", { headers: { ...(await signed(device, "GET", "/v1/me")), "x-forwarded-for": "5.5.5.5" } })).status, 200);
+  const counted = used();
+  assert.equal((await x.app.request("/v1/me", { headers: { ...(await signed(device, "GET", "/v1/me")), "x-forwarded-for": "5.5.5.5" } })).status, 429);
+  assert.equal(used(), counted);
+  const auth = authenticate(x.accounts, undefined as never, ORIGIN, x.keyholes);
+  const req = async () => ({ method: "GET", url: "/pc/v1/signal", headers: { ...(await signed(device, "GET", "/pc/v1/signal")), "x-forwarded-for": "6.6.6.6" } }) as unknown as IncomingMessage;
+  for (let i = 0; i < 240; i++) assert.equal((await auth(await req()) as { kind?: string }).kind, "device");
+  const pcCounted = used();
+  assert.deepEqual(await auth(await req()), { refused: "rate_limited" });
+  assert.equal(used(), pcCounted);
+});
+
+test("review fixes: the serial chain runs one call at a time, in order", async () => {
+  const x = setup();
+  const order: string[] = [];
+  let release!: () => void;
+  const first = x.entries.serial(async () => { order.push("a1"); await new Promise<void>((r) => { release = r; }); order.push("a2"); });
+  const second = x.entries.serial(() => { order.push("b"); });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(order, ["a1"]);
+  release();
+  await Promise.all([first, second]);
+  assert.deepEqual(order, ["a1", "a2", "b"]);
+});
+
+test("review fixes: an open /v1/events stream closes at its next wake once its keyhole is removed", async () => {
+  const x = setup();
+  const { device: parent, entry } = await startParent(x.app, ORIGIN);
+  const child = await joinAs(x.app, ORIGIN, parent);
+  const stream = await x.app.request("/v1/events", { headers: await signed(child, "GET", "/v1/events") });
+  assert.equal(stream.status, 200);
+  const text = stream.text();
+  assert.deepEqual(await keysCall(x.app, parent, "others"), { status: 200, json: { removed: 1 } });
+  x.events.publish(entry, "decision.created", { title: "after removal" });
+  const closed = await Promise.race([text, new Promise((r) => setTimeout(() => r("still open"), 2000))]);
+  assert.equal(typeof closed, "string");
+  assert.notEqual(closed, "still open");
+  assert.equal((closed as string).includes("after removal"), false); // nothing reaches the removed device
 });
