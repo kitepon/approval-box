@@ -10,13 +10,13 @@ import { all, get, openDb, run } from "../src/db.ts";
 import { Decisions } from "../src/decisions.ts";
 import { EventHub } from "../src/events.ts";
 import { createApp } from "../src/http.ts";
-import { SqliteKeyholeStore, createAppKeyholes, createEntries, type AppKeyholes } from "../src/keyholes.ts";
+import { SqliteKeyholeStore, createAppKeyholes, createEntries } from "../src/keyholes.ts";
 import { authenticate } from "../src/pc.ts";
-import { signed, stubKeyholes } from "./keyhole-stub.ts";
+import { joinAs, keysCall, makeDevice, parentAdd, signed, startParent } from "./keyhole-signer.ts";
 
 const ORIGIN = "https://kb.test";
 
-function setup(options: { real?: boolean; now?: () => number } = {}) {
+function setup(options: { now?: () => number } = {}) {
   const db = openDb(":memory:");
   const events = new EventHub(db);
   const accounts = new Accounts(db, events, "store");
@@ -25,10 +25,9 @@ function setup(options: { real?: boolean; now?: () => number } = {}) {
   const pc = { forgotten: [] as string[], ended: [] as { k: string; passId: string }[] };
   const part = { forgetAccount: (k: string) => { pc.forgotten.push(k); }, onPassEnded: (e: { k: string; passId: string }) => { pc.ended.push(e); }, connectionRemoved: () => {} };
   const entries = createEntries({ db, accounts, attachments, peerChannel: () => part, ...(options.now ? { now: options.now } : {}) });
-  const stub = stubKeyholes(entries);
-  const keyholes: AppKeyholes = options.real ? createAppKeyholes({ db, origin: ORIGIN, entries }) : stub.keyholes;
+  const keyholes = createAppKeyholes({ db, origin: ORIGIN, entries });
   const app = createApp({ db, accounts, decisions, events, publicUrl: ORIGIN, attachments, keyholes, peerChannel: part });
-  return { db, accounts, decisions, attachments, entries, app, pc, seen: stub.seen };
+  return { db, accounts, decisions, attachments, entries, keyholes, app, pc };
 }
 
 function insertDecision(db: ReturnType<typeof openDb>, userId: string, id: string) {
@@ -65,7 +64,7 @@ test("store: write applies all ops or none (deletes first), useOnce is once unti
 });
 
 test("/v1/keys/*: reached without auth (library answers), GET is the library's 404, body over 16 KiB is 413, calls per source 429", async () => {
-  const x = setup({ real: true });
+  const x = setup();
   const start = await x.app.request("/v1/keys/start", { method: "POST", body: JSON.stringify({ role: "parent" }), headers: { "content-type": "application/json" } });
   assert.equal(start.status, 401);
   assert.deepEqual(await start.json(), { error: "key_invalid" }); // the library's body, not the /v1 device check's
@@ -85,25 +84,26 @@ test("/v1/keys/*: reached without auth (library answers), GET is the library's 4
   assert.deepEqual(await me.json(), { error: "key_invalid" });
 });
 
-test("signed request: /v1 runs as the entry with no paid gate; the body reaches the route; push token keyed by the keyhole", async () => {
+test("signed request: a started parent runs /v1 as its entry with no paid gate; the body reaches the route; push token keyed by the keyhole", async () => {
   const x = setup();
-  x.accounts.ensureUser("E1");
-  insertDecision(x.db, "E1", "K-1");
-  const list = await x.app.request("/v1/decisions?status=pending", { headers: signed("E1", "key-1") });
+  const { device, entry } = await startParent(x.app, ORIGIN);
+  // The entry's users row is made on its first /v1 request, not on start.
+  assert.equal(get(x.db, "select 1 from users where id = ?", entry), undefined);
+  assert.equal(((await (await x.app.request("/v1/me", { headers: await signed(device, "GET", "/v1/me") })).json()) as { user_id: string }).user_id, entry);
+  assert.ok(get(x.db, "select 1 from users where id = ?", entry));
+  insertDecision(x.db, entry, "K-1");
+  // The path with query is signed: the server rebuilt it exactly.
+  const list = await x.app.request("/v1/decisions?status=pending", { headers: await signed(device, "GET", "/v1/decisions?status=pending") });
   assert.equal(list.status, 200); // billing "store", no contract: the old form would answer 402
   assert.deepEqual(((await list.json()) as { items: { id: string }[] }).items.map((d) => d.id), ["K-1"]);
-  assert.equal(x.seen.at(-1)!.path, "/v1/decisions?status=pending");
-  assert.ok(get(x.db, "select 1 from entries_seen where entry = 'E1'"));
-  // A new entry gets its users row on first use.
-  assert.equal((await x.app.request("/v1/me", { headers: signed("E2", "key-2") })).status, 200);
-  assert.ok(get(x.db, "select 1 from users where id = 'E2'"));
+  assert.ok(get(x.db, "select 1 from entries_seen where entry = ?", entry));
+  // The body is signed too, and the route still reads it.
   const body = JSON.stringify({ platform: "android", fcm_token: "fcm-1" });
-  const device = await x.app.request("/v1/devices", { method: "POST", body, headers: { ...signed("E1", "key-1"), "content-type": "application/json" } });
-  assert.equal(device.status, 200);
-  assert.equal(new TextDecoder().decode(x.seen.at(-1)!.body), body);
-  assert.equal(get<{ keyhole: string }>(x.db, "select keyhole from devices where user_id = 'E1'")?.keyhole, "key-1");
+  const device_ = await x.app.request("/v1/devices", { method: "POST", body, headers: { ...(await signed(device, "POST", "/v1/devices", body)), "content-type": "application/json" } });
+  assert.equal(device_.status, 200);
+  assert.equal(get<{ keyhole: string }>(x.db, "select keyhole from devices where user_id = ?", entry)?.keyhole, device.publicKey);
   // The connector of an entry is never refused for payment either.
-  assert.doesNotThrow(() => x.accounts.assertCanUse("E1"));
+  assert.doesNotThrow(() => x.accounts.assertCanUse(entry));
   // A refused signature answers the library's status and body.
   const bad = await x.app.request("/v1/me", { headers: { "login-billing-key": "nope" } });
   assert.equal(bad.status, 401);
@@ -112,14 +112,93 @@ test("signed request: /v1 runs as the entry with no paid gate; the body reaches 
   assert.equal((await x.app.request("/v1/me")).status, 401);
 });
 
+test("signed request: a child accepted with the parent's add joins the entry; replay, time_off and an unknown key are refused", async () => {
+  const x = setup();
+  const { device: parent, entry } = await startParent(x.app, ORIGIN);
+  const child = await joinAs(x.app, ORIGIN, parent);
+  assert.deepEqual(all<{ key: string; role: string }>(x.db, "select key, role from keyholes where entry = ? order by role desc", entry).map((r) => ({ ...r })), [{ key: parent.publicKey, role: "parent" }, { key: child.publicKey, role: "child" }]);
+  const headers = await signed(child, "GET", "/v1/me");
+  const me = await x.app.request("/v1/me", { headers });
+  assert.equal(((await me.json()) as { user_id: string }).user_id, entry);
+  // The same header again (same nonce) is a replay.
+  const replay = await x.app.request("/v1/me", { headers });
+  assert.equal(replay.status, 401);
+  assert.deepEqual(await replay.json(), { error: "key_replayed" });
+  // A clock 200 s off is time_off with the server's now, as the library answers it.
+  const before = Date.now();
+  const off = await x.app.request("/v1/me", { headers: await signed(child, "GET", "/v1/me", "", before - 200_000) });
+  assert.equal(off.status, 401);
+  const offBody = (await off.json()) as { error: string; now: number };
+  assert.equal(offBody.error, "time_off");
+  assert.ok(offBody.now >= before && offBody.now <= Date.now());
+  // A key in no entry is not signed in.
+  const stranger = await makeDevice({ origin: ORIGIN });
+  const unknown = await x.app.request("/v1/me", { headers: await signed(stranger, "GET", "/v1/me") });
+  assert.equal(unknown.status, 401);
+  assert.deepEqual(await unknown.json(), { error: "not_signed_in" });
+  // A signature for another origin does not verify.
+  const elsewhere = await makeDevice({ origin: "https://evil.test" });
+  assert.deepEqual(await (await x.app.request("/v1/me", { headers: await signed(elsewhere, "GET", "/v1/me") })).json(), { error: "key_invalid" });
+});
+
 test("/pc/v1 authenticate: a signed request is a device of the entry with endpoint_ref = key; a refusal carries its code", async () => {
   const x = setup();
-  const { keyholes } = stubKeyholes(x.entries);
-  const auth = authenticate(x.accounts, undefined as never, ORIGIN, keyholes);
+  const { device, entry } = await startParent(x.app, ORIGIN);
+  const auth = authenticate(x.accounts, undefined as never, ORIGIN, x.keyholes);
   const req = (header: string) => ({ method: "GET", url: "/pc/v1/signal", headers: { "login-billing-key": header } }) as unknown as IncomingMessage;
-  assert.deepEqual(await auth(req("stub E9 key-9")), { k: "E9", kind: "device", endpoint_ref: "key-9", pass_kind: "keyhole" });
-  assert.ok(get(x.db, "select 1 from users where id = 'E9'"));
+  assert.deepEqual(await auth(req((await signed(device, "GET", "/pc/v1/signal"))["login-billing-key"])), { k: entry, kind: "device", endpoint_ref: device.publicKey, pass_kind: "keyhole" });
+  assert.ok(get(x.db, "select 1 from users where id = ?", entry));
   assert.deepEqual(await auth(req("bad")), { refused: "key_invalid" });
+});
+
+test("keys: a parent added by another parent joins its whole entry into the signer's; rows move", async () => {
+  const x = setup();
+  const a = await startParent(x.app, ORIGIN);
+  const b = await startParent(x.app, ORIGIN);
+  const bChild = await joinAs(x.app, ORIGIN, b.device);
+  for (const [device, entry] of [[a.device, a.entry], [b.device, b.entry]] as const) {
+    const body = JSON.stringify({ platform: "android", fcm_token: `fcm-${entry}` });
+    assert.equal((await x.app.request("/v1/devices", { method: "POST", body, headers: { ...(await signed(device, "POST", "/v1/devices", body)), "content-type": "application/json" } })).status, 200);
+  }
+  insertDecision(x.db, b.entry, "K-B");
+  // A's parent adds B's parent: B's entry (its child too) joins A's.
+  const add = await parentAdd(a.device, b.device.publicKey, "parent");
+  const res = await keysCall(x.app, b.device, "accept", { add });
+  assert.deepEqual(res, { status: 200, json: { entry: a.entry, role: "parent" } });
+  assert.deepEqual(all<{ key: string }>(x.db, "select key from keyholes where entry = ? order by key", a.entry).map((r) => r.key), [a.device.publicKey, b.device.publicKey, bChild.publicKey].sort());
+  assert.equal(get(x.db, "select 1 from users where id = ?", b.entry), undefined);
+  assert.equal(get<{ user_id: string }>(x.db, "select user_id from decisions where id = 'K-B'")?.user_id, a.entry);
+  assert.equal(get<{ n: number }>(x.db, "select count(*) n from devices where user_id = ?", a.entry)?.n, 2);
+  assert.equal(get(x.db, "select 1 from entries_seen where entry = ?", b.entry), undefined);
+  assert.deepEqual(x.pc.forgotten, [b.entry]);
+  // B's child now reads A's entry.
+  assert.equal(((await (await x.app.request("/v1/me", { headers: await signed(bChild, "GET", "/v1/me") })).json()) as { user_id: string }).user_id, a.entry);
+  // The same add again is add_used.
+  assert.deepEqual(await keysCall(x.app, b.device, "accept", { add }), { status: 409, json: { error: "add_used" } });
+});
+
+test("keys: others removes the child's keyhole and its devices row; leave of the last key erases the entry", async () => {
+  const x = setup();
+  const { device: parent, entry } = await startParent(x.app, ORIGIN);
+  const child = await joinAs(x.app, ORIGIN, parent);
+  const body = JSON.stringify({ platform: "android", fcm_token: "fcm-child" });
+  assert.equal((await x.app.request("/v1/devices", { method: "POST", body, headers: { ...(await signed(child, "POST", "/v1/devices", body)), "content-type": "application/json" } })).status, 200);
+  assert.ok(get(x.db, "select 1 from devices where keyhole = ?", child.publicKey));
+  // A child may not remove the others.
+  assert.deepEqual(await keysCall(x.app, child, "others"), { status: 403, json: { error: "not_parent" } });
+  assert.deepEqual(await keysCall(x.app, parent, "others"), { status: 200, json: { removed: 1 } });
+  assert.equal(get(x.db, "select 1 from devices where keyhole = ?", child.publicKey), undefined);
+  assert.equal(get(x.db, "select 1 from keyholes where key = ?", child.publicKey), undefined);
+  assert.deepEqual(x.pc.ended, [{ k: entry, passId: child.publicKey }]);
+  assert.deepEqual(await (await x.app.request("/v1/me", { headers: await signed(child, "GET", "/v1/me") })).json(), { error: "not_signed_in" });
+  // The parent leaves as the last key: the entry is emptied and erased.
+  insertDecision(x.db, entry, "K-LEAVE");
+  assert.deepEqual(await keysCall(x.app, parent, "leave"), { status: 200, json: {} });
+  for (const [table, column] of [["users", "id"], ["decisions", "user_id"], ["keyholes", "entry"], ["entries_seen", "entry"]]) {
+    assert.equal(get(x.db, `select 1 from ${table} where ${column} = ?`, entry), undefined, table);
+  }
+  assert.deepEqual(x.pc.forgotten, [entry]);
+  assert.deepEqual(await (await x.app.request("/v1/me", { headers: await signed(parent, "GET", "/v1/me") })).json(), { error: "not_signed_in" });
 });
 
 test("events: removed drops that key's push tokens and closes its endpoint; joined moves every row; emptied erases the entry", () => {

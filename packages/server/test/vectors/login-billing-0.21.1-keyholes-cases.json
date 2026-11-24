@@ -1,0 +1,168 @@
+{
+  "note": "docs/keyholes.md. Keys: d is the private scalar (b64u, tests only), pub the 65-byte point. Each part: rebuild `text` from the fields byte for byte, verify `s` under the key, refuse every `tampered` signature, and verify its own fresh signature of `text` with node's or its own verifier.",
+  "appId": "dev.example.app",
+  "keys": {
+    "parent": {
+      "d": "ERERERERERERERERERERERERERERERERERERERERERE",
+      "pub": "BAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q"
+    },
+    "child": {
+      "d": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI",
+      "pub": "BNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU"
+    },
+    "stranger": {
+      "d": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "pub": "BFGnWAgziY6hsYPL1zUKQJkHjG7xweGOlwzXaDA18l59ARBSJxKwtafP8IFoVIaYSpTmgx7axG5zYPqdg0p6gaE"
+    }
+  },
+  "requests": [
+    {
+      "name": "a POST with a JSON body",
+      "k": "BNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU",
+      "method": "POST",
+      "path": "/api/v1/items?x=1&y=%20z",
+      "body": "{\"a\":1}",
+      "origin": "https://api.example.com",
+      "t": 1795000000000,
+      "n": "AAECAwQFBgcICQoLDA0ODw",
+      "text": "lbk1\nreq\ndev.example.app\nBNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU\nPOST\n/api/v1/items?x=1&y=%20z\nAVq9f1zFei3ZS3WQ8ErYCEJzkF7jPsXOvq5iJ2qX-GI\nhttps://api.example.com\n1795000000000\nAAECAwQFBgcICQoLDA0ODw",
+      "header": "v1 k=BNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU t=1795000000000 n=AAECAwQFBgcICQoLDA0ODw s=B64EYyiKvFyEEoqUO9ZFZW-Oy8bvAmjFee66rBHo30YaOd2yPlPHS4_Ld0njG78vP-ZH_rmO6vm4XIoCDN1GhQ",
+      "s": "B64EYyiKvFyEEoqUO9ZFZW-Oy8bvAmjFee66rBHo30YaOd2yPlPHS4_Ld0njG78vP-ZH_rmO6vm4XIoCDN1GhQ",
+      "tampered": {
+        "s": "B64EYyiKvFyEEouUO9ZFZW-Oy8bvAmjFee66rBHo30YaOd2yPlPHS4_Ld0njG78vP-ZH_rmO6vm4XIoCDN1GhQ",
+        "otherPath": "lbk1\nreq\ndev.example.app\nBNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU\nPOST\n/api/v1/items?x=1&y=%20zx\nAVq9f1zFei3ZS3WQ8ErYCEJzkF7jPsXOvq5iJ2qX-GI\nhttps://api.example.com\n1795000000000\nAAECAwQFBgcICQoLDA0ODw",
+        "otherOrigin": "lbk1\nreq\ndev.example.app\nBNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU\nPOST\n/api/v1/items?x=1&y=%20z\nAVq9f1zFei3ZS3WQ8ErYCEJzkF7jPsXOvq5iJ2qX-GI\nhttps://evil.example\n1795000000000\nAAECAwQFBgcICQoLDA0ODw"
+      }
+    },
+    {
+      "name": "a GET with no body (the hash of the empty string)",
+      "k": "BAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q",
+      "method": "get",
+      "path": "/api/v1/ws",
+      "body": "",
+      "origin": "https://api.example.com:8443",
+      "t": 1795000000001,
+      "n": "EBESExQVFhcYGRobHB0eHw",
+      "text": "lbk1\nreq\ndev.example.app\nBAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q\nGET\n/api/v1/ws\n47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU\nhttps://api.example.com:8443\n1795000000001\nEBESExQVFhcYGRobHB0eHw",
+      "header": "v1 k=BAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q t=1795000000001 n=EBESExQVFhcYGRobHB0eHw s=mIS4vm5wCWs3CDIfPiKWa-PwSf--tptGTKIyO9W4o3ltY4QSQnOrKhmEEamD800dAQZMh76cpW_s0Pub7aYDVA",
+      "s": "mIS4vm5wCWs3CDIfPiKWa-PwSf--tptGTKIyO9W4o3ltY4QSQnOrKhmEEamD800dAQZMh76cpW_s0Pub7aYDVA",
+      "tampered": {
+        "s": "mIS4vm5wCWs3CDMfPiKWa-PwSf--tptGTKIyO9W4o3ltY4QSQnOrKhmEEamD800dAQZMh76cpW_s0Pub7aYDVA",
+        "otherPath": "lbk1\nreq\ndev.example.app\nBAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q\nGET\n/api/v1/wsx\n47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU\nhttps://api.example.com:8443\n1795000000001\nEBESExQVFhcYGRobHB0eHw",
+        "otherOrigin": "lbk1\nreq\ndev.example.app\nBAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q\nGET\n/api/v1/ws\n47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU\nhttps://evil.example\n1795000000001\nEBESExQVFhcYGRobHB0eHw"
+      }
+    }
+  ],
+  "adds": [
+    {
+      "name": "a parent adds a child",
+      "key": "BNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU",
+      "role": "child",
+      "issued": 1795000000000,
+      "signer": "BAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q",
+      "text": "lbk1\nadd\ndev.example.app\nBNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU\nchild\n1795000000000\nBAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q",
+      "s": "2-a26hJQaPh3WpRa-LBzTFDrr2GDwCHII6HyHeowxC9NKdjA2Aod5gskhagT_lktGlLvB1oKFiR06ToYa09dkg",
+      "tampered": {
+        "s": "Mnx9Cqdugd2-2l12F2FDRGdDCvKgQAnDMpfltc0s_kJKcuYLqaY7p2o8rnv906dJQR_guwLiy_icSKLg5O8k7g",
+        "byChild": "eGn7kBnnKLlLNcYpfMgqjvPsLQ2Tb2eEX-ABBADiB2YGys2FdcOr4jkLZNe4bW-sblcHv9C7MWHV7TNi5h050w"
+      }
+    },
+    {
+      "name": "a parent adds another parent",
+      "key": "BFGnWAgziY6hsYPL1zUKQJkHjG7xweGOlwzXaDA18l59ARBSJxKwtafP8IFoVIaYSpTmgx7axG5zYPqdg0p6gaE",
+      "role": "parent",
+      "issued": 1795000000005,
+      "signer": "BAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q",
+      "text": "lbk1\nadd\ndev.example.app\nBFGnWAgziY6hsYPL1zUKQJkHjG7xweGOlwzXaDA18l59ARBSJxKwtafP8IFoVIaYSpTmgx7axG5zYPqdg0p6gaE\nparent\n1795000000005\nBAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q",
+      "s": "E0ze8rgEjZbtI4knoIxX4H7I1tDKaIP97pUssw4_MqIGct4BPPG6qt6MJbMvUz9EaQx4rpcULkxMkDPoD8vT3g",
+      "tampered": {
+        "s": "x7BsqFXQoKC3jzVoJIKIy4_CKWIST_27M08zn_ON6vobdFH9qQ47UR3SzAiTaiB2gHBplE8fKCaZra1W2TCfmQ",
+        "byChild": "VejEIn9ssJ1x2lEY8z7am2f00V8TVTDeW-N4Rg8tmKIVHZdbyE8WZeZjcsbRX8VnaCFQ1CgRClS_CBrU8dtQFA"
+      }
+    }
+  ],
+  "refused": [
+    {
+      "name": "a request's high-s twin",
+      "kind": "req",
+      "key": "BNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU",
+      "text": "lbk1\nreq\ndev.example.app\nBNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU\nPOST\n/api/v1/items?x=1&y=%20z\nAVq9f1zFei3ZS3WQ8ErYCEJzkF7jPsXOvq5iJ2qX-GI\nhttps://api.example.com\n1795000000000\nAAECAwQFBgcICQoLDA0ODw",
+      "s": "B64EYyiKvFyEEoqUO9ZFZW-Oy8bvAmjFee66rBHo30blxiJMwaw4tXA0iLYc5EDQfQCyru2Is4s7XUDA74XezA"
+    },
+    {
+      "name": "a request signature with a spare bit set",
+      "kind": "req",
+      "key": "BNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU",
+      "text": "lbk1\nreq\ndev.example.app\nBNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU\nPOST\n/api/v1/items?x=1&y=%20z\nAVq9f1zFei3ZS3WQ8ErYCEJzkF7jPsXOvq5iJ2qX-GI\nhttps://api.example.com\n1795000000000\nAAECAwQFBgcICQoLDA0ODw",
+      "s": "B64EYyiKvFyEEoqUO9ZFZW-Oy8bvAmjFee66rBHo30YaOd2yPlPHS4_Ld0njG78vP-ZH_rmO6vm4XIoCDN1GhR"
+    },
+    {
+      "name": "a request key with a spare bit set (the text names that spelling)",
+      "kind": "req",
+      "key": "BNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoV",
+      "text": "lbk1\nreq\ndev.example.app\nBNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoV\nPOST\n/api/v1/items?x=1&y=%20z\nAVq9f1zFei3ZS3WQ8ErYCEJzkF7jPsXOvq5iJ2qX-GI\nhttps://api.example.com\n1795000000000\nAAECAwQFBgcICQoLDA0ODw",
+      "s": "2sDmqft90xOMeWHAfRSLZ0shWVZAZMJdhk2AUJ8LwxUnNE5tKr-BtFPDTDxH9Hb1lqn2eICdQpQPAOoXWPRclw"
+    },
+    {
+      "name": "an add's high-s twin",
+      "kind": "add",
+      "key": "BAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q",
+      "text": "lbk1\nadd\ndev.example.app\nBNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU\nchild\n1795000000000\nBAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q",
+      "s": "2-a26hJQaPh3WpRa-LBzTFDrr2GDwCHII6HyHeowxC-y1ic-J_XiGvTbelfsAabSopQLpk0NiGB-0JCqkRPHvw"
+    },
+    {
+      "name": "an add signature with a spare bit set",
+      "kind": "add",
+      "key": "BAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q",
+      "text": "lbk1\nadd\ndev.example.app\nBNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU\nchild\n1795000000000\nBAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q",
+      "s": "2-a26hJQaPh3WpRa-LBzTFDrr2GDwCHII6HyHeowxC9NKdjA2Aod5gskhagT_lktGlLvB1oKFiR06ToYa09dkh"
+    },
+    {
+      "name": "an add signer with a spare bit set (the text names that spelling)",
+      "kind": "add",
+      "key": "BAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5R",
+      "text": "lbk1\nadd\ndev.example.app\nBNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU\nchild\n1795000000000\nBAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5R",
+      "s": "6S3yNAMy8L4ijq0EHgnpkW3ZlGTBxWXSgVPXOTISBbYbT4LCNI8hhS5yeTUaWbB6VyKpmK0I51wOR1QCId9tew"
+    }
+  ],
+  "refusedNote": "1.48: each part's verifier refuses every case (key = the public key the text names, kind req or add); the server answers key_invalid (req) or add_invalid (add). Each verifies under a lenient verifier (node), so the refusal is the part's own canonical and low-s rule.",
+  "helloHash": [
+    {
+      "name": "a hello with no key: the token alone",
+      "t": "eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QifQ.eyJzdWIiOiIxMjMifQ.c2ln",
+      "h": "LHiqbw7ScO9zVEPM-wglaT_Rkd7f3A0i2ZxjjFqdeFw"
+    },
+    {
+      "name": "a child's hello: token | k | r",
+      "t": "eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QifQ.eyJzdWIiOiIxMjMifQ.c2ln",
+      "k": "BNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU",
+      "r": "child",
+      "h": "mtAJ977SvrlBDNfFxEz2JrDqqdju3muMNiqQj9kRbJU"
+    },
+    {
+      "name": "a parent's hello: token | k | r",
+      "t": "eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QifQ.eyJzdWIiOiIxMjMifQ.c2ln",
+      "k": "BAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q",
+      "r": "parent",
+      "h": "_J0KJrv9C_j7VQPQpNZV_mCw-w4fsLNRvbFimSE9YX0"
+    }
+  ],
+  "helloHashNote": "1.48 K2: QR h = b64u(SHA-256(UTF-8 t)) for a hello with no k; b64u(SHA-256(UTF-8 (t + \"|\" + k + \"|\" + r))) for one with k and r.",
+  "addNonce": [
+    {
+      "name": "the parent signs",
+      "id": "AAECAwQFBgcICQoLDA0ODw",
+      "signer": "BAIX5hfwtkQ5KCePlpmeaaI6TywVK99tbN9m5bgCgtTtGUp968uXcS0t2jyoWqh2Wlb0X8dYWZZS8ol8ZTBuV5Q",
+      "nonce": "TU7QZeZ1jIdzeLdKGeuvtnnMnglDfK6nv3iCjGlgbPM",
+      "plain": "2lrFkh1eTysaGiqTq85PWhWUAbCZYAL5QbYGSV2SsUg"
+    },
+    {
+      "name": "another signer gives another nonce",
+      "id": "AAECAwQFBgcICQoLDA0ODw",
+      "signer": "BFGnWAgziY6hsYPL1zUKQJkHjG7xweGOlwzXaDA18l59ARBSJxKwtafP8IFoVIaYSpTmgx7axG5zYPqdg0p6gaE",
+      "nonce": "gYFk9srFxbFvwi_a5mqRA56eesG4ITAPerSlvK9f6wI",
+      "plain": "2lrFkh1eTysaGiqTq85PWhWUAbCZYAL5QbYGSV2SsUg"
+    }
+  ],
+  "addNonceNote": "1.48 K1: a reply that carries an add carries pt with nonce = b64u(SHA-256(UTF-8 (\"lbp2|\" + id + \"|\" + b64u(SHA-256(the signer's 65 bytes))))); a reply with no add keeps plain = b64u(SHA-256(UTF-8 (\"lbp2|\" + id)))."
+}
