@@ -8,7 +8,7 @@ Inputs: the Owner, 2026-11-24 ~14:0x JST: 「ミントに連絡し、新しい�
 
 | Part | Owner | Approval Box uses it through |
 |---|---|---|
-| Sign-in on every device, the paid check, device keys, start / add / leave / sign out my other devices, the QR exchange, the signed request, the JS server part (check, accept, events) | login-billing (Mint designs, Purika builds). **Approval Box never edits it**; a gap goes to Mint as one requirement message | the parts' public API, pinned at 0.21.1 |
+| Sign-in on every device, the paid check, device keys, start / add / leave / sign out my other devices, the QR exchange, the signed request, the JS server part (check, accept, events) | login-billing (Mint designs, Purika builds). **Approval Box never edits it**; a gap goes to Mint as one requirement message | the parts' public API, pinned at 0.22.1 (contract 1.50) |
 | Storage of entries, keyholes and used numbers (the library's storage interface) | Approval Box server (`packages/server`, SQLite) | implements the interface the JS server part defines |
 | Everything from "this request comes from a device of entry E" to the AI: connections and pairing, the peer-channel registry and sessions, push wakes, content, retention | Approval Box and peer-channel (Nayuta) | this page |
 
@@ -54,7 +54,7 @@ Server keeps nothing of: provider, subject, sign-in, purchase, paid state, reque
 
 | State | Entered by | Leaves by |
 |---|---|---|
-| no entry (device signed in, key in no entry) | first sign-in on a parent; a removed keyhole | parent: start -> active; child: a parent's QR -> active |
+| no entry (device signed in, key in no entry) | any sign-in (the library never starts on sign-in); a removed keyhole | the first device: the person chooses 「この端末を親にする（はじめて使う）」 -> start -> active as the one parent; every other device: shows its QR, the parent reads it -> active as a child (contract 11.12) |
 | active (E has keyholes) | start, accept | keyholes removed one by one; entries joined -> the other E; last keyhole gone -> emptied |
 | emptied / unused 90 days | event or sweep | rows erased; final for E |
 | old form (pass, K) | today's apps | the migration route moves K -> E; the old part is unmounted on the switch date |
@@ -66,6 +66,7 @@ Every refusal above has its way out in the same row; no guard waits for a person
 - **The AI side follows the server's keyholes.** A device that the server knows in entry E (library 1.48, a parent's signed add) is a device of E for delivery too; peer-channel registry device keys are accepted when uploaded by a signed request of a keyhole of E. The 6-digit check code of design 2.2 is withdrawn: the Owner pointed out (2026-11-24 14:4x JST, 「それは偶然俺の環境の場合だけですよね。」) that an AI generally reaches Approval Box through the server's MCP, so the server is in the request's path anyway; a check that only protects the case where the MCP runs on the user's own PC is not worth a step for every user. Every keyhole added still shows a notice on every device.
 - **Only a parent approves an AI connection.** Same rule as keyholes; a Linux PC pairs its AI by scanning `PC1PAIR` with the phone.
 - **Retention period 90 days** for an entry no device reaches, the same period as the existing unused-pairing expiry.
+- **Screens follow contract 11.12 as a product guideline (1.50; the texts are Approval Box's, not a library API).** First sign-in screen, before Apple or Google: 「すでにほかの端末で使っている方は、同じアカウントでサインインしてから、次に出るQRコードを使用中の端末のカメラで読んでください。」. QR screen: 「親となる端末（課金操作をするカメラのあるスマートフォンがお勧め）のカメラでQRコードを読んでください。」 with 「この端末を親にする（はじめて使う）」 beside it, the only call of start. A refused add (signer_not_parent) tells the person to read the QR with the parent device. The other-devices section is inside 「接続」, not 設定 (the Owner, 2026-11-24).
 - **Switch date**: when the Owner's own devices run the new builds and the migration route has moved his data. Then `/auth/v1` and passes are unmounted in one server release.
 
 ## 6. Limits (from the library, stated plainly)

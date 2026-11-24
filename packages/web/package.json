@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@kitepon/login-billing": "file:../../vendor/kitepon-login-billing-0.22.0.tgz",
+    "@kitepon/login-billing": "file:../../vendor/kitepon-login-billing-0.22.1.tgz",
     "preact": "^11.0.0"
   },
   "devDependencies": {
