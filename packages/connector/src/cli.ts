@@ -118,7 +118,7 @@ async function finishBinding(server: string, token: string, binding: NonNullable
   out("アプリと、この端末の鍵を結んでいます（最大5分）…");
   try {
     const info = await new Api({ server, token }).call<{ connection_id: string; me: { user_id: string } }>("GET", "/connection");
-    const admission = await binding.complete({ server: { url: server, headers: { authorization: `Bearer ${token}` } }, account: info.me.user_id, connectionId: info.connection_id });
+    const admission = await binding.complete({ server: { url: server, headers: { authorization: `Bearer ${token}` } }, connectionId: info.connection_id });
     writeJsonFile(admissionFile(), admission);
     out("鍵を結びました。申請と答えは、サーバーを通らずにこの端末とアプリの間で運ばれます。");
   } catch (error) {
@@ -166,7 +166,7 @@ async function pairJson() {
       emit("claimed", { ...(result.connection_id ? { connection_id: result.connection_id } : {}) });
       try {
         const info = await new Api({ server, token: result.token }).call<{ connection_id: string; me: { user_id: string } }>("GET", "/connection");
-        writeJsonFile(admissionFile(), await binding.complete({ server: { url: server, headers: { authorization: `Bearer ${result.token}` } }, account: info.me.user_id, connectionId: info.connection_id }));
+        writeJsonFile(admissionFile(), await binding.complete({ server: { url: server, headers: { authorization: `Bearer ${result.token}` } }, connectionId: info.connection_id }));
         return emit("bound", { connection_id: info.connection_id });
       } catch (error) { return fail((error as { code?: string }).code ?? "binding_failed", `${(error as Error).message}（approval-box pair --json --rebind で同じ接続を結び直せます）`); }
     }

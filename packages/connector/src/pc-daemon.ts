@@ -18,8 +18,8 @@ export type DaemonApi = Pick<Api, "call" | "stream" | "download">;
 
 export type PcOptions = {
   server: string; token: string; connectionId: string; account: string;
-  /** ペアリング（契約 5.4）で受け取った、接続を加えた登録の写しとその hash。保存した状態が無い時だけ使う。 */
-  admission?: { snapshot: SignedSnapshotJson; hash: string };
+  /** ペアリング（契約 5.4）で受け取った、接続を加えた登録の写しとその hash と登録の名札（account、0.6.0）。保存した状態が無い時だけ使う。 */
+  admission?: { snapshot: SignedSnapshotJson; hash: string; account?: string };
   root?: string; socket?: string;
   /** GET /status の答え（c8h）。 */
   status?: () => import("./local-api.ts").DaemonStatusReply;

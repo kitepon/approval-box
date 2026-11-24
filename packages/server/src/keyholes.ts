@@ -56,7 +56,7 @@ export class SqliteKeyholeStore implements KeyholeStore {
 }
 
 /** What the entries need from peer-channel's server part (pc.ts). */
-export type PeerChannelPart = { forgetAccount(k: string): void; onPassEnded(event: { k: string; passId: string }): void };
+export type PeerChannelPart = { forgetAccount(k: string): void; onPassEnded(event: { k: string; passId: string }): void; moveAccount(from: string, into: string): void };
 
 export type EntriesInput = { db: Db; accounts: Accounts; attachments?: Attachments; peerChannel?: () => PeerChannelPart | undefined; now?: () => number };
 
@@ -90,6 +90,8 @@ export function createEntries(input: EntriesInput) {
    * Of the users row only created_at (the earlier), setup_verified_at and retention_days carry; never plan, plan_expires_at or store.
    * takeSettings: `from`'s retention setting wins (the K -> entry migration, whose entry is new); otherwise `into` keeps its own (entries joined).
    * Returns false when `from` has no users row (nothing to move; the K -> entry move is once-only through this).
+   * The peer-channel mirror moves last in the same transaction, whether or not `from` had a users row (peer-channel 0.6.0 moveAccount: every slot
+   * stays, served under `into`, so no removal is lost; `from`'s sockets close and reconnect as `into`). If it throws, the rows stay with `from` too.
    */
   function move(from: string, into: string, takeSettings = false) {
     if (from === into) return false;
@@ -106,6 +108,7 @@ export function createEntries(input: EntriesInput) {
       const last = get<{ last_used_at: string }>(db, "select last_used_at from entries_seen where entry = ?", from)?.last_used_at;
       if (last) run(db, "insert into entries_seen (entry, last_used_at) values (?, ?) on conflict(entry) do update set last_used_at = max(last_used_at, excluded.last_used_at)", into, last);
       run(db, "delete from entries_seen where entry = ?", from);
+      input.peerChannel?.()?.moveAccount(from, into);
       return !!source;
     });
   }
@@ -141,10 +144,8 @@ export function createEntries(input: EntriesInput) {
       else if (event.type === "removed") {
         run(db, "delete from devices where keyhole = ?", event.key);
         input.peerChannel?.()?.onPassEnded({ k: event.entry, passId: event.key }); // the device's endpoint_ref is its key (pc.ts)
-      } else if (event.type === "joined") {
-        move(event.from, event.into);
-        input.peerChannel?.()?.forgetAccount(event.from); // its sockets reconnect as `into`
-      } else erase(event.entry);
+      } else if (event.type === "joined") move(event.from, event.into);
+      else erase(event.entry);
     } catch {
       console.error(`approval-box-server: keyhole_event_failed ${event.type}`);
     }

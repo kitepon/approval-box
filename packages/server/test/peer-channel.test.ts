@@ -18,7 +18,9 @@ import { createLibrary } from "../src/lb.ts";
 import { deriveKWith } from "@kitepon/login-billing/server";
 import { type AppLinks, parseAppLinks } from "../src/applinks.ts";
 import { resetKeyCache } from "../src/oidc.ts";
-import { authenticate, createPeerChannel } from "../src/pc.ts";
+import { authenticate, createPeerChannel, type PeerChannel } from "../src/pc.ts";
+import { createAppKeyholes, createEntries } from "../src/keyholes.ts";
+import { joinAs, keysCall, parentAdd, signed, startParent } from "./keyhole-signer.ts";
 import { Waker } from "../src/push.ts";
 
 const ORIGIN = "https://kb.test";
@@ -37,7 +39,7 @@ const keysOnly = (async (input: string | URL | Request) =>
   String(input) === "https://appleid.apple.com/auth/keys" ? Response.json({ keys: [jwk] }) : new Response("", { status: 404 })) as typeof fetch;
 
 /** ライブラリ・アプリ・peer-channel を、本番と同じ serve の createServer で立てる。起こしは記録するだけ。 */
-async function setup(opts: { billing?: "off" | "store"; exemptSubs?: string[]; offset?: { value: number }; appLinks?: AppLinks } = {}) {
+async function setup(opts: { billing?: "off" | "store"; exemptSubs?: string[]; offset?: { value: number }; appLinks?: AppLinks; keyholes?: boolean } = {}) {
   resetKeyCache();
   const db = openDb(":memory:");
   const events = new EventHub(db);
@@ -49,8 +51,12 @@ async function setup(opts: { billing?: "off" | "store"; exemptSubs?: string[]; o
   const offset = opts.offset ?? { value: 0 };
   const library = createLibrary({ db, publicUrl: ORIGIN, billing, kKey, passKey: { id: "p1", key: randomBytes(32).toString("base64url") }, appleAudiences: [BUNDLE], googleAudiences: [], exemptK: exempt, fetch: keysOnly, now: () => Date.now() + offset.value });
   const wakes: { k: string; alert: boolean }[] = [];
-  const pc = createPeerChannel({ accounts, library, publicUrl: ORIGIN, mirrorPath: join(dir, `m-${randomBytes(4).toString("hex")}.db`), wake: (k, alert) => { wakes.push({ k, alert }); } });
-  const app = createApp({ db, accounts, decisions, events, publicUrl: ORIGIN, library, peerChannel: pc.part, appleAudiences: [BUNDLE], ...(opts.appLinks ? { appLinks: opts.appLinks } : {}) });
+  let part: PeerChannel["part"] | undefined;
+  const entries = createEntries({ db, accounts, peerChannel: () => part });
+  const keyholes = opts.keyholes ? createAppKeyholes({ db, origin: ORIGIN, entries }) : undefined; // the library's own keyholes; devices sign for real (keyhole-signer.ts)
+  const pc = createPeerChannel({ accounts, library, publicUrl: ORIGIN, mirrorPath: join(dir, `m-${randomBytes(4).toString("hex")}.db`), wake: (k, alert) => { wakes.push({ k, alert }); }, ...(keyholes ? { keyholes } : {}) });
+  part = pc.part;
+  const app = createApp({ db, accounts, decisions, events, publicUrl: ORIGIN, library, peerChannel: pc.part, appleAudiences: [BUNDLE], ...(opts.appLinks ? { appLinks: opts.appLinks } : {}), ...(keyholes ? { keyholes } : {}) });
   const server = await new Promise<ReturnType<typeof serve>>((ok) => { const s = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1", createServer: pc.createServer }, () => ok(s)); });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const call = (method: string, path: string, token?: string, body?: unknown) =>
@@ -62,7 +68,7 @@ async function setup(opts: { billing?: "off" | "store"; exemptSubs?: string[]; o
     return (await res.json()) as { pass: string; k: string };
   };
   const close = () => new Promise<void>((ok) => { pc.part.close(); server.close(() => ok()); (server as { closeAllConnections?: () => void }).closeAllConnections?.(); });
-  return { db, accounts, library, pc, wakes, base, call, signIn, close };
+  return { db, accounts, library, pc, entries, wakes, base, call, signIn, close };
 }
 
 const req = (authorization?: string) => ({ url: "/pc/v1/registry", method: "GET", headers: authorization ? { authorization } : {} }) as unknown as IncomingMessage;
@@ -303,5 +309,48 @@ test("SEC-084: a sign-out closes that pass's open socket; removing a connection 
       assert.equal((await x.call("DELETE", `${path}${conn.id}`, owner.pass)).status, 200, path);
       assert.equal(await connectorClosed, 4403, path);
     }
+  } finally { await x.close(); }
+});
+
+test("keyholes on the mirror: K -> entry keeps every slot (a removal included) for the entry's devices; a removed keyhole frees what it introduced and closes its socket; entries joined carry it along", async () => {
+  const x = await setup({ keyholes: true });
+  const app = { request: (path: string, init: RequestInit) => fetch(`${x.base}${path}`, init) };
+  type Device = Awaited<ReturnType<typeof startParent>>["device"];
+  const put = async (device: Device, body: unknown) => {
+    const text = JSON.stringify(body);
+    return fetch(`${x.base}/pc/v1/registry`, { method: "PUT", body: text, headers: { ...(await signed(device, "PUT", "/pc/v1/registry", text)), "content-type": "application/json" } });
+  };
+  const slots = async (device: Device) => ((await (await fetch(`${x.base}/pc/v1/registry`, { headers: await signed(device, "GET", "/pc/v1/registry") })).json()) as { slots: { body: string }[] }).slots.map((s) => s.body);
+  try {
+    const { pass, k } = await x.signIn("dave");
+    x.accounts.ensureUser(k);
+    const [a, b, gone] = [generateSigningKey(), generateSigningKey(), generateSigningKey()];
+    const dev = (key: typeof a, by = key) => ({ key_id: b64url(key.id), sig_pub: b64url(key.pub), seal_pub: b64url(key.pub), platform: "ios" as const, protection: "hardware" as const, added_at: 1, added_by: b64url(by.id) });
+    const tomb = [{ key_id: b64url(gone.id), removed_at: 1, removed_by: b64url(a.id) }];
+    const snap = (signer: typeof a, version: number, devices: ReturnType<typeof dev>[], removed: typeof tomb = []) =>
+      toJson(signSnapshot({ v: "pc1-registry", account: k, version, prev: [], created_at: 1, devices, connectors: [], removed }, signer));
+    const removal = snap(a, 2, [dev(a), dev(b, a), dev(gone, a)], tomb);
+    assert.equal((await x.call("PUT", "/pc/v1/registry", pass, snap(a, 1, [dev(a)]))).status, 204);
+    assert.equal((await x.call("PUT", "/pc/v1/registry", pass, removal)).status, 204);
+    const parent = await startParent(app, ORIGIN);
+    x.entries.move(k, parent.entry, true); // the migration route's move
+    assert.deepEqual(await slots(parent.device), [removal.body]); // the removal is still served, under the entry
+    assert.deepEqual(await (await x.call("GET", "/pc/v1/registry", pass)).json(), { slots: [] }); // the old pass no longer reads it
+    // A child keyhole uploads b's own snapshot under the registry's label k.
+    const child = await joinAs(app, ORIGIN, parent.device, "child");
+    const bSnap = snap(b, 3, [dev(a), dev(b, a)], tomb);
+    assert.equal((await put(child, bSnap)).status, 204);
+    assert.equal((await slots(parent.device)).length, 2);
+    const socket = new WebSocket(`${x.base.replace("http", "ws")}/pc/v1/signal`, { headers: await signed(child, "GET", "/pc/v1/signal") } as never);
+    const closed = new Promise<number>((ok) => socket.addEventListener("close", (e) => ok(e.code)));
+    await new Promise((ok) => socket.addEventListener("open", ok));
+    // The parent signs out its other devices: the library's "removed" event frees what the child introduced and closes its socket.
+    assert.deepEqual(await keysCall(app, parent.device, "others"), { status: 200, json: { removed: 1 } });
+    assert.equal(await closed, 4401);
+    assert.deepEqual(await slots(parent.device), [removal.body]); // b's slot freed, a's (with the removal) stays
+    // Another parent adds this one: its entry joins the other's, and the mirror goes along.
+    const other = await startParent(app, ORIGIN);
+    assert.equal((await keysCall(app, parent.device, "accept", { add: await parentAdd(other.device, parent.device.publicKey, "parent") })).status, 200);
+    assert.deepEqual(await slots(other.device), [removal.body]);
   } finally { await x.close(); }
 });

@@ -22,8 +22,8 @@ function setup(options: { now?: () => number } = {}) {
   const accounts = new Accounts(db, events, "store");
   const decisions = new Decisions(db, events);
   const attachments = new Attachments(db, mkdtempSync(join(tmpdir(), "ab-keyholes-")));
-  const pc = { forgotten: [] as string[], ended: [] as { k: string; passId: string }[] };
-  const part = { forgetAccount: (k: string) => { pc.forgotten.push(k); }, onPassEnded: (e: { k: string; passId: string }) => { pc.ended.push(e); }, connectionRemoved: () => {} };
+  const pc = { forgotten: [] as string[], ended: [] as { k: string; passId: string }[], moved: [] as [string, string][] };
+  const part = { forgetAccount: (k: string) => { pc.forgotten.push(k); }, onPassEnded: (e: { k: string; passId: string }) => { pc.ended.push(e); }, moveAccount: (from: string, into: string) => { pc.moved.push([from, into]); }, connectionRemoved: () => {} };
   const entries = createEntries({ db, accounts, attachments, peerChannel: () => part, ...(options.now ? { now: options.now } : {}) });
   const keyholes = createAppKeyholes({ db, origin: ORIGIN, entries });
   const app = createApp({ db, accounts, decisions, events, publicUrl: ORIGIN, attachments, keyholes, peerChannel: part });
@@ -141,14 +141,21 @@ test("signed request: a child accepted with the parent's add joins the entry; re
   assert.deepEqual(await (await x.app.request("/v1/me", { headers: await signed(elsewhere, "GET", "/v1/me") })).json(), { error: "key_invalid" });
 });
 
-test("/pc/v1 authenticate: a signed request is a device of the entry with endpoint_ref = key; a refusal carries its code", async () => {
+test("/pc/v1 authenticate: a signed request is a device of the entry with endpoint_ref = key; a child may not approve a connector; a refusal carries the library's status and body", async () => {
   const x = setup();
   const { device, entry } = await startParent(x.app, ORIGIN);
   const auth = authenticate(x.accounts, undefined as never, ORIGIN, x.keyholes);
   const req = (header: string) => ({ method: "GET", url: "/pc/v1/signal", headers: { "login-billing-key": header } }) as unknown as IncomingMessage;
   assert.deepEqual(await auth(req((await signed(device, "GET", "/pc/v1/signal"))["login-billing-key"])), { k: entry, kind: "device", endpoint_ref: device.publicKey, pass_kind: "keyhole" });
   assert.ok(get(x.db, "select 1 from users where id = ?", entry));
-  assert.deepEqual(await auth(req("bad")), { refused: "key_invalid" });
+  const child = await joinAs(x.app, ORIGIN, device, "child");
+  assert.deepEqual(await auth(req((await signed(child, "GET", "/pc/v1/signal"))["login-billing-key"])),
+    { k: entry, kind: "device", endpoint_ref: child.publicKey, pass_kind: "keyhole", binding_refused: "parent_required" });
+  assert.deepEqual(await auth(req("bad")), { refused: "key_invalid", status: 401, body: { error: "key_invalid" } });
+  // A wrong clock: 401 time_off with the server's now, so the device signs again once with it (peer-channel 0.6.0 carries status and body).
+  const late = await auth(req((await signed(device, "GET", "/pc/v1/signal", "", Date.now() - 10 * 60_000))["login-billing-key"])) as { refused: string; status: number; body: { error: string; now: number } };
+  assert.deepEqual([late.refused, late.status, late.body.error, typeof late.body.now], ["time_off", 401, "time_off", "number"]);
+  assert.ok(Math.abs(late.body.now - Date.now()) < 60_000);
 });
 
 test("keys: a parent added by another parent joins its whole entry into the signer's; rows move", async () => {
@@ -170,7 +177,8 @@ test("keys: a parent added by another parent joins its whole entry into the sign
   assert.equal(get<{ user_id: string }>(x.db, "select user_id from decisions where id = 'K-B'")?.user_id, a.entry);
   assert.equal(get<{ n: number }>(x.db, "select count(*) n from devices where user_id = ?", a.entry)?.n, 2);
   assert.equal(get(x.db, "select 1 from entries_seen where entry = ?", b.entry), undefined);
-  assert.deepEqual(x.pc.forgotten, [b.entry]);
+  assert.deepEqual(x.pc.moved, [[b.entry, a.entry]]); // the mirror moves (no slot dropped); B's sockets reconnect as A
+  assert.deepEqual(x.pc.forgotten, []);
   // B's child now reads A's entry.
   assert.equal(((await (await x.app.request("/v1/me", { headers: await signed(bChild, "GET", "/v1/me") })).json()) as { user_id: string }).user_id, a.entry);
   // The same add again is add_used.
@@ -223,7 +231,8 @@ test("events: removed drops that key's push tokens and closes its endpoint; join
   assert.deepEqual(all<{ keyhole: string }>(x.db, "select keyhole from devices where user_id = 'B' order by keyhole").map((r) => r.keyhole), ["ka", "kb"]); // the colliding token keeps B's row
   assert.ok(get(x.db, "select 1 from entries_seen where entry = 'B'"));
   assert.equal(get(x.db, "select 1 from entries_seen where entry = 'A'"), undefined);
-  assert.deepEqual(x.pc.forgotten, ["A"]);
+  assert.deepEqual(x.pc.moved, [["A", "B"]]);
+  assert.deepEqual(x.pc.forgotten, []);
 
   const file = join((x.attachments as unknown as { dir: string }).dir, "att-1");
   writeFileSync(file, "x");
@@ -235,7 +244,7 @@ test("events: removed drops that key's push tokens and closes its endpoint; join
   }
   assert.equal(existsSync(file), false);
   assert.ok(get(x.db, "select 1 from keyholes where key = 'left'")); // keyholes are the library's: never written by the product
-  assert.deepEqual(x.pc.forgotten, ["A", "B"]);
+  assert.deepEqual(x.pc.forgotten, ["B"]);
 });
 
 test("events: a failing handler is logged as one code line and not thrown", () => {
@@ -304,7 +313,7 @@ test("review fixes: calls per source and the 16 KiB cap come before verify on si
   const req = async () => ({ method: "GET", url: "/pc/v1/signal", headers: { ...(await signed(device, "GET", "/pc/v1/signal")), "x-forwarded-for": "6.6.6.6" } }) as unknown as IncomingMessage;
   for (let i = 0; i < 240; i++) assert.equal((await auth(await req()) as { kind?: string }).kind, "device");
   const pcCounted = used();
-  assert.deepEqual(await auth(await req()), { refused: "rate_limited" });
+  assert.deepEqual(await auth(await req()), { refused: "rate_limited", status: 429 });
   assert.equal(used(), pcCounted);
 });
 
@@ -334,4 +343,20 @@ test("review fixes: an open /v1/events stream closes at its next wake once its k
   assert.equal(typeof closed, "string");
   assert.notEqual(closed, "still open");
   assert.equal((closed as string).includes("after removal"), false); // nothing reaches the removed device
+});
+
+test("pairing claim: a child's signed request is refused parent_required (scan with the phone); a parent's reaches the claim", async () => {
+  const x = setup();
+  const { device: parent } = await startParent(x.app, ORIGIN);
+  const child = await joinAs(x.app, ORIGIN, parent, "child");
+  const path = "/v1/pairing/nope/claim";
+  const claim = async (device: typeof parent, extra: Record<string, string> = {}) =>
+    x.app.request(path, { method: "POST", body: "{}", headers: { ...(await signed(device, "POST", path, "{}")), "content-type": "application/json", ...extra } });
+  const refused = await claim(child);
+  assert.equal(refused.status, 403);
+  assert.deepEqual(await refused.json(), { error: { code: "parent_required", message: "AIとの接続は、スマホ（iPhone・iPad・Android）のアプリでQRコードを読み取って承認してください。" } });
+  assert.match(((await (await claim(child, { "accept-language": "en" })).json()) as { error: { message: string } }).error.message, /scanning the QR code with the app on your phone/);
+  const passed = await claim(parent);
+  assert.equal(passed.status, 404); // past the gate: the pairing itself is unknown
+  assert.equal(((await passed.json()) as { error: { code: string } }).error.code, "not_found");
 });
