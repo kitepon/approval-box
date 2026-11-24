@@ -5,6 +5,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertLoopback, startDevServer } from "../src/dev.ts";
+import { SIGNED_HEADER } from "../src/keyholes.ts";
+import { makeDevice } from "./keyhole-signer.ts";
 
 test("the dev runner refuses a PUBLIC_URL that is not loopback http, and starts nothing", async () => {
   for (const bad of ["https://approval-box-test.kitepon.dev", "http://192.168.1.12:8788", "http://example.com", "https://127.0.0.1:8788", "not a url"]) {
@@ -82,5 +84,20 @@ test("pcOffer false is production's PC_OFFER=off: peer_channel false, no /pc/v1,
     assert.ok(item);
     const answered = await fetch(`${s.url}/v1/decisions/${id}/answer`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${pass}`, "idempotency-key": "lab-1" }, body: JSON.stringify({ option_id: "ok", version: item.version }) });
     assert.equal(answered.status, 200);
+  } finally { await s.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("the dev runner mounts the same keyholes as main.ts: a signed key starts an entry and its signed /v1 call is answered", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ab-dev-"));
+  // the library signs the origin: a fixed port, since publicUrl is made before the listener binds
+  const s = await startDevServer({ port: 18000 + Math.floor(Math.random() * 1000), dataDir: dir, log: () => {} });
+  try {
+    const device = await makeDevice({ origin: s.url });
+    const body = JSON.stringify({ role: "parent" });
+    const started = await fetch(`${s.url}/v1/keys/start`, { method: "POST", headers: { "content-type": "application/json", [SIGNED_HEADER]: await device.sign("POST", "/v1/keys/start", body) }, body });
+    assert.equal(started.status, 200);
+    assert.equal(((await started.json()) as { role: string }).role, "parent");
+    const me = await fetch(`${s.url}/v1/me`, { headers: { [SIGNED_HEADER]: await device.sign("GET", "/v1/me") } });
+    assert.equal(me.status, 200);
   } finally { await s.close(); rmSync(dir, { recursive: true, force: true }); }
 });
