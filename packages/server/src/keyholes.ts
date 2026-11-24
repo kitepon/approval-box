@@ -1,6 +1,7 @@
 // login-billing 0.21.1 keyholes (contract 1.48 section 11), used through the public API only; the library is never edited.
 // Shape: docs/architecture/local-form.md (target) and docs/architecture/login-pass.md (what runs). The server knows a device only as
-// { entry, key, role }; the entry is the account (users.id). Nothing here logs an entry, a key or a body.
+// { entry, key, role }; the entry is the account (users.id). Nothing here logs an entry, a key or a body. The server never keeps K beside an
+// entry (contract 11.3) and never writes the keyholes table outside the library's store calls.
 import { createKeyholes, KeyholeError, type Keyhole, type KeyholeEvent, type KeyholeOps, type KeyholeRequest, type KeyholeRole, type KeyholeStore } from "@kitepon/login-billing/server";
 import type { Accounts } from "./accounts.ts";
 import type { Attachments } from "./attachments.ts";
@@ -63,6 +64,14 @@ export type EntriesInput = { db: Db; accounts: Accounts; attachments?: Attachmen
 export function createEntries(input: EntriesInput) {
   const { db, accounts, attachments } = input;
   const clock = input.now ?? Date.now;
+  // One chain for everything that reads keyholes and then writes entry rows: the library's handle (its events move and erase rows), a signed
+  // request's verify + users row, and the K -> entry move. So no write lands on an entry that a join or an emptied event just took away.
+  let chain: Promise<unknown> = Promise.resolve();
+  function serial<T>(fn: () => T | Promise<T>): Promise<T> {
+    const next = chain.then(fn);
+    chain = next.catch(() => {});
+    return next;
+  }
 
   /** Each accepted signed request: the users row exists and the entry was used now. */
   function signedIn(entry: string) {
@@ -77,38 +86,47 @@ export function createEntries(input: EntriesInput) {
   /**
    * Moves every row owned by `from` to `into` in one transaction (every column that references users.id, found from the schema).
    * A row that would collide with one `into` already has (same idempotency key, same push token) is dropped with `from`'s users row.
+   * Push tokens registered without a keyhole (by the old pass) are dropped, not moved: only a keyhole's own registration reaches the entry.
+   * Of the users row only created_at (the earlier), setup_verified_at and retention_days carry; never plan, plan_expires_at or store.
    * takeSettings: `from`'s retention setting wins (the K -> entry migration, whose entry is new); otherwise `into` keeps its own (entries joined).
+   * Returns false when `from` has no users row (nothing to move; the K -> entry move is once-only through this).
    */
   function move(from: string, into: string, takeSettings = false) {
-    if (from === into) return;
-    tx(db, () => {
-      if (get(db, "select 1 from users where id = ?", from)) {
-        run(db, `insert or ignore into users (id, created_at, setup_verified_at, retention_days, plan, plan_expires_at, store)
-          select ?, created_at, setup_verified_at, retention_days, plan, plan_expires_at, store from users where id = ?`, into, from);
-        run(db, "update users set setup_verified_at = coalesce(setup_verified_at, (select setup_verified_at from users where id = ?)) where id = ?", from, into);
-        if (takeSettings) run(db, "update users set retention_days = (select retention_days from users where id = ?) where id = ?", from, into);
+    if (from === into) return false;
+    return tx(db, () => {
+      const source = get<{ created_at: string; setup_verified_at: string | null; retention_days: number }>(db, "select created_at, setup_verified_at, retention_days from users where id = ?", from);
+      if (source) {
+        accounts.ensureUser(into);
+        run(db, "update users set created_at = min(created_at, ?), setup_verified_at = coalesce(setup_verified_at, ?) where id = ?", source.created_at, source.setup_verified_at, into);
+        if (takeSettings) run(db, "update users set retention_days = ? where id = ?", source.retention_days, into);
+        run(db, "delete from devices where user_id = ? and keyhole is null", from);
         for (const [table, column] of userColumns(db)) run(db, `update or ignore ${table} set ${column} = ? where ${column} = ?`, into, from);
         run(db, "delete from users where id = ?", from);
       }
-      run(db, "update k_moved set entry = ? where entry = ?", into, from);
       const last = get<{ last_used_at: string }>(db, "select last_used_at from entries_seen where entry = ?", from)?.last_used_at;
       if (last) run(db, "insert into entries_seen (entry, last_used_at) values (?, ?) on conflict(entry) do update set last_used_at = max(last_used_at, excluded.last_used_at)", into, last);
       run(db, "delete from entries_seen where entry = ?", from);
+      return !!source;
     });
   }
 
-  /** Erases an entry as account deletion does (rows, files, peer-channel mirror), and its keyholes, so its devices are signed out of it. */
+  /** Erases an entry's content as account deletion does (rows, files, peer-channel mirror). Keyholes are the library's: never written here. */
   function erase(entry: string) {
     const ids = attachments?.userFileIds(entry) ?? [];
     tx(db, () => {
       accounts.deleteUser(entry);
       attachments?.eraseFiles(ids);
-      for (const table of ["keyholes", "entries_seen", "k_moved"]) run(db, `delete from ${table} where entry = ?`, entry);
+      run(db, "delete from entries_seen where entry = ?", entry);
     });
     input.peerChannel?.()?.forgetAccount(entry);
   }
 
-  /** Erases every entry unused for RETENTION_DAYS. Returns how many. */
+  /** Whether `key` is still a keyhole of `entry` (read only; an open stream re-checks it on each heartbeat). */
+  function holds(entry: string, key: string) {
+    return !!get(db, "select 1 from keyholes where key = ? and entry = ?", key, entry);
+  }
+
+  /** Erases the content of every entry unused for RETENTION_DAYS (never its keyholes). Returns how many. */
   function sweep() {
     const before = new Date(clock() - RETENTION_DAYS * 86400_000).toISOString();
     const stale = all<{ entry: string }>(db, "select entry from entries_seen where last_used_at < ?", before).map((r) => r.entry);
@@ -132,20 +150,15 @@ export function createEntries(input: EntriesInput) {
     }
   }
 
-  return { signedIn, seen, move, erase, sweep, onEvent };
+  return { serial, signedIn, seen, move, erase, sweep, holds, onEvent };
 }
 export type Entries = ReturnType<typeof createEntries>;
 
-/** The library's keyholes on our store. handle() runs one at a time: the store has no conditional write, so two starts or accepts must not both pass their reads (docs/keyholes.md "The store"). */
+/** The library's keyholes on our store. handle() runs on the entries' serial chain: the store has no conditional write, so two starts or accepts must not both pass their reads (docs/keyholes.md "The store"). */
 export function createAppKeyholes(input: { db: Db; origin: string; entries: Entries; now?: () => number }) {
   const store = new SqliteKeyholeStore(input.db, input.now);
   const keyholes = createKeyholes({ appId: APP_ID, origin: input.origin, store, onEvent: input.entries.onEvent, ...(input.now ? { now: input.now } : {}) });
-  let chain: Promise<unknown> = Promise.resolve();
-  const handle = (request: KeyholeRequest) => {
-    const next = chain.then(() => keyholes.handle(request));
-    chain = next.catch(() => {});
-    return next;
-  };
+  const handle = (request: KeyholeRequest) => input.entries.serial(() => keyholes.handle(request));
   return { verify: keyholes.verify, handle, store, entries: input.entries };
 }
 export type AppKeyholes = Pick<ReturnType<typeof createAppKeyholes>, "verify" | "handle" | "entries">;

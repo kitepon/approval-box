@@ -111,7 +111,7 @@ test("lb_kv: 期限切れは読まず、掃除で消え、同じ鍵は上書き�
     assert.equal(await storage.get("slot:b"), "y");
     await storage.delete("slot:b");
     assert.equal(await storage.get("slot:b"), undefined);
-    assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 17);
+    assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 18);
     // take: 1回目だけ値が返り、行は消える。期限切れは返さない（行は消す）
     await storage.put("once:c", "z", 1000);
     assert.deepEqual(await Promise.all([storage.take("once:c"), storage.take("once:c")]), ["z", undefined]);
@@ -491,6 +491,7 @@ test("move-to-entry: the old pass and a signed request move every row of K to th
   const { pass, k } = await x.signIn("sub-move");
   x.accounts.ensureUser(k);
   x.accounts.updateSettings(k, 365);
+  x.accounts.setPlan(k, "active", "2099-01-01T00:00:00.000Z", "app_store");
   insertDecision(x.db, k, "K-MOVE");
   const conn = x.accounts.createConnection(k, "pc", "linux", ["codex"]);
   x.accounts.registerDevice(k, { platform: "ios", apns_token: "apns-1", apns_env: "production" });
@@ -508,9 +509,9 @@ test("move-to-entry: the old pass and a signed request move every row of K to th
   assert.equal(get(x.db, "select 1 from users where id = ?", k), undefined);
   assert.equal(get<{ user_id: string }>(x.db, "select user_id from decisions where id = 'K-MOVE'")?.user_id, one.entry);
   assert.equal(get<{ user_id: string }>(x.db, "select user_id from connections where id = ?", conn.id)?.user_id, one.entry);
-  assert.equal(get<{ user_id: string }>(x.db, "select user_id from devices where push_key like 'ios:%'")?.user_id, one.entry);
-  assert.equal(get<{ entry: string }>(x.db, "select entry from k_moved where k = ?", k)?.entry, one.entry);
+  assert.equal(get(x.db, "select 1 from devices where push_key like 'ios:%'"), undefined); // the old pass's push token is dropped, not moved
   assert.equal(x.accounts.settings(one.entry).retention_days, 365);
+  assert.deepEqual({ ...get(x.db, "select plan, plan_expires_at, store from users where id = ?", one.entry) }, { plan: "expired", plan_expires_at: null, store: null }); // never copied
   // The entry reads the moved decision with no paid gate.
   assert.equal((await x.call("GET", "/v1/decisions/K-MOVE", { headers: await signed(one.device, "GET", "/v1/decisions/K-MOVE") })).json.id, "K-MOVE");
   // Again with the same pass (now signed out), with a fresh pass of the same K, and with no pass: moved:false.

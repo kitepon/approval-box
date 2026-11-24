@@ -171,8 +171,8 @@ export class Accounts {
     run(this.db, "delete from users where id = ?", userId);
   }
 
-  /** entitlements は共有ライブラリの通行証で来た時だけ（契約はそこから決める）。 */
-  me(userId: string, entitlements?: { productId: string; store: string; expiresAt?: string }[]) {
+  /** entitlements は共有ライブラリの通行証で来た時だけ（契約はそこから決める）。local: a signed request (new form): no plan, store or expiry, no payment check. */
+  me(userId: string, entitlements?: { productId: string; store: string; expiresAt?: string }[], local = false) {
     const user = get<UserRow>(this.db, "select * from users where id = ?", userId);
     if (!user) throw new ApiError("unauthorized", "アカウントが見つかりません。");
     const checks = all<CheckRow>(this.db, "select * from setup_checks where user_id = ? order by client", userId).map((c) => ({
@@ -195,15 +195,15 @@ export class Accounts {
     const plan = entitlements ? (live ? "active" : "expired") : free ? "active" : effectivePlan(user);
     const store = entitlements ? ({ apple: "app_store", google: "google_play" } as Record<string, string>)[live?.store ?? ""] : user.store;
     const expiresAt = entitlements ? live?.expiresAt : user.plan_expires_at;
-    if (plan === "expired" && !entitlements) this.onExpired?.(userId);
+    if (plan === "expired" && !entitlements && !local) this.onExpired?.(userId);
     const login = get<{ provider: string }>(this.db, "select provider from identities where user_id = ? order by created_at", userId);
     return {
       user_id: user.id,
       login: login?.provider ?? null,
       setup: { verified: !!user.setup_verified_at, ...(user.setup_verified_at ? { verified_at: user.setup_verified_at } : {}), checks },
-      plan,
-      ...(expiresAt && !free ? { expires_at: expiresAt } : {}),
-      ...(store && !free ? { store } : {}),
+      ...(local ? {} : { plan }),
+      ...(expiresAt && !free && !local ? { expires_at: expiresAt } : {}),
+      ...(store && !free && !local ? { store } : {}),
       billing: this.billing,
       ...(entitlements ? { purchase_mark: userId } : {}), // 購入に付ける印。Kそのもの（ライブラリの契約）
     };

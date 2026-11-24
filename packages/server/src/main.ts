@@ -223,7 +223,7 @@ setInterval(() => {
   accounts.prunePairings();
   library?.storage.sweep();
   keyholes?.store.sweep();
-  // Retention: entries unused for 90 days. Checked hourly with the other sweeps; the 90-day line moves by at most an hour.
+  // Retention: the content of entries unused for 90 days (never their keyholes). Checked hourly with the other sweeps; the 90-day line moves by at most an hour.
   const erased = entries.sweep();
   if (erased) console.log(`approval-box-server: erased ${erased} unused entries`);
   events.prune(7);

@@ -56,8 +56,10 @@ function clientKey(c: Context): string {
   try { return getConnInfo(c).remote.address ?? ""; } catch { return ""; }
 }
 
-/** Body cap of /v1/keys/* (local-form.md "Edge limits"). */
+/** Body cap of /v1/keys/* and of every signed /v1 request but the attachment upload, checked before the signature (local-form.md "Edge limits"). */
 const KEYS_BODY_MAX = 16 * 1024;
+/** The one signed route whose body is a file: it keeps the file cap. */
+const SIGNED_UPLOAD = /^\/v1\/decisions\/[^/]+\/attachments$/;
 
 /** The library's KeyholeRequest: the path with query exactly as the device sent it (Node's raw url when served by Node), and the raw body bytes. */
 function keyholeRequest(c: Context, body: Uint8Array) {
@@ -195,6 +197,8 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
 
   // The library's keyholes (local-form.md): start, accept, others, leave. Mounted ahead of the /v1 device check, since a key in no entry must reach start and accept.
   const keyholes = services.keyholes;
+  // Signed /v1 requests per source (a device's normal traffic; the cheaper checks before the signature).
+  const allowSigned = rateLimiter(240, 60_000);
   if (keyholes) {
     const allow = rateLimiter(30, 60_000);
     app.all("/v1/keys/:route{start|accept|others|leave}", async (c) => {
@@ -297,15 +301,23 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   v1.use("*", async (c, next) => {
     const path = c.req.path.slice("/v1".length);
     // The new form: a request signed with the device's library key -> the entry is the account. No paid gate: the paid check is on each device.
+    // Calls per source and the body cap come before the signature check, so strangers cannot fill the used-number records.
     if (keyholes && c.req.header(SIGNED_HEADER) !== undefined) {
+      if (!allowSigned(clientKey(c))) throw new ApiError("rate_limited", "回数が多すぎます。少し待ってから試してください。");
+      const upload = c.req.method === "POST" && SIGNED_UPLOAD.test(c.req.path);
+      const request = keyholeRequest(c, await takeBody(c, upload ? MAX_FILE_BYTES : KEYS_BODY_MAX, upload ? "1つのファイルは20MBまでです。" : "本文は16KBまでです。"));
       let who: { entry: string; key: string };
       try {
-        who = await keyholes.verify(keyholeRequest(c, await takeBody(c, MAX_FILE_BYTES, "1つのファイルは20MBまでです。")));
+        // verify and the users row on the same chain as the library's changes: the entry is still current when its row is written.
+        who = await keyholes.entries.serial(async () => {
+          const found = await keyholes.verify(request);
+          keyholes.entries.signedIn(found.entry);
+          return found;
+        });
       } catch (error) {
         if (error instanceof KeyholeError) return c.json(error.body(), error.status as 401);
         throw error;
       }
-      keyholes.entries.signedIn(who.entry);
       c.set("userId", who.entry);
       c.set("keyhole", who.key);
       return next();
@@ -396,7 +408,9 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       services.shutdown?.addEventListener("abort", stop, { once: true });
       let sent = last;
       // 外された登録クライアントの流れは、次の心拍（25秒以内）で閉じる。
-      const granted = () => !clientSessionId || accounts.clientSessionActive(clientSessionId);
+      const keyhole = c.get("keyhole");
+      // A device whose keyhole was removed loses reach: checked on each heartbeat like a removed client session.
+      const granted = () => (!clientSessionId || accounts.clientSessionActive(clientSessionId)) && (!keyhole || !!keyholes?.entries.holds(userId, keyhole));
       while (!stream.aborted && !services.shutdown?.aborted && granted()) {
         while (queue.length) {
           const event = queue.shift()!;
@@ -449,7 +463,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   });
   v1.post("/pairing/:id/reject", (c) => idempotent(c, services, c.get("userId"), () => { accounts.rejectPairing(c.get("userId"), c.req.param("id")); return { ok: true }; }));
 
-  v1.get("/me", (c) => c.json(accounts.me(c.get("userId"), c.get("pass")?.entitlements)));
+  v1.get("/me", (c) => c.json(accounts.me(c.get("userId"), c.get("pass")?.entitlements, !!c.get("keyhole"))));
   // 自分のアカウントに保存している全ての写し。どの端末でも（契約が切れていても）取れる。
   v1.get("/me/export", (c) => {
     const day = now().slice(0, 10).replaceAll("-", "");
@@ -459,8 +473,9 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   });
   v1.delete("/me", async (c) => {
     const userId = c.get("userId");
-    // A signed request: erase the entry and its keyholes, so every device of it is signed out of it.
-    if (c.get("keyhole")) { keyholes!.entries.erase(userId); return c.json({ ok: true }); }
+    // A signed request erases nothing here: keyholes are the library's, and a device leaves through the library's keys/leave. The entry's
+    // content goes when the library reports the last keyhole gone (emptied) or after 90 days unused.
+    if (c.get("keyhole")) throw new ApiError("conflict", "この端末のサインアウト（keys/leave）で消してください。最後の端末が抜けた時にサーバーの記録も消えます。");
     // 通行証で入った時は、消す前にこのアカウントの全端末のログインを止める（契約 1.32 endAllLogins、ミント 2026-11-23）。端末の後追いのサインアウトが失敗しても、他の端末が残っていても、消したアカウントの通行証は残らない。止められなければ何も消さない。
     const token = c.get("pass") && library ? bearer(c) ?? getCookie(c, "__Host-lb_pass") : undefined;
     if (token) await library!.lb.endAllLogins(token);
@@ -481,11 +496,11 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       if (error instanceof LoginBillingError) return undefined;
       throw error;
     }) : undefined;
-    const moved = !!pass && tx(services.db, () => {
-      if (get(services.db, "select 1 from k_moved where k = ?", pass.k)) return false; // already moved, to this entry or to one that later joined
-      keyholes!.entries.move(pass.k, entry, true);
-      run(services.db, "insert into k_moved (k, entry, at) values (?, ?, ?)", pass.k, entry, now());
-      return true;
+    // On the keyholes' chain: if a join took this entry away since verify, answer 409 and the device retries as its new entry.
+    // Once-only without keeping K: the move deletes K's users row, so a second call finds nothing to move.
+    const moved = !!pass && await keyholes!.entries.serial(() => {
+      if (!get(services.db, "select 1 from users where id = ?", entry)) throw new ApiError("conflict", "端末の登録が変わりました。もう一度試してください。");
+      return keyholes!.entries.move(pass.k, entry, true);
     });
     if (!moved) return c.json({ entry, moved: false });
     // The old pass of this device has done its work; end that one login (its peer-channel sockets close through onPassEnded). The move stands if this fails.

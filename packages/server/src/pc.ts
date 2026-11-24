@@ -7,7 +7,7 @@ import { LoginBillingError } from "@kitepon/login-billing/server";
 import { createServerPart, SqliteMirrorStore, type Identity, type ServerPart, type TurnAnswer } from "@kitepon/peer-channel/server";
 import type { Accounts } from "./accounts.ts";
 import { ApiError } from "./errors.ts";
-import { type Library, PRODUCT_ID } from "./lb.ts";
+import { type Library, PRODUCT_ID, rateLimiter } from "./lb.ts";
 import { type AppKeyholes, KeyholeError, SIGNED_HEADER } from "./keyholes.ts";
 
 export type PeerChannelInput = {
@@ -24,8 +24,10 @@ export type PeerChannelInput = {
   keyholes?: AppKeyholes;
 };
 
-/** peer-channel's own cap on a registry PUT (signaling.js MAX_PUT_BYTES). */
-const PC_BODY_MAX = 128 * 1024;
+/** Body cap of a signed /pc/v1 request, checked before the signature (Mint's t03 review; the same 16 KiB as /v1). */
+const PC_BODY_MAX = 16 * 1024;
+/** The caller as http.ts clientKey sees it: the last X-Forwarded-For hop, else the socket's peer. Memory only. */
+const sourceOf = (req: IncomingMessage) => String(req.headers["x-forwarded-for"] ?? "").split(",").at(-1)!.trim() || (req.socket?.remoteAddress ?? "");
 /** Raw bodies of signed /pc/v1 requests, read once in the mount for the signature check (the part reads the copy). */
 const signedBodies = new WeakMap<IncomingMessage, Uint8Array>();
 const isSigned = (req: IncomingMessage) => req.headers[SIGNED_HEADER] !== undefined;
@@ -46,13 +48,15 @@ const bearer = (req: IncomingMessage) => /^Bearer\s+(\S+)$/i.exec(req.headers.au
  * 通行証が更新された時は、/v1 と同じく Login-Billing-Pass（cookie なら Set-Cookie）を /pc/v1 の HTTP の答えに付ける。
  */
 export function authenticate(accounts: Accounts, library: Library, publicUrl: string, keyholes?: AppKeyholes) {
+  const allowSigned = rateLimiter(240, 60_000);
   return async (req: IncomingMessage): Promise<Identity | { refused: string } | null> => {
     // The new form first: a signed request (the WebSocket GET is signed over an empty body). peer-channel answers only 401 or 403 + code, so every
     // refusal goes back as its code (time_off included); `now` of time_off is not carried. pass_kind "keyhole" is outside peer-channel 0.5.7's PassKind (t04).
     if (keyholes && isSigned(req)) {
+      if (!allowSigned(sourceOf(req))) return { refused: "rate_limited" }; // before the signature check (the body cap is in the mount)
       try {
-        const who = await keyholes.verify({ method: req.method ?? "GET", path: req.url ?? "/", headers: req.headers, body: signedBodies.get(req) ?? new Uint8Array() });
-        keyholes.entries.signedIn(who.entry);
+        const request = { method: req.method ?? "GET", path: req.url ?? "/", headers: req.headers, body: signedBodies.get(req) ?? new Uint8Array() };
+        const who = await keyholes.entries.serial(async () => { const found = await keyholes.verify(request); keyholes.entries.signedIn(found.entry); return found; });
         return { k: who.entry, kind: "device", endpoint_ref: who.key, pass_kind: "keyhole" as Identity["pass_kind"] & string };
       } catch (error) {
         if (error instanceof KeyholeError) return { refused: error.code };
