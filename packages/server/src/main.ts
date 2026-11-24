@@ -19,6 +19,7 @@ import { type Library, createLibrary } from "./lb.ts";
 import { purgeLegacy, rekeyToK } from "./rekey.ts";
 import { type PeerChannel, cloudflareTurn, createPeerChannel } from "./pc.ts";
 import { parseAppLinks } from "./applinks.ts";
+import { type AppKeyholes, createAppKeyholes, createEntries } from "./keyholes.ts";
 
 const env = process.env;
 const dataDir = resolve(env.APPROVAL_BOX_DATA ?? "data");
@@ -183,9 +184,18 @@ if (library) {
     else console.log(`approval-box-server: 旧いログインと契約の行（一度だけ消した数）: ${Object.entries(purged).map(([table, n]) => `${table} ${n}`).join("、")}`);
   }
 }
+// login-billing keyholes (local-form.md): /v1/keys/*, and a signed request on /v1 and /pc/v1 is a device of entry E. Runs beside the old pass.
+// The events reach peer-channel, which is made below with these keyholes (hence the late reference).
+let peerChannel: PeerChannel | undefined;
+const entries = createEntries({ db, accounts, attachments, peerChannel: () => peerChannel?.part });
+let keyholes: (AppKeyholes & { store: { sweep(): void } }) | undefined;
+try {
+  keyholes = createAppKeyholes({ db, origin: publicUrl, entries });
+} catch (error) {
+  console.error(`approval-box-server: keyholes are off (${error instanceof Error ? error.message : "unknown"})`); // the library's message names the setting only (origin, appId)
+}
 // peer-channel の server part（/pc/v1）。端末の通行証にライブラリを使うので、ライブラリがある時だけ置く。
 // 起こしは今の APNs・FCM の送り手で、中身の無い決まった知らせだけ。TURN は PC_TURN_SECRET と PC_TURN_URLS が揃った時だけ。
-let peerChannel: PeerChannel | undefined;
 // PC_OFFER=off は /pc/v1 を置かず peer_channel を名乗らない。今のアプリは名乗りを見て /v1 の申請を出さなくなるので、つなぎ先がそろうまで止めておく道。
 if (library && env.PC_OFFER?.trim() !== "off") {
   const turnSecret = secretValue("PC_TURN_SECRET");
@@ -195,7 +205,7 @@ if (library && env.PC_OFFER?.trim() !== "off") {
   // Cloudflare TURN が揃っていればそれ、無ければ coturn の共有の秘密、どちらも無ければ TURN なし。
   const turn = cfKeyId && cfToken ? cloudflareTurn(cfKeyId, cfToken) : turnSecret && turnUrls.length ? { secret: turnSecret, urls: turnUrls } : undefined;
   const waker = new Waker(db, { ...(apnsSend ? { apns: apnsSend } : {}), ...(fcm ? { fcm: fcm.send } : {}) });
-  peerChannel = createPeerChannel({ accounts, library, publicUrl, mirrorPath: join(dataDir, "pc-mirror.db"), wake: waker.wake, ...(turn ? { turn } : {}) });
+  peerChannel = createPeerChannel({ accounts, library, publicUrl, mirrorPath: join(dataDir, "pc-mirror.db"), wake: waker.wake, ...(turn ? { turn } : {}), ...(keyholes ? { keyholes } : {}) });
   console.log(`approval-box-server: peer-channel を /pc/v1 に置きます（TURN ${!turn ? "なし" : "generate" in turn ? "Cloudflare" : `coturn ${turnUrls.length}`}）`);
 }
 // アプリのリンク（/.well-known）。AB_ANDROID_APP_LINKS・AB_APPLE_APP_IDS が無ければ 404 で答える。
@@ -204,7 +214,7 @@ for (const problem of appLinks.problems) console.error(`approval-box-server: ア
 const diagnosticsAdminToken = env.DIAGNOSTICS_ADMIN_KEY_FILE ? readFileSync(env.DIAGNOSTICS_ADMIN_KEY_FILE,"utf8").trim() : env.DIAGNOSTICS_ADMIN_KEY;
 // 停止の合図。開いたままの更新の知らせ（SSE）を正しく閉じてから終える。
 const shutdown = new AbortController();
-const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) }, ...(library ? { library } : {}), ...(peerChannel ? { peerChannel: peerChannel.part } : {}), appLinks: appLinks.links }, { staticHandler });
+const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) }, ...(library ? { library } : {}), ...(peerChannel ? { peerChannel: peerChannel.part } : {}), appLinks: appLinks.links, ...(keyholes ? { keyholes } : {}) }, { staticHandler });
 
 setInterval(() => {
   new Diagnostics(db).prune();
@@ -212,6 +222,10 @@ setInterval(() => {
   attachments.gc();
   accounts.prunePairings();
   library?.storage.sweep();
+  keyholes?.store.sweep();
+  // Retention: entries unused for 90 days. Checked hourly with the other sweeps; the 90-day line moves by at most an hour.
+  const erased = entries.sweep();
+  if (erased) console.log(`approval-box-server: erased ${erased} unused entries`);
   events.prune(7);
 }, 3600_000).unref();
 

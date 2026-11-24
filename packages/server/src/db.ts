@@ -397,6 +397,17 @@ const MIGRATIONS: ((db: Db) => void)[] = [
   (db) => { db.exec("drop table if exists stripe_subscriptions"); },
   // 16: 共有ライブラリ（login-billing）の置き場 lb_kv。nonce・QRの枠・止めた通行証の印を期限つきで持ち、期限切れは定期の掃除で消す。
   (db) => { db.exec("create table if not exists lb_kv (key text primary key, value text not null, expires_at integer not null)"); },
+  // 17: login-billing 0.21.1 keyholes (local-form.md). The library's store (keyholes, used numbers), when each entry was last used (retention),
+  // which old K moved to which entry (move-to-entry), and the keyhole a push token was registered with (dropped when that keyhole is removed).
+  (db) => {
+    db.exec(`create table if not exists keyholes (key text primary key, entry text not null, role text not null check(role in ('parent','child')));
+      create index if not exists keyholes_entry on keyholes(entry);
+      create table if not exists keyhole_used (id text primary key, until_ms integer not null);
+      create table if not exists entries_seen (entry text primary key, last_used_at text not null);
+      create table if not exists k_moved (k text primary key, entry text not null, at text not null);`);
+    const columns = all<{ name: string }>(db, "select name from pragma_table_info('devices')").map((c) => c.name);
+    if (!columns.includes("keyhole")) db.exec("alter table devices add column keyhole text");
+  },
 ];
 
 function migrate(db: Db) {
