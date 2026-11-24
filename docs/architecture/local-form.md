@@ -4,7 +4,7 @@ Status: design 1.1, 2026-11-24, Nayuta (chart approval-box/local-form-20261124/t
 
 Inputs (all the Owner's, through Mint, 2026-11-23/24): login-billing contract 1.42 section 10 (no server takes part in sign-in or payment; "課金ってクライアントだけ"); his key model 「スマホ（全ての契約ログインとしての親）の鍵A」「Windows（…認めてもらった子）の鍵B」; "an account is Apple or Google, never both" (「片方の親って何…なぜ混ぜてるの？」); "nothing for login or admission goes through our relay" (「何でそんなに混ぜたがるのか分からない…」); "Approval Box is not responsible for the Apple ID or Google account" (「ここに俺のプロダクトが責任持つの？」); content never stored on the server and only devices decrypt (2026-11-21); no Web device (2026-11-21).
 
-**Owner of the device family (2026-11-24 10:2x JST, the Owner: 「基盤技術なんだからプリカに作らせるものでは？」):** parents and children, key A and keys B, the A-signed keyhole list, admission over the direct path and the rebuild are built by the login-billing library (Purika, login-billing t10x), not by Approval Box or peer-channel. Below, every row marked **[family]** is that external part, drawn here only as Approval Box sees it; its own function, data-flow and state diagrams are Purika's. The boundary with peer-channel (registry snapshots, peer-channel 4.3 and 5.3) is agreed between Purika and Nayuta before either builds. Approval Box builds only what consumes the family: routing by R, the screens, the connector, the server.
+**The device family is an external part (2026-11-24 10:4x JST, the Owner: 「お前が設計してプリカに作らせて、ナユタに使わせるだけでは？」):** parents and the shared A, children and connectors with their own keys, the A-signed family list, admit/remove/leave/rebuild over the direct path, the server-side verify, and the JS part for Node connectors and servers are designed by Mint (login-billing contract section 11) and built by Purika (login-billing t10x). Approval Box and peer-channel design and build none of it; rows marked **[family]** below only show how Approval Box uses it, and section 11 prevails wherever this page differs. Approval Box's requirements went to Mint on 2026-11-24 (a key per parent device, signing + sealing keys per entry, no labels in the list, merging concurrent additions).
 
 ## 1. The account
 
@@ -18,11 +18,7 @@ An account is an **Apple account** or a **Google account**. Nothing in any scree
 | A new parent gets A | by itself, through iCloud Keychain; no exchange | from an existing Android parent over the direct path (section 4) |
 | A new phone after losing every parent | a new Apple device of the same Apple ID gets A from iCloud Keychain | a new Android restored from the same Google account gets A from Block Store |
 
-Keys:
-- **A** (parent key, ECDSA P-256): the only key that signs registry snapshots. Never leaves the parents and their own store backup. Never sent to a child.
-- **Device key set** (every device, parent or child: sig + seal, P-256, peer-channel 3.1): made on the device, never leaves it. Used for sessions with the AIs and to authenticate to the relay.
-- **Connector key set** (each AI connection): made by the connector on its PC, never leaves it.
-- **R** (account routing id) = base64url(SHA-256(A's public key, uncompressed point)). The server knows the account only as R. R names no person, no provider and no subject.
+Keys and the family id R: as login-billing contract section 11 (A shared by the parents, own keys for children and connectors, R = SHA-256 of A's genesis public key). The server knows the account only as R; R names no person, no provider and no subject.
 
 ## 2. Function diagram (target)
 
@@ -68,12 +64,7 @@ What the server no longer has after the move: K, passes, `/auth/v1`, web sign-in
 
 ## 4. The direct path (admission and handover of A) **[family]**
 
-Built inside the library (t10x) on the local-form exchange of contract section 10; the two-way payload is internal to it. What Approval Box needs from the family's interface, to be agreed with Purika:
-- on a parent: start "add a device / add an AI connection" (scan), with a confirm step that hands the app what is being admitted (platform, name, key fingerprint, parent or child) so the app shows its own confirm screen;
-- on a new device or connector: "join" (show the QR), ending with R and the device's place in the keyhole list;
-- everywhere: R, the current keyhole list (active device and connector keys, who added each, when), a change signal (a new keyhole -> the app's notice), remove (parent), self-removal (child), rebuild (parent, giving R');
-- the device's own key set for sessions and relay authentication, or an agreed way for peer-channel to bind its device keys to a keyhole.
-Nothing of the admission touches our server; the server only stores the signed keyhole list (the mirror) and checks relay authentication against it.
+Login-billing contract section 11 (admit, parentJoin, remove, leave, rebuild, verify). Approval Box supplies only its confirm screen and notice texts, uploads the signed family list the part exports, and keeps nothing of the exchange. Nothing of the admission touches our server.
 
 ## 5. States of an account
 
@@ -100,7 +91,7 @@ Exit from every guard: a refused relay authentication ends when a parent adds th
 | Part | Change | Task |
 |---|---|---|
 | device family | keys A/B, keyhole list, direct-path admission (devices and AI connections, a Node part for the connector), rebuild | login-billing t10x (Purika), via approval-box t02 |
-| peer-channel contract | R instead of K; registry and admission handed to the family at the agreed boundary; relay authentication by key signature against the keyhole list; `onPassEnded`, pass ids and `not_entitled` removed | t03 (0.6), after the boundary with Purika |
+| peer-channel contract | R instead of K; its own registry (section 4) and admission (5.2-5.4) replaced by the family list it consumes; relay authentication by key signature against the keyhole list; `onPassEnded`, pass ids and `not_entitled` removed | t03 (0.6), after section 11 is built |
 | server | remove the library server part and its routes, the paid gate, pairing codes and connection tokens; `/pc/v1` authenticates by key; mirror, waits and push tokens per R; delete by signed request | t04 |
 | web | sign-in, pairing and subscription pages go; public pages stay | t05 |
 | connector (and BellTeam's module) | joins as a family member, key authentication | t06 |
