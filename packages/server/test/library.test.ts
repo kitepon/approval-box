@@ -14,6 +14,8 @@ import { createApp } from "../src/http.ts";
 import { PRODUCT_ID, SqliteStorage, createLibrary, rateLimiter } from "../src/lb.ts";
 import { hash } from "../src/ids.ts";
 import { resetKeyCache } from "../src/oidc.ts";
+import { createEntries } from "../src/keyholes.ts";
+import { signed, stubKeyholes } from "./keyhole-stub.ts";
 
 // 共有ライブラリは公開の入口だけで動かす。AppleとGoogleは、偽のfetch（公開鍵とApp Store Server APIの答え）で代える。
 const ORIGIN = "https://kb.test";
@@ -66,7 +68,8 @@ function setup(options: { billing?: "off" | "store"; exempt?: string[]; offsetMs
   });
   accounts.contract = (userId) => library.lb.known(userId);
   library.lb.onNone((userId) => decisions.endForNoContract(userId));
-  const app = createApp({ db, accounts, decisions, events, publicUrl: ORIGIN, attachments, library, appleAudiences: [BUNDLE], idKeys: async () => [jwk as never] });
+  const keyholes = stubKeyholes(createEntries({ db, accounts, attachments })).keyholes;
+  const app = createApp({ db, accounts, decisions, events, publicUrl: ORIGIN, attachments, library, keyholes, appleAudiences: [BUNDLE], idKeys: async () => [jwk as never] });
   const call = async (method: string, path: string, opts: { token?: string; body?: unknown; headers?: Record<string, string> } = {}) => {
     const res = await app.request(path, { method, headers: { ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}), "content-type": "application/json", ...opts.headers }, ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}) });
     const text = await res.text();
@@ -108,7 +111,7 @@ test("lb_kv: 期限切れは読まず、掃除で消え、同じ鍵は上書き�
     assert.equal(await storage.get("slot:b"), "y");
     await storage.delete("slot:b");
     assert.equal(await storage.get("slot:b"), undefined);
-    assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 16);
+    assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 17);
     // take: 1回目だけ値が返り、行は消える。期限切れは返さない（行は消す）
     await storage.put("once:c", "z", 1000);
     assert.deepEqual(await Promise.all([storage.take("once:c"), storage.take("once:c")]), ["z", undefined]);
@@ -481,4 +484,36 @@ test("LB_OLD_HANDOFF=off: handoff/start without a pass is refused (contract 1.20
   const res = await off.handler.handle(new Request(`${ORIGIN}/auth/v1/handoff/start`, { method: "POST", headers: { "content-type": "application/json", origin: ORIGIN }, body: JSON.stringify({ deviceLabel: "Chrome" }) }));
   assert.notEqual(res!.status, 200);
   assert.equal((await setup().call("POST", "/auth/v1/handoff/start", { body: { deviceLabel: "Chrome" } })).status, 200);
+});
+
+test("move-to-entry: the old pass and a signed request move every row of K to the entry once; then moved:false. The pass path still runs beside it", async () => {
+  const x = setup();
+  const { pass, k } = await x.signIn("sub-move");
+  x.accounts.ensureUser(k);
+  x.accounts.updateSettings(k, 365);
+  insertDecision(x.db, k, "K-MOVE");
+  const conn = x.accounts.createConnection(k, "pc", "linux", ["codex"]);
+  x.accounts.registerDevice(k, { platform: "ios", apns_token: "apns-1", apns_env: "production" });
+  // The old pass still opens /v1 (and still meets the paid gate) while keyholes are mounted.
+  assert.equal((await x.call("GET", "/v1/me", { token: pass })).json.user_id, k);
+  assert.equal((await x.call("GET", "/v1/decisions", { token: pass })).status, 402);
+  // The pass alone cannot move: a signed request is required.
+  assert.equal((await x.call("POST", "/v1/me/move-to-entry", { token: pass })).status, 401);
+  const moved = await x.call("POST", "/v1/me/move-to-entry", { token: pass, headers: signed("ENTRY1", "key-1") });
+  assert.equal(moved.status, 200);
+  assert.deepEqual(moved.json, { entry: "ENTRY1", moved: true });
+  assert.equal(get(x.db, "select 1 from users where id = ?", k), undefined);
+  assert.equal(get<{ user_id: string }>(x.db, "select user_id from decisions where id = 'K-MOVE'")?.user_id, "ENTRY1");
+  assert.equal(get<{ user_id: string }>(x.db, "select user_id from connections where id = ?", conn.id)?.user_id, "ENTRY1");
+  assert.equal(get<{ user_id: string }>(x.db, "select user_id from devices where push_key like 'ios:%'")?.user_id, "ENTRY1");
+  assert.equal(get<{ entry: string }>(x.db, "select entry from k_moved where k = ?", k)?.entry, "ENTRY1");
+  assert.equal(x.accounts.settings("ENTRY1").retention_days, 365);
+  // The entry reads the moved decision with no paid gate.
+  assert.equal((await x.call("GET", "/v1/decisions/K-MOVE", { headers: signed("ENTRY1", "key-1") })).json.id, "K-MOVE");
+  // Again with the same pass (now signed out), with a fresh pass of the same K, and with no pass: moved:false.
+  assert.deepEqual((await x.call("POST", "/v1/me/move-to-entry", { token: pass, headers: signed("ENTRY1", "key-1") })).json, { entry: "ENTRY1", moved: false });
+  const again = await x.signIn("sub-move");
+  assert.deepEqual((await x.call("POST", "/v1/me/move-to-entry", { token: again.pass, headers: signed("ENTRY2", "key-2") })).json, { entry: "ENTRY2", moved: false });
+  assert.deepEqual((await x.call("POST", "/v1/me/move-to-entry", { headers: signed("ENTRY1", "key-1") })).json, { entry: "ENTRY1", moved: false });
+  assert.equal(get<{ user_id: string }>(x.db, "select user_id from decisions where id = 'K-MOVE'")?.user_id, "ENTRY1");
 });

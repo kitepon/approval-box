@@ -9,7 +9,7 @@ type Provider = "apple" | "google";
 export type RekeyResult = { deleted: number; rekeyed: number } | { failed: string };
 
 /** users(id) を持つ全ての列。表の定義から引くので、後から足した表も漏れない。 */
-function userColumns(db: Db): [table: string, column: string][] {
+export function userColumns(db: Db): [table: string, column: string][] {
   const found = new Map<string, [string, string]>();
   for (const { name } of all<{ name: string }>(db, "select name from sqlite_master where type = 'table' and name not like 'sqlite_%'")) {
     for (const column of all<{ name: string }>(db, `select name from pragma_table_info('${name}')`)) {

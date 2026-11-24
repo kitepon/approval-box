@@ -226,6 +226,8 @@ export class Accounts {
 
   assertCanUse(userId: string) {
     if (this.billing === "off" || this.freeAccountIds.has(userId)) return;
+    // An entry of the new form (local-form.md): the paid check is on each device, the server never refuses for payment.
+    if (get(this.db, "select 1 from entries_seen where entry = ?", userId)) return;
     if (this.contract?.(userId) === "active") return;
     this.assertContract(userId);
     const user = get<UserRow>(this.db, "select * from users where id = ?", userId)!;
@@ -290,17 +292,18 @@ export class Accounts {
 
   // ---- 通知を受ける端末（アプリ・Web Push）。同じ宛先（tokenやsubscription）は同じidに上書きする ----
 
-  registerDevice(userId: string, input: { platform: "ios" | "android" | "web"; locale?: Locale; apns_token?: string; apns_env?: "sandbox" | "production"; fcm_token?: string; web_push_subscription?: unknown }) {
+  /** keyhole: the library key of a signed request; the row goes when that keyhole is removed (keyholes.ts). */
+  registerDevice(userId: string, input: { platform: "ios" | "android" | "web"; locale?: Locale; apns_token?: string; apns_env?: "sandbox" | "production"; fcm_token?: string; web_push_subscription?: unknown }, keyhole?: string) {
     const subscription = input.web_push_subscription === undefined ? null : JSON.stringify(input.web_push_subscription);
     const key = input.platform === "ios" ? input.apns_token : input.platform === "android" ? input.fcm_token : subscription;
     if (!key) throw new ApiError("validation_failed", input.platform === "ios" ? "apns_token が要ります。" : input.platform === "android" ? "fcm_token が要ります。" : "web_push_subscription が要ります。");
     const pushKey = `${input.platform}:${hash(key)}`;
     const existing = get<{ id: string; locale: Locale }>(this.db, "select id, locale from devices where user_id = ? and push_key = ?", userId, pushKey);
     const id = existing?.id ?? uuid();
-    run(this.db, `insert into devices (id, user_id, platform, push_key, apns_token, apns_env, fcm_token, web_push_subscription, created_at, updated_at, locale)
-      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      on conflict(user_id, push_key) do update set apns_env = excluded.apns_env, updated_at = excluded.updated_at, locale = excluded.locale`,
-      id, userId, input.platform, pushKey, input.apns_token ?? null, input.apns_env ?? null, input.fcm_token ?? null, subscription, now(), now(), input.locale ?? existing?.locale ?? "ja");
+    run(this.db, `insert into devices (id, user_id, platform, push_key, apns_token, apns_env, fcm_token, web_push_subscription, created_at, updated_at, locale, keyhole)
+      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      on conflict(user_id, push_key) do update set apns_env = excluded.apns_env, updated_at = excluded.updated_at, locale = excluded.locale, keyhole = excluded.keyhole`,
+      id, userId, input.platform, pushKey, input.apns_token ?? null, input.apns_env ?? null, input.fcm_token ?? null, subscription, now(), now(), input.locale ?? existing?.locale ?? "ja", keyhole ?? null);
     return { id };
   }
 

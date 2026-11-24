@@ -19,11 +19,12 @@ import { now } from "./ids.ts";
 import { type RemoteMcpOptions, remoteMcpHandler } from "./remote-mcp.ts";
 import { LoginBillingError, type Checked } from "@kitepon/login-billing/server";
 import { getConnInfo } from "@hono/node-server/conninfo";
-import { type Library, PRODUCT_ID } from "./lb.ts";
+import { type Library, PRODUCT_ID, rateLimiter } from "./lb.ts";
+import { type AppKeyholes, KeyholeError, SIGNED_HEADER } from "./keyholes.ts";
 import { exportAccount } from "./export.ts";
 import { type AppLinks, appleAppSiteAssociation, assetLinks } from "./applinks.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal; library?: Library; peerChannel?: { forgetAccount(k: string): void; connectionRemoved(k: string, connectionId: string): void }; appLinks?: AppLinks };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal; library?: Library; peerChannel?: { forgetAccount(k: string): void; connectionRemoved(k: string, connectionId: string): void }; appLinks?: AppLinks; keyholes?: AppKeyholes };
 
 /** 登録クライアント（BellTeamなど）のsessionが通れる `/v1` の経路。ここに無いものは403。 */
 const CLIENT_ROUTES: [string, RegExp][] = [
@@ -53,6 +54,26 @@ function clientKey(c: Context): string {
   const forwarded = c.req.header("x-forwarded-for");
   if (forwarded) return forwarded.split(",").at(-1)!.trim();
   try { return getConnInfo(c).remote.address ?? ""; } catch { return ""; }
+}
+
+/** Body cap of /v1/keys/* (local-form.md "Edge limits"). */
+const KEYS_BODY_MAX = 16 * 1024;
+
+/** The library's KeyholeRequest: the path with query exactly as the device sent it (Node's raw url when served by Node), and the raw body bytes. */
+function keyholeRequest(c: Context, body: Uint8Array) {
+  const incoming = (c.env as { incoming?: { url?: string } } | undefined)?.incoming?.url;
+  const url = new URL(c.req.url);
+  return { method: c.req.method, path: incoming ?? `${url.pathname}${url.search}`, headers: c.req.raw.headers, body };
+}
+
+/** Reads the raw body once for the signed-request check and puts the same bytes back on the request, so the route reads it as before. */
+async function takeBody(c: Context, limit: number, message: string): Promise<Uint8Array> {
+  const raw = c.req.raw;
+  if (!raw.body) return new Uint8Array();
+  if (Number(raw.headers.get("content-length") ?? 0) > limit) throw new ApiError("too_large", message);
+  const bytes = await readLimited(raw.body, limit).catch((error: unknown) => { throw error instanceof ApiError && error.code === "too_large" ? new ApiError("too_large", message) : error; });
+  c.req.raw = new Request(raw.url, { method: raw.method, headers: raw.headers, body: new Uint8Array(bytes), signal: raw.signal });
+  return new Uint8Array(bytes);
 }
 
 const STATUSES = ["pending", "held", "answered", "cancelled"] as const;
@@ -172,6 +193,16 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     for (const path of LEGACY_ROUTES) app.post(path, () => { throw new ApiError("gone", "この入口はもう使えません。アプリを新しい版にしてください。"); });
   }
 
+  // The library's keyholes (local-form.md): start, accept, others, leave. Mounted ahead of the /v1 device check, since a key in no entry must reach start and accept.
+  const keyholes = services.keyholes;
+  if (keyholes) {
+    const allow = rateLimiter(30, 60_000);
+    app.all("/v1/keys/:route{start|accept|others|leave}", async (c) => {
+      if (!allow(clientKey(c))) throw new ApiError("rate_limited", "回数が多すぎます。少し待ってから試してください。");
+      return keyholes.handle(keyholeRequest(c, await takeBody(c, KEYS_BODY_MAX, "本文は16KBまでです。")));
+    });
+  }
+
   const diagnostics = new Diagnostics(services.db);
   app.route("/api/admin",diagnosticsAdmin(diagnostics,services.diagnosticsAdminToken));
 
@@ -262,9 +293,23 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     return c.json(accounts.redeemAppCode(input.code, input.code_verifier));
   });
 
-  const v1 = new Hono<{ Variables: { userId: string; clientSessionId: string | undefined; pass: Checked | undefined } }>();
+  const v1 = new Hono<{ Variables: { userId: string; clientSessionId: string | undefined; pass: Checked | undefined; keyhole: string | undefined } }>();
   v1.use("*", async (c, next) => {
     const path = c.req.path.slice("/v1".length);
+    // The new form: a request signed with the device's library key -> the entry is the account. No paid gate: the paid check is on each device.
+    if (keyholes && c.req.header(SIGNED_HEADER) !== undefined) {
+      let who: { entry: string; key: string };
+      try {
+        who = await keyholes.verify(keyholeRequest(c, await takeBody(c, MAX_FILE_BYTES, "1つのファイルは20MBまでです。")));
+      } catch (error) {
+        if (error instanceof KeyholeError) return c.json(error.body(), error.status as 401);
+        throw error;
+      }
+      keyholes.entries.signedIn(who.entry);
+      c.set("userId", who.entry);
+      c.set("keyhole", who.key);
+      return next();
+    }
     // ライブラリを使う時は、先にライブラリの通行証（Bearerかcookie）として確かめる。通行証でなければ（pass_invalid）、今までのsessionとして扱う。
     const pass = library ? await library.handler.authenticate(c.req.raw).catch((error: unknown) => {
       if (!(error instanceof LoginBillingError)) throw error;
@@ -388,7 +433,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       fcm_token: z.string().min(1).max(4096).optional(),
       web_push_subscription: z.object({ endpoint: z.url(), keys: z.object({ p256dh: z.string(), auth: z.string() }) }).optional(),
     }));
-    return c.json(accounts.registerDevice(c.get("userId"), input));
+    return c.json(accounts.registerDevice(c.get("userId"), input, c.get("keyhole")));
   });
   v1.delete("/devices/:id", (c) => { accounts.removeDevice(c.get("userId"), c.req.param("id")); return c.json({ ok: true }); });
   v1.get("/onboarding", (c) => {
@@ -414,6 +459,8 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   });
   v1.delete("/me", async (c) => {
     const userId = c.get("userId");
+    // A signed request: erase the entry and its keyholes, so every device of it is signed out of it.
+    if (c.get("keyhole")) { keyholes!.entries.erase(userId); return c.json({ ok: true }); }
     // 通行証で入った時は、消す前にこのアカウントの全端末のログインを止める（契約 1.32 endAllLogins、ミント 2026-11-23）。端末の後追いのサインアウトが失敗しても、他の端末が残っていても、消したアカウントの通行証は残らない。止められなければ何も消さない。
     const token = c.get("pass") && library ? bearer(c) ?? getCookie(c, "__Host-lb_pass") : undefined;
     if (token) await library!.lb.endAllLogins(token);
@@ -424,6 +471,26 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     });
     services.peerChannel?.forgetAccount(userId); // peer-channel の登録の写し（公開鍵だけ）も消し、その K の接続を閉じる
     return c.json({ ok: true });
+  });
+  // Migration (local-form.md): the old pass in Authorization and a signed request together move every row of K to the entry, once.
+  v1.post("/me/move-to-entry", async (c) => {
+    if (!c.get("keyhole")) throw new ApiError("unauthorized", "端末の鍵で署名した要求が要ります。アプリを新しい版にしてください。");
+    const entry = c.get("userId");
+    const token = bearer(c);
+    const pass = library && token ? await library.handler.authenticate(new Request(c.req.raw.url, { headers: { authorization: `Bearer ${token}` } })).catch((error: unknown) => {
+      if (error instanceof LoginBillingError) return undefined;
+      throw error;
+    }) : undefined;
+    const moved = !!pass && tx(services.db, () => {
+      if (get(services.db, "select 1 from k_moved where k = ?", pass.k)) return false; // already moved, to this entry or to one that later joined
+      keyholes!.entries.move(pass.k, entry, true);
+      run(services.db, "insert into k_moved (k, entry, at) values (?, ?, ?)", pass.k, entry, now());
+      return true;
+    });
+    if (!moved) return c.json({ entry, moved: false });
+    // The old pass of this device has done its work; end that one login (its peer-channel sockets close through onPassEnded). The move stands if this fails.
+    await library!.lb.signOut(token!).catch(() => console.error("approval-box-server: move_to_entry_signout_failed"));
+    return c.json({ entry, moved: true });
   });
   v1.get("/me/settings", (c) => c.json(accounts.settings(c.get("userId"))));
   v1.patch("/me/settings", async (c) => {

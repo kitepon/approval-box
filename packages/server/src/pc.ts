@@ -1,12 +1,14 @@
 // peer-channel の server part（kitepon/peer-channel、vendor の tgz、無改造）を /pc/v1 に置く所。形は docs/architecture/peer-channel-adoption.md（c8b）。
 // 使うのは公開の入口（@kitepon/peer-channel/server の createServerPart・SqliteMirrorStore）だけ。中身（K・通行証・鍵・封をした封筒）はログに出さない。
 import { createServer, type IncomingMessage, type RequestListener, type ServerOptions } from "node:http";
+import { Readable } from "node:stream";
 import { randomBytes } from "node:crypto";
 import { LoginBillingError } from "@kitepon/login-billing/server";
 import { createServerPart, SqliteMirrorStore, type Identity, type ServerPart, type TurnAnswer } from "@kitepon/peer-channel/server";
 import type { Accounts } from "./accounts.ts";
 import { ApiError } from "./errors.ts";
 import { type Library, PRODUCT_ID } from "./lb.ts";
+import { type AppKeyholes, KeyholeError, SIGNED_HEADER } from "./keyholes.ts";
 
 export type PeerChannelInput = {
   accounts: Accounts;
@@ -18,7 +20,15 @@ export type PeerChannelInput = {
   wake: (k: string, alert: boolean) => void | Promise<void>;
   /** TURN の設定がある時だけ。coturn の共有の秘密か、Cloudflare TURN のような払い出し役。無ければ urls は空で答える。 */
   turn?: { secret: string; urls: string[] } | { generate(): Promise<TurnAnswer> };
+  /** login-billing keyholes: a signed request is a device of entry E (local-form.md). */
+  keyholes?: AppKeyholes;
 };
+
+/** peer-channel's own cap on a registry PUT (signaling.js MAX_PUT_BYTES). */
+const PC_BODY_MAX = 128 * 1024;
+/** Raw bodies of signed /pc/v1 requests, read once in the mount for the signature check (the part reads the copy). */
+const signedBodies = new WeakMap<IncomingMessage, Uint8Array>();
+const isSigned = (req: IncomingMessage) => req.headers[SIGNED_HEADER] !== undefined;
 
 /** Node の要求を、ライブラリの authenticate が読む Request にする。通行証は Authorization にあるので本文は渡さない。 */
 function asRequest(req: IncomingMessage, publicUrl: string) {
@@ -35,8 +45,20 @@ const bearer = (req: IncomingMessage) => /^Bearer\s+(\S+)$/i.exec(req.headers.au
  * 契約が無い時（/v1 の G1・/connector/v1 の G2 と同じ判定）は入れるが、端末の join と接続の wait.open だけをその符号で断る（契約 10.2）。
  * 通行証が更新された時は、/v1 と同じく Login-Billing-Pass（cookie なら Set-Cookie）を /pc/v1 の HTTP の答えに付ける。
  */
-export function authenticate(accounts: Accounts, library: Library, publicUrl: string) {
+export function authenticate(accounts: Accounts, library: Library, publicUrl: string, keyholes?: AppKeyholes) {
   return async (req: IncomingMessage): Promise<Identity | { refused: string } | null> => {
+    // The new form first: a signed request (the WebSocket GET is signed over an empty body). peer-channel answers only 401 or 403 + code, so every
+    // refusal goes back as its code (time_off included); `now` of time_off is not carried. pass_kind "keyhole" is outside peer-channel 0.5.7's PassKind (t04).
+    if (keyholes && isSigned(req)) {
+      try {
+        const who = await keyholes.verify({ method: req.method ?? "GET", path: req.url ?? "/", headers: req.headers, body: signedBodies.get(req) ?? new Uint8Array() });
+        keyholes.entries.signedIn(who.entry);
+        return { k: who.entry, kind: "device", endpoint_ref: who.key, pass_kind: "keyhole" as Identity["pass_kind"] & string };
+      } catch (error) {
+        if (error instanceof KeyholeError) return { refused: error.code };
+        throw error;
+      }
+    }
     try {
       const pass = await library.handler.authenticate(asRequest(req, publicUrl));
       const headers: Record<string, string | string[]> = {};
@@ -80,10 +102,25 @@ export function cloudflareTurn(keyId: string, apiToken: string, fetchFn: typeof 
   };
 }
 
+/** The body of a signed request as a fresh stream with the same url, method and headers; null when over the part's own cap. */
+async function readSigned(req: IncomingMessage): Promise<IncomingMessage | null> {
+  const parts: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req as AsyncIterable<Buffer>) {
+    size += chunk.length;
+    if (size > PC_BODY_MAX) return null;
+    parts.push(chunk);
+  }
+  const body = Buffer.concat(parts);
+  const copy = Object.assign(Readable.from(body.length ? [body] : []), { url: req.url, method: req.method, headers: req.headers, socket: req.socket }) as unknown as IncomingMessage;
+  signedBodies.set(copy, new Uint8Array(body));
+  return copy;
+}
+
 /** server part と、それを /pc/v1 に置く HTTP サーバーの作り方（@hono/node-server の serve の createServer に渡す）。 */
 export function createPeerChannel(input: PeerChannelInput) {
   const part: ServerPart = createServerPart({
-    authenticate: authenticate(input.accounts, input.library, input.publicUrl),
+    authenticate: authenticate(input.accounts, input.library, input.publicUrl, input.keyholes),
     wake: input.wake,
     store: new SqliteMirrorStore(input.mirrorPath),
     // TURN が無いサーバーでも形は同じ（urls が空）。秘密はこの起動の間だけの乱数で、どこにも書かない。
@@ -96,7 +133,9 @@ export function createPeerChannel(input: PeerChannelInput) {
   const mount = ((options: ServerOptions, listener: RequestListener) => {
     const server = createServer(options ?? {}, (req, res) => {
       if (!req.url?.startsWith("/pc/v1/")) return listener(req, res);
-      part.handleRequest(req, res).then(
+      // A signed request: read its body once (the signature covers it) and hand the part a copy to read again.
+      const ready = input.keyholes && isSigned(req) ? readSigned(req) : Promise.resolve(req);
+      ready.then((r) => r ? part.handleRequest(r, res) : (res.writeHead(413, { "content-type": "application/json" }), res.end(JSON.stringify({ error: "too_large" })), true)).then(
         (handled) => { if (!handled) listener(req, res); },
         () => { if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "internal" })); },
       );
