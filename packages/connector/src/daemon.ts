@@ -228,7 +228,7 @@ export async function runDaemon(options: { hosted?: boolean } = {}) {
   const config = relay ? undefined : hostedStart?.config ?? requireConfig();
   const pc = relay ? undefined : hostedStart?.pc ?? await startDaemonPeerChannel(config!, log, sleep, undefined, () => self);
   if (pc && !hostedStart) Object.assign(self, { mode: "pc", paired: true, reason: "running", server: config!.server, ...(readConfig()?.connection_id ? { connection_id: readConfig()!.connection_id } : {}) });
-  const api: DaemonApi = relay ? new LocalApi(relay) : pc ? pc.api : new Api(config!);
+  const api: DaemonApi = relay ? LocalApi.hosted(relay) : pc ? pc.api : new Api(config!);
   let journal: Journal = existsSync(journalFile()) ? (JSON.parse(readFileSync(journalFile(), "utf8")) as Journal) : {};
   const save = () => writeJsonFile(journalFile(), journal);
   let wakes: Wakes = {};
