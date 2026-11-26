@@ -61,3 +61,24 @@ test("Windowsの置き換え拒否（EPERM/EACCES/EBUSY）は短く待って繰�
   assert.throws(() => renameWithRetry("a", "b", flaky(5, "ENOENT"), true, () => assert.fail("waited")), /ENOENT/);
   assert.equal(calls, 1);
 });
+
+test("Windowsで置き換えを断られ続けたら、既にある対象をその場で書き換えて読み戻し、tempを残さず1行伝える（fox、ESET）", () => {
+  const root = mkdtempSync(join(tmpdir(), "ab-config-inplace-"));
+  const refused = () => { throw Object.assign(new Error("EPERM: operation not permitted, rename"), { code: "EPERM", syscall: "rename" }); };
+  const written: string[] = [];
+  const original = process.stderr.write.bind(process.stderr);
+  try {
+    const file = join(root, ".claude.json");
+    writeFileSync(file, JSON.stringify({ keep: 1 }));
+    (process.stderr as { write: unknown }).write = (chunk: string) => { written.push(String(chunk)); return true; };
+    writeJsonFile(file, { keep: 1, mcpServers: { "approval-box": {} } }, { discardTemporaryOnError: true }, refused, true);
+    (process.stderr as { write: unknown }).write = original;
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { keep: 1, mcpServers: { "approval-box": {} } });
+    assert.deepEqual(readdirSync(root), [".claude.json"]);
+    assert.ok(written.some(line => line.includes("その場で書き換えました") && line.includes("EPERM")));
+    // 対象がまだ無い時と、Windows以外は、元の失敗をそのまま伝える。
+    assert.throws(() => writeJsonFile(join(root, "new.json"), { a: 1 }, { discardTemporaryOnError: true }, refused, true), /EPERM/);
+    assert.throws(() => writeJsonFile(file, { b: 2 }, { discardTemporaryOnError: true }, refused, false), /EPERM/);
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { keep: 1, mcpServers: { "approval-box": {} } });
+  } finally { (process.stderr as { write: unknown }).write = original; rmSync(root, { recursive: true, force: true }); }
+});
