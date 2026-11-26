@@ -6,6 +6,7 @@ import { createConnection, createServer, type Server } from "node:net";
 import { join } from "node:path";
 import { ServerError } from "./api.ts";
 import { renameWithRetry } from "./config.ts";
+import { provenDoor } from "./door.ts";
 import type { LocalBox } from "./local-box.ts";
 import { stateRoot } from "./profile.ts";
 
@@ -90,15 +91,19 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export class LocalApi {
   private readonly path: string;
   private readonly waitMs: number;
+  private readonly resolve?: () => Promise<string>;
 
-  constructor(path = socketPath(), waitMs = 10_000) {
+  /** resolve: where to connect for each call (the use-hosted door on Windows proves itself first, door.ts); default this.path. */
+  constructor(path = socketPath(), waitMs = 10_000, resolve?: () => Promise<string>) {
     this.path = path;
     this.waitMs = waitMs;
+    this.resolve = resolve;
   }
 
-  private once(method: string, route: string, body?: unknown): Promise<Reply> {
+  private async once(method: string, route: string, body?: unknown): Promise<Reply> {
+    const path = this.resolve ? await this.resolve() : this.path;
     return new Promise((ok, fail) => {
-      const socket = createConnection(this.path);
+      const socket = createConnection(path);
       let text = "";
       socket.setEncoding("utf8");
       socket.on("connect", () => socket.write(`${JSON.stringify({ method, path: route, body })}\n`));
@@ -114,6 +119,7 @@ export class LocalApi {
       let reply: Reply;
       try { reply = await this.once(method, route, body); }
       catch (error) {
+        if (error instanceof ServerError) throw error;
         const code = (error as NodeJS.ErrnoException).code;
         if ((code === "ENOENT" || code === "ECONNREFUSED") && Date.now() < until) { await sleep(200); continue; }
         throw new ServerError(0, "daemon_unreachable", `Approval Boxの配送デーモンにつながりません（${code ?? (error as Error).message}）。少し待ってからやり直してください。`, {});
@@ -131,6 +137,11 @@ export class LocalApi {
   /** 申請画像をデーモンへ渡し、その印を返す。デーモンが state/pc/uploads に置き、申請の時に端末へ運ぶ（サーバーへは送らない）。 */
   async uploadRequestImage(data: Buffer, name: string, contentType: string): Promise<{ id: string }> {
     return this.call<{ id: string }>("POST", "/uploads", { name, content_type: contentType, data: data.toString("base64") });
+  }
+
+  /** use-hosted の席の入口。Windows では入口の名前を信じず、名乗りを確かめてから送る（door.ts）。POSIX は 0700 の中の 0600 のソケット。 */
+  static hosted(socket: string, platform = process.platform) {
+    return new LocalApi(socket, undefined, platform === "win32" ? () => provenDoor(socket) : undefined);
   }
 
   /** 席のデーモン（use-hosted）の受信: ソケットには知らせが無いので、2秒ごとに onEvent を呼び、配送待ちを読み直させる。 */

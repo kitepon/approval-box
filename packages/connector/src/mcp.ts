@@ -265,7 +265,7 @@ export async function runMcp() {
       const config = hosted ? undefined : requireConfig();
       // peer-channel の道（c8c）では、同じ形の呼び出しをデーモンの手元の申請へ送る（本文をサーバーへ送らない）。
       ensureDaemon();
-      const api = hosted ? new LocalApi(hosted) : (await useLocalApi()) ? new LocalApi() : new Api(config!);
+      const api = hosted ? LocalApi.hosted(hosted) : (await useLocalApi()) ? new LocalApi() : new Api(config!);
       const channelQuery = lastChannel ? `?channel_id=${encodeURIComponent(lastChannel)}` : "";
 
       if (name === "list_my_decisions") {
