@@ -48,12 +48,25 @@ export function renameWithRetry(from: string, to: string, rename: (from: string,
 }
 const sleepSync = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
-export function writeJsonFile(file: string, value: unknown, options: { discardTemporaryOnError?: boolean } = {}) {
+/**
+ * fox（Windows、ESET）のように、ウイルス対策がhome直下と%TEMP%の置き換え（rename）をどのprogramにも EPERM で断り続ける機械がある。
+ * 待っても通らないので、Claude Code自身と同じく、既にある対象fileをその場で書き換える。書いた中身を読み戻して確かめ、そうしたことを1行で伝える。
+ */
+export function writeJsonFile(file: string, value: unknown, options: { discardTemporaryOnError?: boolean } = {}, rename: (from: string, to: string) => void = renameWithRetry, inPlaceOnRefusal = process.platform === "win32") {
   mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
   const temp = `${file}.${process.pid}.tmp`;
+  const text = `${JSON.stringify(value, null, 2)}\n`;
   try {
-    writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-    renameWithRetry(temp, file);
+    writeFileSync(temp, text, { mode: 0o600 });
+    try { rename(temp, file); }
+    catch (refused) {
+      const code = (refused as NodeJS.ErrnoException).code ?? "";
+      if (!inPlaceOnRefusal || !["EPERM", "EACCES", "EBUSY"].includes(code) || !existsSync(file)) throw refused;
+      try { writeFileSync(file, text); } catch { throw refused; }
+      if (readFileSync(file, "utf8") !== text) throw refused;
+      try { rmSync(temp, { force: true }); } catch { process.stderr.write(`approval-box: 一時ファイル ${temp} を消せませんでした。\n`); }
+      process.stderr.write(`approval-box: ${file} を置き換えられなかったため（${code}）、その場で書き換えました。\n`);
+    }
   } catch (error) {
     // 一度だけ取得する資格や結果不明のjournalは、復旧用tempを残す。
     if (options.discardTemporaryOnError) {
