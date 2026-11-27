@@ -3,8 +3,9 @@ import { launchDaemon } from "./daemon-launch.ts";
 import { sendChannelAnswer, channelAnswerState } from "./channel-delivery.ts";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { hostname } from "node:os";
 import { Api, ServerError } from "./api.ts";
-import { admissionFile, modeFile, pcPrepared, readMode, serverOffersPeerChannel } from "./pc-mode.ts";
+import { admissionFile, modeFile, pcPrepared, readMode, serverOffersPeerChannel, v1Connection } from "./pc-mode.ts";
 import type { DaemonApi, PeerChannelRuntime } from "./pc-daemon.ts";
 import type { DaemonStatusReply } from "./local-api.ts";
 import { VERSION } from "./version.ts";
@@ -128,7 +129,7 @@ export async function useLocalApi(wait = (ms: number) => new Promise((r) => setT
  */
 export async function startDaemonPeerChannel(config: { server: string; token: string }, log: (message: string) => void, pause: (ms: number) => Promise<unknown> = sleep,
   hosted?: { reason(reason: string): void; beforeStart(): Promise<void> }, status?: () => DaemonStatusReply): Promise<PeerChannelRuntime | undefined> {
-  if (!pcPrepared()) return undefined;
+  if (!pcPrepared() && (hosted || !(await carryIfOffered(config, log)))) return undefined;
   const setMode = (mode: "pc" | "server", reason: string) => writeJsonFile(modeFile(), { mode, reason, pid: process.pid, at: new Date().toISOString() });
   for (let wait = 5000; ; wait = Math.min(wait * 2, 60_000)) {
     try {
@@ -154,6 +155,31 @@ export async function startDaemonPeerChannel(config: { server: string; token: st
       log(`peer-channel の道を確かめられません・起こせません（${(error as Error).message}）。${wait / 1000}秒後に試し直します`);
       await pause(wait);
     }
+  }
+}
+
+/**
+ * 引き継ぎ（peer-channel 契約 5.4 carry-over, 0.7.0、旦那 2026-11-28「既にQRで繋がってるのだから。再度やるのはあり得ない。」）:
+ * 製品のペアリングで既につないだ接続が、鍵をまだ持たない時、読み取りなしで新しい道の鍵を結ぶ。旦那の端末（親）が自分で認めるまで待つ。
+ * サーバーが peer_channel を出していない時、/v1 の接続、サーバーが引き継ぎを出していない（carry_off）時は偽（今の道のまま）。
+ */
+async function carryIfOffered(config: { server: string; token: string }, log: (message: string) => void): Promise<boolean> {
+  if (v1Connection()) return false;
+  try { if (!(await serverOffersPeerChannel(config.server))) return false; } catch { return false; }
+  const info = await new Api(config).call<{ connection_id: string }>("GET", "/connection");
+  const { carryConnection } = await import("@kitepon/peer-channel/pairing");
+  const { newKeys, saveKeys } = await import("./pc-keys.ts");
+  const fresh = await newKeys();
+  log("前につないだ接続を、新しい道へ引き継ぎます（旦那の端末が認めるまで待ちます）");
+  try {
+    const admission = await carryConnection(fresh.keys, { server: { url: config.server, headers: { authorization: `Bearer ${config.token}` } }, connectionId: info.connection_id, label: readConfig()?.device_name ?? hostname() });
+    saveKeys(fresh.saved); // 認められてから置く（結び直しと同じ）
+    writeJsonFile(admissionFile(), admission);
+    log("新しい道へ引き継ぎました");
+    return true;
+  } catch (error) {
+    log(`引き継げませんでした（${(error as { code?: string }).code ?? "binding_failed"}: ${(error as Error).message}）。今の道で動きます`);
+    return false;
   }
 }
 

@@ -206,7 +206,7 @@ test("contract 10.2: a device pass without the subscription is refused at join (
     assert.equal((await x.call("GET", "/pc/v1/registry", unpaid.pass)).status, 200); // the mirror stays readable (admission needs it)
     const b = await socket(x.base, owner.pass);
     b.send({ type: "join" });
-    assert.deepEqual(await b.next(), { type: "waits", waits: [] });
+    assert.deepEqual(await b.next(), { type: "waits", waits: [], carries: [] }); // 0.7.0: Approval Box turns carry-over on
     a.ws.close(); b.ws.close();
   } finally { await x.close(); }
 });
