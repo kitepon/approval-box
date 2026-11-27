@@ -191,7 +191,9 @@ export class Accounts {
     // セルフホスト（課金なし）は全員を契約中として扱う。
     const live = entitlements?.find((e) => e.productId === PRODUCT_ID);
     // 通行証の契約は exempt（課金の対象外）なら期限もストアも出さない。
-    const free = entitlements ? live?.store === "exempt" : this.billing === "off" || this.freeAccountIds.has(userId);
+    // An entry of the new form (local-form.md) is paid on each device; the server never refuses it (assertCanUse), so a session reading it (BellTeam) sees active.
+    const entry = !entitlements && !local && !!get(this.db, "select 1 from entries_seen where entry = ?", userId);
+    const free = entitlements ? live?.store === "exempt" : this.billing === "off" || this.freeAccountIds.has(userId) || entry;
     const plan = entitlements ? (live ? "active" : "expired") : free ? "active" : effectivePlan(user);
     const store = entitlements ? ({ apple: "app_store", google: "google_play" } as Record<string, string>)[live?.store ?? ""] : user.store;
     const expiresAt = entitlements ? live?.expiresAt : user.plan_expires_at;
