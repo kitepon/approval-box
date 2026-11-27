@@ -129,6 +129,7 @@ export function createPeerChannel(input: PeerChannelInput) {
     store: new SqliteMirrorStore(input.mirrorPath),
     // TURN が無いサーバーでも形は同じ（urls が空）。秘密はこの起動の間だけの乱数で、どこにも書かない。
     turn: input.turn ?? { secret: randomBytes(32).toString("base64url"), urls: [] },
+    carry: true, // 0.7.0: a connection the Owner already paired moves to the peer path with no scan (Owner 2026-11-28)
     onError: () => { /* 中身の無い符号だけだが、今は数えない */ },
   });
   // ライブラリがログインを終えた時（停止・サインアウト・入れ替え・ほかをすべて停止）、その通行証が入れた枠をすぐ空ける（契約 4.5、0.4.10）。
