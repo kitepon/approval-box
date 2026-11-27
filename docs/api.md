@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.49
+# Approval Box API（アプリ・Web版向け） v0.50
+
+2026-11-27 v0.50（意味の変更・形は変わらない）: 新しい形の入口（entry、端末ごとに購入を確かめる。[local-form.md](architecture/local-form.md)）を、session や接続トークン（BellTeam）で読んだ `GET /me` は、`plan: active` で `store`・`expires_at` を出さない（課金の対象外のアカウントと同じ形）。サーバーは entry を支払いで断らない（`assertCanUse`）ので、`/me` もそれに合わせた。それまでは users の行の既定値のまま `expired` を返し、BellTeam が旦那の答えを席へ渡すのを止めていた。署名つきの要求の `/me` は今までどおり `plan` を出さない。
 
 2026-11-21 v0.49（追加のみ）: 診断の`diagnostic_log.operation`に、Appleアプリが自分の処理名で送る32個の`app.*`（`app.approveDevice`など）を足した。任意の`diagnostic_log.client_code`（`[a-z0-9_]{1,64}`、アプリ内のエラーコード）も足した。HTTPの状態が無い失敗の時だけ送り、`http_status`と一緒なら400。`app.operation`は古い版のため残す。`client_code`の無い診断のfingerprintは変わらない。serverの受理を先に配備してから、新しいアプリを配る。詳細は[diagnostics.md](diagnostics.md#named-app-operations-and-client-code-2026-11-21)。
 

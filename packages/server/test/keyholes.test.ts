@@ -35,6 +35,22 @@ function insertDecision(db: ReturnType<typeof openDb>, userId: string, id: strin
     values (?, ?, ?, ?, '', '[{"id":"a","label":"A"},{"id":"b","label":"B"}]', 'normal', 'claude-code', 's', 'connector', 'pending', 'r', '2026-11-24T00:00:00.000Z', '2026-11-24T00:00:00.000Z', 1)`, id, userId, id, id);
 }
 
+test("an entry read through a session (BellTeam) is active with no store or expiry, and nothing is withdrawn", async () => {
+  const x = setup();
+  const { device, entry } = await startParent(x.app, ORIGIN);
+  await x.app.request("/v1/me", { headers: await signed(device, "GET", "/v1/me") }); // makes the users row and entries_seen
+  let expired = 0;
+  x.accounts.onExpired = () => { expired++; };
+  const me = x.accounts.me(entry) as { plan?: string; expires_at?: string; store?: string };
+  assert.equal(me.plan, "active");
+  assert.equal(me.expires_at, undefined);
+  assert.equal(me.store, undefined);
+  assert.equal(expired, 0);
+  // An account that is not an entry and has no contract still reads expired.
+  run(x.db, "insert into users (id, created_at, plan) values ('old', '2026-11-01T00:00:00.000Z', 'expired')");
+  assert.equal((x.accounts.me("old") as { plan?: string }).plan, "expired");
+});
+
 test("store: write applies all ops or none (deletes first), useOnce is once until expiry, sweep drops expired", () => {
   const db = openDb(":memory:");
   let at = 1_000;
