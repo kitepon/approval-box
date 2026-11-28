@@ -22,7 +22,7 @@ import { type Library, createLibrary } from "./lb.ts";
 import { purgeLegacy, rekeyToK } from "./rekey.ts";
 import { type PeerChannel, cloudflareTurn, createPeerChannel } from "./pc.ts";
 import { parseAppLinks } from "./applinks.ts";
-import { keySigner, moduleSigner, type Signer } from "./auth-module.ts";
+import { keySigner, moduleFetch, moduleSigner, type Signer } from "./auth-module.ts";
 import { type AppKeyholes, createAppKeyholes, createEntries } from "./keyholes.ts";
 
 const env = process.env;
@@ -141,17 +141,19 @@ const fcmProject = (env.FCM_PROJECT_ID ?? "").trim();
 const fcm = fcmProject && playSigning ? new Fcm({ projectId: fcmProject, serviceAccount: playSigning }) : undefined;
 if (fcm) console.log(`approval-box-server: Androidへの通知を送ります（project ${fcmProject}）`);
 if (apnsSend || fcm) new Notifier(db, events, { ...(apnsSend ? { apns: apnsSend } : {}), ...(fcm ? { fcm: fcm.send } : {}) });
-// 答えを call-bridge の通話で届ける接続（GrokBotなど）。ヘッダーのファイル（Authorization など）が読めなければ使わない。
+// 答えを call-bridge の通話で届ける接続（GrokBotなど）。認証モジュールの項目が無く、ヘッダーのファイル（Authorization など）も読めなければ使わない。
 const callBridgeIds = (env.CALL_BRIDGE_CONNECTIONS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 let callBridgeConnections: Set<string> | undefined;
 if (callBridgeIds.length) {
+  // 認証モジュールの項目（AUTH_ITEM_CALLBRIDGE）があれば、Authorization はモジュールが付ける。無ければ今まで通りヘッダーのファイル。
+  const bridgeItem = moduleItem("AUTH_ITEM_CALLBRIDGE", "approvalbox-callbridge");
   const file = env.CALL_BRIDGE_HEADERS_FILE ?? "";
-  if (!file || !existsSync(file)) {
+  if (!bridgeItem && (!file || !existsSync(file))) {
     console.error(`approval-box-server: CALL_BRIDGE_HEADERS_FILE（${file || "未設定"}）が読めません。call-bridge での配送は使いません。`);
   } else {
     const send = callBridgeSender({
       url: env.CALL_BRIDGE_URL || "https://call.kitepon.dev/mcp",
-      headers: readHeaderFile(file),
+      ...(bridgeItem ? { fetch: moduleFetch(authSocket, bridgeItem) } : { headers: readHeaderFile(file) }),
       localSystem: env.CALL_BRIDGE_LOCAL_SYSTEM || "local",
       localId: env.CALL_BRIDGE_LOCAL_ID || "approval-box",
       localLabel: env.CALL_BRIDGE_LOCAL_LABEL || "Approval Box",

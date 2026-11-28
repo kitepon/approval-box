@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { type Db, get, all, run, tx } from "./db.ts";
 import type { Decisions } from "./decisions.ts";
 import type { EventHub } from "./events.ts";
+import type { FetchLike } from "./auth-module.ts";
 
 export type BridgeProgress = { save: (sessionId: string, seq?: number) => void };
 export type SendResult = { state: "delivered" | "unknown" | "failed"; detail?: string } | { state: "retry"; retry_after_seconds: 30; detail?: string };
@@ -15,8 +16,10 @@ export type CallSender = (memberId: string, decisionId: string, text: string, pr
 
 export type CallBridgeConfig = {
   url: string;
-  /** 送るHTTPヘッダー（Authorization など）。 */
-  headers: Record<string, string>;
+  /** 送るHTTPヘッダー（Authorization など）。認証モジュールを使う時（fetch あり）は要らない。 */
+  headers?: Record<string, string>;
+  /** 認証モジュールの http-stream（moduleFetch）。あれば全ての HTTP をこれで話し、サーバーは Authorization を持たない。 */
+  fetch?: FetchLike;
   /** 発信元の所属（call-bridge のトークンに結び付いた system。Approval Box は local）。 */
   localSystem: string;
   localId: string;
@@ -47,7 +50,7 @@ export function callBridgeSender(config: CallBridgeConfig): CallSender {
   const connect = async () => {
     const client = new Client({ name: "approval-box-server", version: "1" });
     try {
-      await client.connect(new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: config.headers } }));
+      await client.connect(new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: config.headers ?? {} }, ...(config.fetch ? { fetch: config.fetch } : {}) }));
       return client;
     } catch (error) { await client.close().catch(() => {}); throw error; }
   };

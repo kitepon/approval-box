@@ -8,7 +8,7 @@
 
 - `Decisions`が回答・公開deliveryを所有。API enumは不変。`waiting`は配送待ち、`delivered`はBridgeが受け付けた（GrokBotは`queued`の耐久保存、BellTeamは受付）、`unknown`は結果不明または失敗、`fetched`は明示取得。`delivered`はAIが動いた証明ではない。
 - `CallBridgeDeliverer`がschema10の`bridge_deliveries`を所有（decision_id・session_id・seq・state・detail・closed）。stateはpending/delivered/failed/unknown。`closed`は旧版の列で、新しい行では使わない（schema変更なし）。
-- `callBridgeSender`はApproval Box自身の認証で`call_open`と`call_send`だけを呼ぶ。`call_info`の追跡、`call_hangup`（queuedのGrokBot宛てを取り消す）、receipt、既読変更は使わない。通話は開いたまま残す。
+- `callBridgeSender`はApproval Box自身の認証（認証モジュールがあれば http-stream 経由でモジュールが bearer を付け、サーバーは Authorization を持たない。無ければ `CALL_BRIDGE_HEADERS_FILE` のヘッダー）で`call_open`と`call_send`だけを呼ぶ。`call_info`の追跡、`call_hangup`（queuedのGrokBot宛てを取り消す）、receipt、既読変更は使わない。通話は開いたまま残す。
 - 宛先は`route.channel_id`（電話帳のid）と、Bridge接続ごとの環境変数`CALL_BRIDGE_MEMBER_SYSTEM`（既定grokbot、電話帳のsystem）。申請ごとのsystem指定は持たない。
 - Bridge経路は明示的に指定された接続だけに使う。通常のBellTeam・stdio・コネクタ配送経路は変更しない。
 - 新規通話のsessionを本文送信より先にDB保存する。`call_send`が受け付けたら、journal deliveredとreportDeliveryを同じtransactionで確定する。応答が消えた送信は再送せずunknown。
