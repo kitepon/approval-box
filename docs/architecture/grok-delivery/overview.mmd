@@ -8,7 +8,9 @@ flowchart LR
  Worker --> Journal["bridge_deliveries: session / seq / handoff result"]
  Journal --> DB
  Worker --> Sender["callBridgeSender"]
- Sender --> Bridge["Bridge MCP: call_open / call_send only"]
+ Sender -->|AUTH_ITEM_CALLBRIDGE set: moduleFetch http-stream, no Authorization from the server| Module["Auth module (unix socket): adds bearer, no key in server"]
+ Module --> Bridge["Bridge MCP: call_open / call_send only"]
+ Sender -->|no module: CALL_BRIDGE_HEADERS_FILE headers sent directly| Bridge
  Bridge --> Recipient["External: Bridge adapters wake recipient (GrokBot courier, BellTeam socket) and recover"]
  Worker --> Result["Decisions.reportDelivery / UI event"]
  Result --> UI["Web / native reload: waiting / delivered / unknown / fetched"]
