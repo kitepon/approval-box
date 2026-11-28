@@ -292,9 +292,26 @@ export async function sealExisting(db: Db, attachmentsDir: string | undefined, a
 }
 
 /** The window from the environment: the auth module when AUTH_MODULE_SOCKET is set, else ABX_DATA_KEY(_FILE) (base64, 32 bytes). */
+/** At most MODULE_PARALLEL module calls at once; the rest wait their turn. The relay refuses some calls past ~40 at once (measured 11/28: 16 all granted, 40 one refused), and the start-up migration asks for hundreds. */
+export const MODULE_PARALLEL = 8;
+export function limitWindow(window: KeyWindow, max = MODULE_PARALLEL): KeyWindow {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  const run = async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (active >= max) await new Promise<void>((resolve) => waiting.push(resolve));
+    active++;
+    try { return await fn(); } finally { active--; waiting.shift()?.(); }
+  };
+  return {
+    current: () => window.current(),
+    wrap: (name, data, aad) => run(() => window.wrap(name, data, aad)),
+    unwrap: (name, blob, aad) => run(() => window.unwrap(name, blob, aad)),
+  };
+}
+
 export function vaultFromEnv(db: Db, env: Record<string, string | undefined>): Vault {
   const socket = env.AUTH_MODULE_SOCKET?.trim();
-  if (socket) return new Vault(db, brokerWindow({ socket, name: DATA_KEY_NAME }));
+  if (socket) return new Vault(db, limitWindow(brokerWindow({ socket, name: DATA_KEY_NAME })));
   const file = env.ABX_DATA_KEY_FILE?.trim();
   let raw = env.ABX_DATA_KEY?.trim() ?? "";
   if (file) {
