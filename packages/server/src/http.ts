@@ -17,6 +17,7 @@ import type { EventHub, UserEvent } from "./events.ts";
 import { Decisions, amendSchema, answerSchema, createSchema, routeSchema } from "./decisions.ts";
 import { now } from "./ids.ts";
 import { type RemoteMcpOptions, remoteMcpHandler } from "./remote-mcp.ts";
+import { vaultOf } from "./seal.ts";
 import { LoginBillingError, type Checked } from "@kitepon/login-billing/server";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { type Library, PRODUCT_ID, rateLimiter } from "./lb.ts";
@@ -122,28 +123,50 @@ async function body<T extends z.ZodType>(c: Context, schema: T): Promise<z.infer
   return schema.parse(raw);
 }
 
-/** 書き込みの冪等キー。同期の変更処理と初回応答の記録の間では実行を譲らない。 */
-function idempotent(c: Context, services: Services, userId: string, fn: () => Record<string, unknown>) {
+/** Writes with the same key run one after another (the change and the record of its first answer are one step for that key). */
+const idempotencyChain = new Map<string, Promise<unknown>>();
+
+/**
+ * 書き込みの冪等キー。同じキーの要求は順に処理し、変更と初回応答の記録の間に同じキーの別の要求を入れない。
+ * The saved answer can carry request content, so it is sealed (context "idempotency|<key>") when the server has a window; it goes after a day
+ * or with its request's content (Decisions.sweepContent).
+ */
+async function idempotent(c: Context, services: Services, userId: string, fn: () => unknown) {
   const key = c.req.header("idempotency-key");
+  if (!key) return respond(c, services, userId, undefined, fn);
+  const slot = `${userId}\n${key}`;
+  const previous = idempotencyChain.get(slot) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(() => respond(c, services, userId, key, fn));
+  idempotencyChain.set(slot, next);
+  try { return await next; } finally { if (idempotencyChain.get(slot) === next) idempotencyChain.delete(slot); }
+}
+
+async function respond(c: Context, services: Services, userId: string, key: string | undefined, fn: () => unknown) {
   const route = `${c.req.method} ${c.req.path}`;
+  const vault = vaultOf(services.db);
   if (key) {
-    const saved = get<{ route: string; status: number; body: string }>(services.db, "select route, status, body from idempotency where user_id = ? and key = ?", userId, key);
+    const saved = get<{ route: string; status: number; body: string | Uint8Array; sealed_set: string | null }>(services.db, "select route, status, body, sealed_set from idempotency where user_id = ? and key = ?", userId, key);
     if (saved) {
       if (saved.route !== route) throw new ApiError("validation_failed", "同じIdempotency-Keyが別の操作に使われています。");
-      return c.body(saved.body, saved.status as 200, { "content-type": "application/json" });
+      const text = (await vault.open(saved.sealed_set ?? userId, `idempotency|${key}`, saved.body)) ?? "";
+      return c.body(text, saved.status as 200, { "content-type": "application/json" });
     }
   }
   let status = 200;
   let payload: unknown;
   try {
-    payload = fn();
+    payload = await fn();
   } catch (error) {
     if (!(error instanceof ApiError) || error.status >= 500 || error.code === "rate_limited") throw error;
     status = error.status;
     payload = error.body(requestLocale(c.req.header("Accept-Language")));
   }
   const text = JSON.stringify(payload);
-  if (key) run(services.db, "insert or replace into idempotency (user_id, key, route, status, body, created_at) values (?, ?, ?, ?, ?, ?)", userId, key, route, status, text, now());
+  // Without a window no request content can have been written (those routes refuse with 503), so the answer is kept as it is.
+  if (key) {
+    const body = vault.ready ? await vault.seal(userId, `idempotency|${key}`, text) : text;
+    run(services.db, "insert or replace into idempotency (user_id, key, route, status, body, created_at, sealed_set) values (?, ?, ?, ?, ?, ?, ?)", userId, key, route, status, body, now(), vault.ready ? userId : null);
+  }
   return c.body(text, status as 200, { "content-type": "application/json" });
 }
 
@@ -361,12 +384,12 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
 
   v1.post("/diagnostics",async c=>c.json(diagnostics.accept(c.get("userId"),await readDiagnostic(c.req.raw),c.req.header("idempotency-key")),202));
 
-  v1.get("/decisions", (c) => {
+  v1.get("/decisions", async (c) => {
     const statuses = (c.req.query("status") ?? "pending,held").split(",").map((s) => s.trim()).filter(Boolean);
     if (!statuses.length || statuses.some((s) => !STATUSES.includes(s as (typeof STATUSES)[number]))) throw new ApiError("validation_failed", "status が正しくありません。");
     const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 50) || 50, 1), 200);
     const cursor = Math.max(Number(c.req.query("cursor") ?? 0) || 0, 0);
-    return c.json(decisions.list(c.get("userId"), statuses, limit, cursor));
+    return c.json(await decisions.list(c.get("userId"), statuses, limit, cursor));
   });
   v1.delete("/decisions", async (c) => {
     const statuses = (c.req.query("status") ?? "").split(",").sort().join(",");
@@ -375,7 +398,13 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     sweep();
     return res;
   });
-  v1.get("/decisions/:id", (c) => c.json(decisions.toApi(decisions.forUser(c.get("userId"), c.req.param("id")))));
+  v1.get("/decisions/:id", async (c) => c.json(await decisions.view(decisions.forUser(c.get("userId"), c.req.param("id")))));
+  // A device stored the decided request in its own history (storage-lifecycle.md "Sealed content"). Signed requests only: the device is its keyhole.
+  v1.post("/decisions/:id/stored", (c) => {
+    const keyhole = c.get("keyhole");
+    if (!keyhole) throw new ApiError("forbidden", "端末の鍵で署名した要求が要ります。アプリを新しい版にしてください。");
+    return c.json(decisions.stored(c.get("userId"), c.req.param("id"), keyhole));
+  });
   v1.post("/decisions/:id/answer", async (c) => {
     const input = await body(c, answerSchema);
     const res = await idempotent(c, services, c.get("userId"), () => decisions.answer(c.get("userId"), c.req.param("id"), input));
@@ -387,12 +416,12 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     const key = c.req.header("idempotency-key");
     if (!key || key.length > 200) throw new ApiError("validation_failed", "Idempotency-Key が要ります。");
     const data = await readLimited(c.req.raw.body, MAX_FILE_BYTES);
-    return c.json(files().upload(c.get("userId"), c.req.param("id"), { name: c.req.query("name") ?? "", contentType: mediaType(c.req.header("content-type")), idempotencyKey: key, data }));
+    return c.json(await files().upload(c.get("userId"), c.req.param("id"), { name: c.req.query("name") ?? "", contentType: mediaType(c.req.header("content-type")), idempotencyKey: key, data }));
   });
-  v1.get("/decisions/:id/attachments", (c) => c.json(files().staged(c.get("userId"), c.req.param("id"))));
+  v1.get("/decisions/:id/attachments", async (c) => c.json(await files().staged(c.get("userId"), c.req.param("id"))));
   v1.delete("/decisions/:id/attachments/:aid", (c) => c.json(files().removeStaged(c.get("userId"), c.req.param("id"), c.req.param("aid"))));
-  v1.get("/decisions/:id/attachments/:aid", (c) => {
-    const file = files().readForUser(c.get("userId"), c.req.param("id"), c.req.param("aid"));
+  v1.get("/decisions/:id/attachments/:aid", async (c) => {
+    const file = await files().readForUser(c.get("userId"), c.req.param("id"), c.req.param("aid"));
     return fileResponse(c, file.meta, file.data);
   });
   v1.post("/decisions/:id/hold", (c) => idempotent(c, services, c.get("userId"), () => decisions.setHold(c.get("userId"), c.req.param("id"), true)));
@@ -470,9 +499,9 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
 
   v1.get("/me", (c) => c.json(accounts.me(c.get("userId"), c.get("pass")?.entitlements, !!c.get("keyhole"))));
   // 自分のアカウントに保存している全ての写し。どの端末でも（契約が切れていても）取れる。
-  v1.get("/me/export", (c) => {
+  v1.get("/me/export", async (c) => {
     const day = now().slice(0, 10).replaceAll("-", "");
-    return c.body(JSON.stringify(exportAccount(services, c.get("userId"))), 200, {
+    return c.body(JSON.stringify(await exportAccount(services, c.get("userId"))), 200, {
       "content-type": "application/json", "content-disposition": `attachment; filename="approval-box-export-${day}.json"`, "cache-control": "private, no-store",
     });
   });
@@ -568,43 +597,40 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     accounts.updateConnectionClients(c.get("conn"), input.clients, input.os);
     return c.json(accounts.connectionInfo(c.get("conn")));
   });
-  conn.get("/decisions", (c) => c.json({ items: decisions.listMine(c.get("conn"), routeChannel(c)) }));
+  conn.get("/decisions", async (c) => c.json({ items: await decisions.listMine(c.get("conn"), routeChannel(c)) }));
   conn.post("/request-images", async (c) => {
     const me = c.get("conn");
     accounts.assertCanUse(me.user_id);
     const data = await readLimited(c.req.raw.body, MAX_FILE_BYTES);
-    return c.json(files().uploadRequest(me, { name: c.req.query("name") ?? "image", contentType: mediaType(c.req.header("content-type")), data }));
+    return c.json(await files().uploadRequest(me, { name: c.req.query("name") ?? "image", contentType: mediaType(c.req.header("content-type")), data }));
   });
   conn.post("/decisions", async (c) => {
     const input = await body(c, createSchema);
     accounts.assertCanUse(c.get("conn").user_id);
-    const row = decisions.create(c.get("conn"), input);
+    const row = await decisions.create(c.get("conn"), input);
     return c.json(decisions.toAi(row, input.route?.channel_id));
   });
-  conn.get("/decisions/:id", (c) => {
-    const row = decisions.forConnection(c.get("conn"), c.req.param("id"));
-    return c.json(decisions.toAi(row, routeChannel(c)));
-  });
-  conn.post("/decisions/:id/fetched", (c) => {
+  conn.get("/decisions/:id", async (c) => c.json(await decisions.aiRead(c.get("conn"), c.req.param("id"), routeChannel(c))));
+  conn.post("/decisions/:id/fetched", async (c) => {
     const row = decisions.forConnection(c.get("conn"), c.req.param("id"));
     decisions.markFetched(row);
-    return c.json(decisions.aiView(c.get("conn"), row.id));
+    return c.json(await decisions.aiRead(c.get("conn"), row.id));
   });
-  conn.post("/decisions/:id/resume", async (c) => c.json(decisions.resume(c.get("conn"), c.req.param("id"), await body(c, routeSchema))));
+  conn.post("/decisions/:id/resume", async (c) => c.json(await decisions.resume(c.get("conn"), c.req.param("id"), await body(c, routeSchema))));
   conn.post("/decisions/:id/amend", async (c) => {
-    const result = decisions.amend(c.get("conn"), c.req.param("id"), await body(c, amendSchema));
+    const result = await decisions.amend(c.get("conn"), c.req.param("id"), await body(c, amendSchema));
     sweep();
     return c.json(result);
   });
   conn.post("/decisions/:id/cancel", async (c) => {
     const input = await body(c, z.object({ reason: z.string().trim().min(1).max(500) }));
-    const res = decisions.cancel(c.get("conn"), c.req.param("id"), input.reason);
+    const res = await decisions.cancel(c.get("conn"), c.req.param("id"), input.reason);
     sweep();
     return c.json(res);
   });
-  conn.get("/decisions/:id/attachments/:aid", (c) => {
+  conn.get("/decisions/:id/attachments/:aid", async (c) => {
     const row = decisions.forConnection(c.get("conn"), c.req.param("id"));
-    const file = files().readForAi(row.id, c.req.param("aid"));
+    const file = await files().readForAi(row.id, c.req.param("aid"));
     return fileResponse(c, file.meta, file.data);
   });
   conn.post("/setup-test", async (c) => {
@@ -612,7 +638,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
       client: z.string().trim().min(1).max(40), os: z.string().max(20).optional(), session_label: z.string().trim().min(1).max(200),
       route: z.object({ channel_id: z.string().min(1).max(100), harness: z.string().min(1).max(20) }).optional(),
     }));
-    return c.json(decisions.startSetupTest(c.get("conn"), input.client, input.os, input.route, input.session_label));
+    return c.json(await decisions.startSetupTest(c.get("conn"), input.client, input.os, input.route, input.session_label));
   });
   // peer-channel の道（c8c）: 手元で通った接続テストの印だけ（中身・コードなし）。
   conn.post("/setup-test/verified", async (c) => {
@@ -623,7 +649,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     const input = await body(c, z.object({ decision_id: z.string(), code: z.string() }));
     return c.json(decisions.confirmSetupTest(c.get("conn"), input.decision_id, input.code));
   });
-  conn.get("/deliveries", (c) => c.json({ items: decisions.pendingDeliveries(c.get("conn")) }));
+  conn.get("/deliveries", async (c) => c.json({ items: await decisions.pendingDeliveries(c.get("conn")) }));
   conn.post("/deliveries/:id", async (c) => {
     const input = await body(c, z.object({ state: z.enum(["delivered", "unknown", "failed"]), detail: z.string().max(1000).optional() }));
     return c.json(decisions.reportDelivery(c.get("conn"), c.req.param("id"), input.state, input.detail));

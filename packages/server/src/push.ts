@@ -4,7 +4,7 @@ import type { Locale } from "./locales.ts";
 import { connect, type ClientHttp2Session } from "node:http2";
 import { createPrivateKey, sign, type KeyObject } from "node:crypto";
 import { type Db, all, get, run } from "./db.ts";
-import { displayLabel } from "./decisions.ts";
+import { displayLabel, headline } from "./decisions.ts";
 import type { EventHub, UserEvent } from "./events.ts";
 import { GoogleToken, type ServiceAccount } from "./google-auth.ts";
 
@@ -111,12 +111,14 @@ export class Notifier {
   async handle(userId: string, event: UserEvent) {
     if (event.type !== "decision.created" && event.type !== "decision.updated") return;
     const { decision_id: id, version, change } = event.data as { decision_id: string; version: number; change?: string };
+    // The server let go of a decided request's content: nothing for the user to see.
+    if (change === "content_removed") return;
     const devices = all<{ id: string; platform: string; apns_token: string | null; apns_env: string | null; fcm_token: string | null; locale: Locale }>(this.db,
       "select id, platform, apns_token, apns_env, fcm_token, locale from devices where user_id = ? and ((platform = 'ios' and apns_token is not null) or (platform = 'android' and fcm_token is not null))", userId)
       .filter((d) => (d.platform === "ios" ? this.apns : this.fcm));
     if (!devices.length) return;
-    const decision = get<{ title: string; session_label: string; requester: string | null; via: string; route: string | null }>(this.db,
-      "select title, session_label, requester, via, route from decisions where id = ?", id);
+    // The title is opened in memory for this notification only.
+    const decision = await headline(this.db, id);
     const badge = get<{ n: number }>(this.db, "select count(*) as n from decisions where user_id = ? and status = 'pending'", userId)?.n ?? 0;
     const loud = event.type === "decision.created" || change === "amended";
     const custom = { type: event.type, ...(change ? { change } : {}), decision_id: id, version };

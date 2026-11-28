@@ -57,8 +57,8 @@ test("five device locales receive localized fixed push text while request conten
     const decisions = new Decisions(db,new EventHub(db));
     const actor = {id:conn.id,user_id:userId,label:"fixture",os:"linux"};
     const input = {title:"日本語 request $&",context:"",options:[{id:"a",label:"A"},{id:"b",label:"B"}],session_label:"作業",requester:"名前",client:"codex",urgency:"normal" as const};
-    let check_token="";try{decisions.create(actor,input);}catch(e){check_token=(e as {extra:{check_token:string}}).extra.check_token;}
-    const d=decisions.create(actor,{...input,check_token});
+    let check_token="";try{await decisions.create(actor,input);}catch(e){check_token=(e as {extra:{check_token:string}}).extra.check_token;}
+    const d=await decisions.create(actor,{...input,check_token});
     await notifier.handle(userId,{id:1,type:"decision.updated",data:{decision_id:d.id,version:2,change:"amended"}});
     assert.equal(sent.find(s=>s.token==="e")!.payload.aps.alert.title,"Updated: 日本語 request $&");
     assert.equal(sent.find(s=>s.token==="j")!.payload.aps.alert.title,"修正: 日本語 request $&");
@@ -78,7 +78,7 @@ test("schema 7 device migration preserves existing fields and defaults only the 
     accounts.registerDevice(id,{platform:"ios",apns_token:"fixture",apns_env:"sandbox"});
     db.exec("alter table devices drop column locale; pragma user_version=7");
     const before=all(db,"select * from devices");db.close();db=openDb(file);
-    assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version, 18);
+    assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version, 19);
     const after=all<Record<string,unknown>>(db,"select * from devices");assert.equal(after[0]!.locale,"ja");
     assert.deepEqual(after.map(({locale,...rest})=>rest),before.map(row=>({...row as object})));db.close();
   } finally { rmSync(dir,{recursive:true,force:true}); }
@@ -122,7 +122,7 @@ test("schema 8 locale constraint upgrade preserves all old device values and all
     db.exec("alter table devices rename to prior_devices");db.exec(definition.replace(",'ko','zh-Hans','zh-Hant'",""));
     db.exec("insert into devices select * from prior_devices; drop table prior_devices; pragma user_version=8");
     const before=all(db,"select * from devices order by id");db.close();db=openDb(file);
-    assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version, 18);
+    assert.equal(get<{user_version:number}>(db,"pragma user_version")?.user_version, 19);
     assert.deepEqual(all(db,"select * from devices order by id"),before);
     const updated=new Accounts(db,new EventHub(db),"off");updated.registerDevice(id,{platform:"ios",apns_token:"e",locale:"zh-Hant"});
     assert.equal(get<{locale:string}>(db,"select locale from devices where apns_token='e'")?.locale,"zh-Hant");

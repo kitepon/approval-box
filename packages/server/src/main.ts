@@ -9,6 +9,8 @@ import type { Context } from "hono";
 import { Accounts, type BillingMode } from "./accounts.ts";
 import { Attachments } from "./attachments.ts";
 import { openDb } from "./db.ts";
+import { ApiError } from "./errors.ts";
+import { sealExisting, vaultOf } from "./seal.ts";
 import { Decisions } from "./decisions.ts";
 import { EventHub } from "./events.ts";
 import { AppStore, appleRootCertificates } from "./appstore.ts";
@@ -39,6 +41,23 @@ const freeAccountIds = new Set((env.FREE_ACCOUNT_IDS ?? "").split(",").map((s) =
 const accounts = new Accounts(db, events, billing, freeAccountIds);
 const decisions = new Decisions(db, events);
 const attachments = new Attachments(db, join(dataDir, "attachments"));
+// Sealed content (e02, docs/architecture/storage-lifecycle.md "Sealed content"). The window is the auth module (AUTH_MODULE_SOCKET) or ABX_DATA_KEY;
+// without one new requests are refused with 503, since nothing is stored in plaintext. Rows from before are sealed in place before serving
+// (retried every minute if the window failed). Every minute the decided content the devices stored goes; every hour the data keys rotate.
+const vault = vaultOf(db);
+let plaintextLeft = vault.ready;
+const sealPlaintext = () => sealExisting(db, join(dataDir, "attachments")).then((counts) => {
+  plaintextLeft = false;
+  if (Object.values(counts).some(Boolean)) console.log(`approval-box-server: sealed existing rows (${Object.entries(counts).map(([table, n]) => `${table} ${n}`).join(", ")})`);
+}, (error: unknown) => console.error(`approval-box-server: seal_existing_failed ${error instanceof ApiError ? error.code : "error"}; retried in a minute`));
+if (!vault.ready) console.error(`approval-box-server: content_store_unavailable (${vault.problem}); new requests are refused with 503`);
+else await sealPlaintext();
+setInterval(() => {
+  void (plaintextLeft ? sealPlaintext() : Promise.resolve())
+    .then(() => decisions.sweepContent()).then((purged) => { if (purged) attachments.gc(); })
+    .catch((error: unknown) => console.error(`approval-box-server: content_sweep_failed ${error instanceof ApiError ? error.code : "error"}`));
+}, 60_000).unref();
+setInterval(() => { void vault.sweep(join(dataDir, "attachments")).catch((error: unknown) => console.error(`approval-box-server: data_key_sweep_failed ${error instanceof ApiError ? error.code : "error"}`)); }, 3600_000).unref();
 
 // Web版（packages/web のビルド結果）。APIでないGETは index.html を返し、画面の振り分けはWeb版が行う。
 const here = fileURLToPath(new URL(".", import.meta.url));

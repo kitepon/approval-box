@@ -133,7 +133,7 @@ export class CallBridgeDeliverer {
         for (const id of this.connectionIds) {
           const conn = this.connection(id);
           if (!conn) continue;
-          for (const item of this.decisions.serverDeliveries(id)) {
+          for (const item of await this.decisions.serverDeliveries(id)) {
             if (!this.decisions.markSending(item.decision_id)) continue;
             await this.deliver(conn, item.decision_id, item.route.channel_id, `Approval Box ${item.decision_id}\n${item.text}`);
           }

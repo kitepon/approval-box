@@ -306,7 +306,7 @@ test("review fixes: a signed /me has no payment fields; a signed DELETE /me is 4
   assert.ok(get(x.db, "select 1 from decisions where id = 'K-1'"));
   assert.ok(get(x.db, "select 1 from keyholes where entry = ?", entry));
   assert.equal(get(x.db, "select 1 from sqlite_master where name = 'k_moved'"), undefined);
-  assert.equal(get<{ user_version: number }>(x.db, "pragma user_version")?.user_version, 18);
+  assert.equal(get<{ user_version: number }>(x.db, "pragma user_version")?.user_version, 19);
 });
 
 test("review fixes: calls per source and the 16 KiB cap come before verify on signed /v1 (the upload keeps its file cap) and /pc/v1", async () => {

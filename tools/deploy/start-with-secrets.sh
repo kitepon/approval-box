@@ -48,5 +48,6 @@ if [ -n "${SECRETS_DIR:-}" ]; then
   put PC_TURN_CF_API_TOKEN pc-turn-cf-api-token
   put LB_WEB_GOOGLE_CLIENT_SECRET lb-web-google-client-secret
   put LB_WEB_APPLE_PRIVATE_KEY lb-web-apple-private-key.p8 pem
+  put ABX_DATA_KEY abx-data-key
 fi
 exec "$@"

@@ -153,6 +153,7 @@ create table if not exists idempotency (
   status integer not null,
   body text not null,
   created_at text not null,
+  sealed_set text,
   primary key (user_id, key)
 );
 create table if not exists appstore_subscriptions (
@@ -409,6 +410,23 @@ const MIGRATIONS: ((db: Db) => void)[] = [
   },
   // 18: the server never keeps K beside an entry (login-billing contract 11.3, Mint's review of t03): drop k_moved.
   (db) => { db.exec("drop table if exists k_moved"); },
+  // 19: sealed content (e02, storage-lifecycle.md "Sealed content"). Content columns hold lbd1 blobs under the row's sealed_set (the account's data
+  // set when sealed; rows keep it when they move between entries). content_state: plain (before sealExisting) -> sealed -> purged (tombstone).
+  // decided_at / purge_by (7-day cap) / ai_seen_at / purged_at drive the purge; decision_stored holds the devices' "stored in history" acks;
+  // data_sets is the library's DataSetStore (wrapped data keys only).
+  (db) => {
+    const has = (table: string) => all<{ name: string }>(db, `select name from pragma_table_info('${table}')`).map((c) => c.name);
+    const decisions = has("decisions");
+    for (const column of ["content_state text not null default 'plain'", "sealed_set text", "decided_at text", "purge_by text", "ai_seen_at text", "purged_at text"]) {
+      if (!decisions.includes(column.split(" ")[0]!)) db.exec(`alter table decisions add column ${column}`);
+    }
+    for (const table of ["attachments", "request_uploads", "idempotency"]) if (!has(table).includes("sealed_set")) db.exec(`alter table ${table} add column sealed_set text`);
+    db.exec(`create table if not exists data_sets (key text primary key, value text not null);
+      create table if not exists decision_stored (
+        decision_id text not null references decisions(id) on delete cascade, device text not null, at text not null, primary key (decision_id, device)
+      );
+      create index if not exists decisions_content on decisions(content_state, status);`);
+  },
 ];
 
 function migrate(db: Db) {

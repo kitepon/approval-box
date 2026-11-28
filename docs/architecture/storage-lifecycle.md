@@ -12,6 +12,37 @@ writerはstate/daemon.log一個に直近最大1MiBを保存する。各呼出し
 
 fileのopen/read/write/truncate失敗は元stderrへの短いbest effort通知にし、daemon本体へthrowしない。callbackを完了させ、log失敗が配送journalやdelivered/failed/unknownを変えない。import失敗も同writerで記録しexit1。node自体が起動できない場合の親errorは、同logに上限以下の失敗一件を記録し、従来のstderr通知を維持する。
 
+## Sealed content and decided requests (e02, 2026-11-28)
+
+Design: `/srv/bellteam/bots/bot-4366a50b/docs/approval-box/encrypted-store-20261128.md` (Owner ruling 2026-11-28). Library: login-billing 0.28.0, contract 1.64 section 12.10 "Data sets without teams" (package alias `login-billing-028`; the login itself stays on 0.22.4).
+
+### Function diagram
+| Function | Part | Input -> output | Failure / exit |
+| --- | --- | --- | --- |
+| window | server seal.ts vaultFromEnv/vaultOf | AUTH_MODULE_SOCKET -> brokerWindow (grant `approvalbox-data`); else ABX_DATA_KEY(_FILE) (base64, 32 bytes) -> keyWindow | none configured -> Vault not ready: create, answer, upload refuse with 503 `store_unavailable` (nothing is stored in plaintext); start-up logs `content_store_unavailable` |
+| data key | seal.ts Vault (createDataSets) | set = the account id (users.id) at first seal -> DK_n wrapped by the window in `data_sets` (`dset:<set>`, JSON, one transaction per write); unwrapped keys cached at most 60 s | window down -> 503 for that call; a broken record -> 500, logged as its code only |
+| seal / open | decisions.ts, attachments.ts, http.ts idempotent | plaintext -> lbd1 (AES-256-GCM) with context `<decision id>\|<column>`, `<decision id>\|note`, `<attachment id>\|name`, `<attachment id>\|file`, `idempotency\|<key>`; opened in memory for one response | every write reseals the whole row under the set's current key |
+| device ack | http.ts POST /v1/decisions/{id}/stored -> Decisions.stored | signed request (keyhole = device id), decided request -> decision_stored row | idempotent; open request 409; not signed (pass, BellTeam session) 403 forbidden |
+| AI has the result | Decisions.markFetched/reportDelivery/aiRead/cancel/assertOpen | delivered, fetched, AI read of a decided request, AI cancel -> decisions.ai_seen_at | - |
+| purge sweep (every minute) | Decisions.sweepContent, then Attachments.gc | (a) ai_seen_at and every keyhole of the account acked, or (b) purge_by (decided + 7 days) -> content columns emptied, notes nulled, attachments rows and files, acks and the request's idempotency answers deleted; tombstone kept | a failure leaves the rest to the next minute |
+| expiry | Decisions.sweepContent | pending/held older than 14 days -> cancelled, cancel_reason `expired` (needs the window) | next minute |
+| tombstone | Decisions.sweepContent | purged_at + 30 days -> row deleted, `decision.deleted` | - |
+| key sweep (hourly) | Vault.sweep | DK older than 30 days -> rotated; an old DK no record uses (DB headers and attachment files) -> retired; sets with no account and no row -> deleted | resumable |
+| account deletion | Accounts.deleteUser | after commit: the account's set and the sets its rows were sealed under, when no row references them -> deleteSet | the hourly sweep catches the rest |
+| migration | seal.ts sealExisting at start (main.ts, before serving; retried every minute on failure) | content_state plain rows, plain attachment files and names, idempotency answers -> sealed in place, batches of 50, one transaction each; then vacuum and WAL truncate | a row is replaced only while unchanged, so it is plain or sealed, never neither; a sealed file under a plain row is recognized by opening it |
+
+### Data flow
+AI -> connector or remote MCP -> Decisions.create (seal) -> SQLite (blobs) -> push and SSE (ids only; the APNs/FCM title is opened in memory as before) -> device GET /v1/decisions/{id} (open) -> TLS -> device. Answer: device -> POST answer -> seal answer and delivery text -> connector or call-bridge delivery (open) -> AI. Decided: devices store it in their history -> POST stored -> purge sweep deletes the content; a later GET answers the tombstone (`content_removed: true`).
+
+### Content state of a request on the server
+`plain` (rows from before e02, until sealExisting) -> `sealed` (open, held, decided waiting for the AI and the acks) -> `purged` (tombstone: id, state, timestamps, metadata; no title, context, options, answer, notes or attachments) -> gone (30 days after the purge). decided -> purged also at purge_by (7 days). Already-decided rows at the migration get purge_by = migration + 7 days.
+
+### Schema 19
+decisions: content_state, sealed_set, decided_at, purge_by, ai_seen_at, purged_at (norm_title is always empty; the duplicate check compares opened titles). attachments, request_uploads, idempotency: sealed_set. New tables data_sets (the library's DataSetStore) and decision_stored (decision_id, device, at). A row keeps its sealed_set when it moves between entries, so it stays readable.
+
+### What stays in plaintext
+Metadata the server routes and lists by: ids, status, urgency, deadline, timestamps, session_label, requester, requester_bot_id, client, route, delivery state and its detail, setup check codes. The decided content leaves the server; open content stays sealed until decided or expired.
+
 ## 生成・保存・複製と回収
 
 ### 設定とjournalの一時ファイル（0.1.30の実装前設計）
@@ -28,7 +59,7 @@ foxの標準setupで、通常fileの.claude.jsonへのrenameがEPERMとなり、
 | --- | --- | --- | --- |
 | npm build/connector esbuild | server dist、Web dist、bundle chunks/ライセンス | Web/esbuildは既出力を置換。source/lockを原本として保持 | 完了前の配布を成功扱いしない。次buildが同出力を置換 |
 | cli.installRuntime/setup | home/runtime/version、harness設定の絶対path、動作中旧MCP/daemon | 同版を置換、設定backupOnceは一個 | 旧会話の参照が残るので旧runtime一括GCをしない。認証はcacheとして消さない |
-| server Attachments/Decisions | SQLite＋添付原本、Web/native/AI | closed保持期間、下書き24h、part1h、孤立原本GC。SQLiteは `secure_delete = on` で開き、消した行を空きページに残さない。起動時に空きページがあれば一度 `vacuum` とWALの切り詰め（2026-11-21、ミランダ f02s） | DB参照ある原本を削除せず、強制終了のpartは次通常hourly GC |
+| server Attachments/Decisions | SQLite＋添付原本、Web/native/AI。中身は封をして保存（下の「Sealed content」） | 決まった申請の中身はAIと全端末へ届いたら、遅くとも7日で消し、印（tombstone）は30日。closed保持期間、下書き24h、part1h、孤立原本GC。SQLiteは `secure_delete = on` で開き、消した行を空きページに残さない。起動時に空きページがあれば一度 `vacuum` とWALの切り詰め（2026-11-21、ミランダ f02s） | DB参照ある原本を削除せず、強制終了のpartは次通常hourly GC |
 | daemon saveAttachment | home/attachments、回答に書いたpathとget_attachment | hash一致を再利用、30日超はpruneAttachments | 保存失敗も本文配送は継続、get_attachmentを案内。唯一の資料は利用者が別保存 |
 | server main cleanup/停止 | DB event/pairing/診断/決裁/添付、Web/API | hourly prune、SIGTERM/INTでabort→HTTP close→DB close | WAL/DBを容量理由で除去しない。利用者のpending/heldは保持 |
 | 通常配備normal_entry | expectedrun/manifest/prepared-source.tar、complete/bundle/outbox、監査/復旧reader | commit＋policy＋変換recipe＋hashに結んだ耐久原本 | resultだけでoutbox終端としない。unknown/唯一archiveを保持し自動再配備しない |

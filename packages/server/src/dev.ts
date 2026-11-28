@@ -11,6 +11,7 @@ import { deriveKWith } from "@kitepon/login-billing/server";
 import { createTestKit } from "@kitepon/login-billing/testing";
 import { Accounts } from "./accounts.ts";
 import { openDb } from "./db.ts";
+import { attachVault, sealExisting, vaultFromEnv } from "./seal.ts";
 import { Decisions } from "./decisions.ts";
 import { EventHub } from "./events.ts";
 import { createApp } from "./http.ts";
@@ -44,15 +45,18 @@ export async function startDevServer(o: DevServerOptions = {}) {
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   // 鍵はこの置き場に一度作って使い回す（起動し直しても同じ K・同じ通行証で入れる）。開発用で、本物の鍵とは無関係。
   const keysFile = join(dataDir, "dev-keys.json");
-  const keys = existsSync(keysFile) ? JSON.parse(readFileSync(keysFile, "utf8")) as { k: string; pass: string }
+  const keys = existsSync(keysFile) ? JSON.parse(readFileSync(keysFile, "utf8")) as { k: string; pass: string; data?: string }
     : { k: randomBytes(32).toString("base64url"), pass: randomBytes(32).toString("base64url") };
-  if (!existsSync(keysFile)) writeFileSync(keysFile, JSON.stringify(keys), { mode: 0o600 });
+  // The data key window for sealed content (seal.ts), kept here like the others (older dev-keys.json files get it added).
+  if (!keys.data) { keys.data = randomBytes(32).toString("base64"); writeFileSync(keysFile, JSON.stringify(keys), { mode: 0o600 }); }
 
   const kit = await createTestKit();
   const subject = o.subject ?? "dev-person";
   // その偽の人の K（Apple と Google の両方）を課金の対象外にする。ストア無しで契約の要る所まで通る。
   const exemptK = await Promise.all((["apple", "google"] as const).map((p) => deriveKWith(Buffer.from(keys.k, "base64url"), p, subject)));
   const db = openDb(join(dataDir, "approval-box.db"));
+  attachVault(db, vaultFromEnv(db, { ABX_DATA_KEY: keys.data }));
+  await sealExisting(db, undefined);
   const events = new EventHub(db);
   const accounts = new Accounts(db, events, "store", new Set(exemptK));
   const decisions = new Decisions(db, events);

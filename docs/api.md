@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.50
+# Approval Box API（アプリ・Web版向け） v0.51
+
+2026-11-28 v0.51（追加と意味の変更。e02、[保存図](architecture/storage-lifecycle.md#sealed-content-and-decided-requests-e02-2026-11-28)）: サーバーは申請の中身（件名・背景・選択肢・答え・注記・添付）を封をして保存する。決まった申請（answered・cancelled）の中身は、AIが答えを受け取り、アカウントの全端末（鍵穴）が `POST /decisions/{id}/stored` で「履歴に保存した」と知らせたら消す。遅くとも決まってから7日で消す。消した後の `GET /decisions/{id}` は印（`content_removed: true`、件名・背景・選択肢・答え・履歴は空）を返し、印は30日で消える（その後は404）。一覧には印を出さない。消した時の知らせは `decision.updated`（`change: "content_removed"`、通知は送らない）。答えの出ないまま14日たった申請は取り下げになる（`cancel_reason: "expired"`）。中身を封にする鍵が使えないサーバーは、新しい申請・答え・添付を 503 `store_unavailable` で断る。アプリは決まった申請を自分の履歴に保存してから stored を送り、一覧は「端末の履歴＋サーバーの未決・保留」にする。
 
 2026-11-27 v0.50（意味の変更・形は変わらない）: 新しい形の入口（entry、端末ごとに購入を確かめる。[local-form.md](architecture/local-form.md)）を、session や接続トークン（BellTeam）で読んだ `GET /me` は、`plan: active` で `store`・`expires_at` を出さない（課金の対象外のアカウントと同じ形）。サーバーは entry を支払いで断らない（`assertCanUse`）ので、`/me` もそれに合わせた。それまでは users の行の既定値のまま `expired` を返し、BellTeam が旦那の答えを席へ渡すのを止めていた。署名つきの要求の `/me` は今までどおり `plan` を出さない。
 
@@ -124,7 +126,8 @@ Decision {
   created_at: time,
   updated_at: time,
   version: int,                  // 更新のたびに増える（AIの修正でも増える）
-  cancel_reason?: string,        // AIが取り下げた理由（status=cancelled の時）
+  cancel_reason?: string,        // AIが取り下げた理由（status=cancelled の時）。サーバーが取り下げた時は subscription_expired・expired（14日たった）
+  content_removed?: true,        // 決まった申請の中身をサーバーから消した印（v0.51）。title・context は ""、options・request_attachments・history は []、answer は無い
   distinct_reason?: string,      // 似た申請があるのにAIが別件として出した理由
   history: [{
     at: time,
@@ -160,12 +163,14 @@ Decision {
 | POST | `/decisions/{id}/answer` | `{ option_id?, text?, attachment_ids?: string[], version }`。option_id・text・attachment_ids（1件以上）のどれか1つは必須（添付だけの答えも可）。versionは必須。pending・heldの時だけ。応答は更新後のDecision |
 | POST | `/decisions/{id}/hold` | 保留にする。応答はDecision |
 | POST | `/decisions/{id}/unhold` | 保留を戻す。応答はDecision |
+| POST | `/decisions/{id}/stored` | 決まった申請（answered・cancelled）を端末の履歴に保存したと知らせる（v0.51）。本文なし。署名つきの要求（鍵穴）だけ（通行証・BellTeamのsessionは403 `forbidden`。ログインへは戻さない）。何度送ってもよい。応答 `{ decision_id, stored: true, content_removed?: true }`。未決・保留は409 `conflict` |
 | GET | `/events` | SSE（下記） |
 
 - 並び順: pending・held は 急ぎ度（high→low）、期限の近い順、古い順。answered・cancelled は updated_at の新しい順。 期限は時差と小数秒を反映した実時刻で比べ、期限なしは期限ありの後、同じ時刻は作成の古い順とする。保存・返却する期限の表記は変えない。
 - 書き込み（answer・hold・unhold）には `Idempotency-Key: <UUID>` を付ける。通信が切れて送り直しても二重に答えない。
 - answer の `version` がサーバー側と違えば409 `conflict`（AIが内容を直した、Webで先に答えた等）。古い内容のまま答えさせないため、versionは必須。応答の `error.decision` に最新のDecisionが入るので、それで画面を差し替える。
 - 取り下げ（cancelled）と修正（amended）はAI側だけが行う。アプリからは行わない。
+- 決まった申請の中身（v0.51）: サーバーは、AIが答えを受け取り（配送の delivered・fetched、AIが決まった申請を読んだ、AIの取り下げ）、アカウントの全ての鍵穴が `stored` を送ったら中身を消す。鍵穴の無いアカウント（通行証だけの古いアプリ）は7日で消える。消えた申請はアプリの履歴にだけ残る。
 - AIの修正: 同じ申請が直される。history の最後が `amended` なら、カードと決裁画面に「修正あり」と note・直した項目を出す。
 - AIの取り下げ: 一覧から消え、既決側に `cancel_reason` 付きで残る。
 - 決裁画面を開いている間に `decision.updated` が来たら、取り直して差し替え、「AIが内容を直した」「AIが取り下げた」と知らせる。
@@ -228,7 +233,7 @@ Attachment {
 
 - 背景にいる時: プッシュ通知（APNs・FCM）。
   - 表示文は件名と、その下の「誰から / 何の仕事」の一行（背景は出さない）。
-  - payload: `{ type: "decision.created" | "decision.updated", change?: "amended" | "cancelled" | "answered" | "delivery", decision_id, version }`。開いたら `/decisions/{id}` を取る。
+  - payload: `{ type: "decision.created" | "decision.updated", change?: "amended" | "cancelled" | "answered" | "delivery", decision_id, version }`。開いたら `/decisions/{id}` を取る。`change: "content_removed"`（v0.51、中身を消した）は通知を送らず、SSEだけに流す。
   - 鳴らすのは created（件名）と amended（「修正: 件名」）だけ。cancelled・answered・delivery は音なしの更新（バッジと一覧の更新だけ）。
   - 表示文はサーバーが組み立てて渡す（`title`。created は件名、amended は「修正: 件名」）。音なしの更新には `title` を入れない。
   - APNs: 鳴らす時は `aps.alert.title`・`aps.alert.subtitle`（`source.session_label` と同じ一行。v0.29）と `aps.sound`、`aps.badge`。音なしは `aps.content-available: 1` と `aps.badge` だけ。どちらも `apns-push-type: alert`・priority 10 で送る（background にするとiOSが後回しにし、答えた後もバッジが残る）。独自のキー（type・change・decision_id・version）は aps の外に置く。
@@ -351,6 +356,7 @@ setup: {
 | 429 | `rate_limited` | `Retry-After` 秒待つ |
 | 410 | `gone` | ライブラリだけで動くサーバーで、旧いログイン・購入の照合・ストアの通知の入口を呼んだ（v0.48）。再試行しない。ライブラリのログイン・購入へ進む |
 | 5xx | `internal` | 時間を置いて送り直す（Idempotency-Key は同じものを使う） |
+| 503 | `store_unavailable` | 中身を封にする鍵（認証モジュール）が使えない（v0.51）。時間を置いて送り直す |
 
 message は利用者にそのまま見せてよい日本語の文。
 
@@ -379,6 +385,8 @@ message は利用者にそのまま見せてよい日本語の文。
 - 無し（無料体験の形は設計側の未決。決まったら `/me` に反映する）
 
 ## 変更履歴
+
+- v0.51 2026-11-28 封をした中身と、決まった申請の中身の削除（e02）: `POST /decisions/{id}/stored`、印（`content_removed`）、`change: "content_removed"`、14日の期限（`cancel_reason: expired`）、503 `store_unavailable`。AI側（`/connector/v1`・MCP）の決まって消えた申請は `content_removed: true` と `message` を返し、`answer`・`answer_text` は無い。保存した冪等キーの応答は1日で消える。
 
 - v0.47 2026-11-20 `GET /auth/config` に `library_login`（ライブラリのログインを使うサーバーだけ `true`）を追加。Web版がライブラリのQRログインへ切り替える目印。他は変わらない。
 - v0.46 2026-11-20 共有の login & billing ライブラリの導入（段階A、互換）: `/auth/v1`（ライブラリのwire v1）、`/v1` の通行証（Bearer・cookie）と応答ヘッダー `Login-Billing-Pass`、通行証での契約の関門（402 `subscription_expired`）、`/me` の `purchase_mark`、`GET /me/export`、契約がなくなった時の取り下げ（`cancel_reason: subscription_expired`）。旧いsessionと `/v1/auth/*` は今までどおり使える。ライブラリの鍵が無いサーバーは何も変わらない。

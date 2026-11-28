@@ -55,6 +55,10 @@ services:
       LB_WEB_APPLE_PRIVATE_KEY: ${LB_WEB_APPLE_PRIVATE_KEY:-}
       LB_WEB_APPLE_PRIVATE_KEY_FILE: ${LB_WEB_APPLE_PRIVATE_KEY_FILE:-}
       LB_REKEY_DELETE_IDS: ${LB_REKEY_DELETE_IDS:-}
+      # 申請の中身を封にする鍵の窓（docs/architecture/storage-lifecycle.md「Sealed content」）。認証モジュールのソケットか、無ければ ABX_DATA_KEY（base64の32バイト）。どちらも無ければ新しい申請は503。
+      AUTH_MODULE_SOCKET: ${AUTH_MODULE_SOCKET:-}
+      ABX_DATA_KEY: ${ABX_DATA_KEY:-}
+      ABX_DATA_KEY_FILE: ${ABX_DATA_KEY_FILE:-}
       # アプリのリンク（/.well-known、Webサインインの戻り /app/websignin）。形は docs/architecture/login-pass.md。無ければ404。
       AB_ANDROID_APP_LINKS: ${AB_ANDROID_APP_LINKS:-}
       AB_APPLE_APP_IDS: ${AB_APPLE_APP_IDS:-}

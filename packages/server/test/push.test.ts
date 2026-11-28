@@ -24,8 +24,8 @@ test("申請が来たら件名で鳴らし、取り下げは音なし。無効�
   const me = { id: conn.id, user_id: userId, label: "pc", os: "linux" };
   const input = { title: "デプロイしてよいか", context: "", options: [{ id: "a", label: "A" }, { id: "b", label: "B" }], urgency: "normal" as const, session_label: "Approval Box / 配備", requester: "ナユタ", client: "claude-code" };
   let check_token = "";
-  try { decisions.create(me, input); } catch (error) { check_token = (error as { extra: { check_token: string } }).extra.check_token; }
-  const created = decisions.create(me, { ...input, check_token });
+  try { await decisions.create(me, input); } catch (error) { check_token = (error as { extra: { check_token: string } }).extra.check_token; }
+  const created = await decisions.create(me, { ...input, check_token });
   await new Promise((r) => setTimeout(r, 20));
   const loud = sent.find((s) => s.token === "good")!;
   assert.equal(loud.env, "sandbox");
@@ -36,20 +36,20 @@ test("申請が来たら件名で鳴らし、取り下げは音なし。無効�
   // 申請者を送らない古いコネクタの申請は、作業名だけを出す。
   sent.length = 0;
   const { requester: _requester, ...old } = input;
-  try { decisions.create(me, { ...old, title: "別の件" }); } catch (error) { check_token = (error as { extra: { check_token: string } }).extra.check_token; }
-  const second = decisions.create(me, { ...old, title: "別の件", check_token });
+  try { await decisions.create(me, { ...old, title: "別の件" }); } catch (error) { check_token = (error as { extra: { check_token: string } }).extra.check_token; }
+  const second = await decisions.create(me, { ...old, title: "別の件", check_token });
   await new Promise((r) => setTimeout(r, 20));
   assert.deepEqual(sent[0]!.payload.aps.alert, { title: "別の件", subtitle: "Approval Box / 配備" });
   // 直した時の通知にも付く。
   sent.length = 0;
-  decisions.amend(me, second.id, { version: 1, note: "件名を直した", changes: { title: "別の件（直し）" } });
+  await decisions.amend(me, second.id, { version: 1, note: "件名を直した", changes: { title: "別の件（直し）" } });
   await new Promise((r) => setTimeout(r, 20));
   assert.deepEqual(sent[0]!.payload.aps.alert, { title: "修正: 別の件（直し）", subtitle: "Approval Box / 配備" });
-  decisions.cancel(me, second.id, "試験の片付け");
+  await decisions.cancel(me, second.id, "試験の片付け");
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(all(db, "select * from devices").length, 1); // 410 の端末は消えた
   sent.length = 0;
-  decisions.cancel({ id: conn.id, user_id: userId, label: "pc", os: "linux" }, created.id, "やめた");
+  await decisions.cancel({ id: conn.id, user_id: userId, label: "pc", os: "linux" }, created.id, "やめた");
   await new Promise((r) => setTimeout(r, 20));
   assert.deepEqual(sent[0]!.payload.aps, { "content-available": 1, badge: 0 });
   assert.equal(sent[0]!.headers["apns-push-type"], "alert");
@@ -85,8 +85,8 @@ test("Androidにはデータだけで送り、鳴らす時はhigh・音なしは
   const me = { id: conn.id, user_id: userId, label: "pc", os: "linux" };
   const input = { title: "配備してよいか", context: "", options: [{ id: "a", label: "A" }, { id: "b", label: "B" }], urgency: "normal" as const, session_label: "Approval Box / 配備", requester: "ナユタ", client: "claude-code" };
   let check_token = "";
-  try { decisions.create(me, input); } catch (error) { check_token = (error as { extra: { check_token: string } }).extra.check_token; }
-  const created = decisions.create(me, { ...input, check_token });
+  try { await decisions.create(me, input); } catch (error) { check_token = (error as { extra: { check_token: string } }).extra.check_token; }
+  const created = await decisions.create(me, { ...input, check_token });
   await new Promise((r) => setTimeout(r, 20));
   assert.deepEqual(sent.map((s) => s.token).sort(), ["a-gone", "a-good"]);
   const loud = sent.find((s) => s.token === "a-good")!;
@@ -94,7 +94,7 @@ test("Androidにはデータだけで送り、鳴らす時はhigh・音なしは
   assert.deepEqual(loud.data, { type: "decision.created", decision_id: created.id, version: "1", badge: "1", title: "配備してよいか" });
   assert.equal(all(db, "select * from devices where platform = 'android'").length, 1);
   sent.length = 0;
-  decisions.cancel(me, created.id, "やめた");
+  await decisions.cancel(me, created.id, "やめた");
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(sent[0]!.priority, "normal");
   assert.deepEqual(sent[0]!.data, { type: "decision.updated", change: "cancelled", decision_id: created.id, version: String(sent[0]!.data.version), badge: "0" });
