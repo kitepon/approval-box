@@ -55,11 +55,12 @@ async function labSession(o: { url?: string; dataDir?: string; subject?: string 
   else {
     const sig = createECDH("prime256v1"); sig.generateKeys();
     const seal = createECDH("prime256v1"); seal.generateKeys();
-    saved = { v: 1, sig_d: sig.getPrivateKey("hex"), seal_d: seal.getPrivateKey("hex"), seal_pub: seal.getPublicKey("hex", "uncompressed") };
+    saved = { v: 1, sig_d: sig.getPrivateKey("hex").padStart(64, "0"), seal_d: seal.getPrivateKey("hex").padStart(64, "0"), seal_pub: seal.getPublicKey("hex", "uncompressed") };
   }
   const save = (next: Saved) => { mkdirSync(dataDir, { recursive: true, mode: 0o700 }); writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 }); };
-  const sign = signingKeyFromScalar(fromHex(saved.sig_d));
-  const seal = await sealKeyFromScalar(fromHex(saved.seal_d), fromHex(saved.seal_pub));
+  // getPrivateKey("hex") drops leading zero bytes (1 key in 256): pad to the 32-byte scalar, also for files saved before this fix.
+  const sign = signingKeyFromScalar(fromHex(saved.sig_d.padStart(64, "0")));
+  const seal = await sealKeyFromScalar(fromHex(saved.seal_d.padStart(64, "0")), fromHex(saved.seal_pub));
 
   // c. the registry: a genesis the first time (or for a new account), the saved head after that
   if (!saved.snapshot || saved.account !== k) {
