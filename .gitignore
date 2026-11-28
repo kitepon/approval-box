@@ -10,3 +10,6 @@ playwright-report/
 
 # npm run dev:server (local only)
 .dev-data/
+
+# compose の AUTH_MODULE_DIR が未設定の時の空の置き場
+.auth-module-unused/

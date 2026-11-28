@@ -8,6 +8,7 @@ import { EventHub } from "../src/events.ts";
 import { createApp } from "../src/http.ts";
 import { type Jwk, resetKeyCache } from "../src/oidc.ts";
 import { Play } from "../src/play.ts";
+import { keySigner } from "../src/auth-module.ts";
 
 const PACKAGE = "dev.kitepon.approvalbox";
 const PRODUCT = "approvalbox_monthly";
@@ -68,7 +69,7 @@ function setup(options: { play?: boolean } = {}) {
   }) as unknown as typeof fetch;
   const keys = async (): Promise<Jwk[]> => [{ ...(pushKey.publicKey.export({ format: "jwk" }) as object), kid: "push-1" } as Jwk];
   const play = new Play(db, accounts, {
-    packageName: PACKAGE, productIds: [PRODUCT], serviceAccount: { client_email: SA_EMAIL, private_key: serviceKey.privateKey.export({ type: "pkcs8", format: "pem" }) as string },
+    packageName: PACKAGE, productIds: [PRODUCT], serviceAccount: { client_email: SA_EMAIL, sign: keySigner(serviceKey.privateKey.export({ type: "pkcs8", format: "pem" }) as string, "RS256") },
     pushAudience: AUDIENCE, pushServiceAccount: PUSH_EMAIL, fetch: fake, keys,
   });
   const app = createApp({ db, accounts, decisions: new Decisions(db, events), events, publicUrl: "https://kb.test", ...(options.play === false ? {} : { play }) });
@@ -268,7 +269,7 @@ test("Play: サービスアカウントの鍵が使えない時は購入を受�
   const t = setup();
   t.verified();
   t.subs.set("tok_1", t.sub());
-  const broken = new Play(t.db, t.accounts, { packageName: PACKAGE, productIds: [PRODUCT], serviceAccount: { client_email: SA_EMAIL, private_key: "not a key" }, pushAudience: AUDIENCE, pushServiceAccount: PUSH_EMAIL, fetch: (async () => { throw new Error("unreachable"); }) as unknown as typeof fetch });
+  const broken = new Play(t.db, t.accounts, { packageName: PACKAGE, productIds: [PRODUCT], serviceAccount: { client_email: SA_EMAIL, sign: keySigner("not a key", "RS256") }, pushAudience: AUDIENCE, pushServiceAccount: PUSH_EMAIL, fetch: (async () => { throw new Error("unreachable"); }) as unknown as typeof fetch });
   await assert.rejects(() => broken.verifyPurchase(t.userId, PRODUCT, "tok_1"), (e: any) => e.code === "internal");
   assert.equal((await t.me()).plan, "expired");
 });

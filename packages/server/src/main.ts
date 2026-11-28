@@ -2,6 +2,7 @@
 import { Diagnostics } from "./diagnostics.ts";
 import { Apns, Fcm, Notifier, Waker } from "./push.ts";
 import { serve } from "@hono/node-server";
+import { createPrivateKey } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +22,7 @@ import { type Library, createLibrary } from "./lb.ts";
 import { purgeLegacy, rekeyToK } from "./rekey.ts";
 import { type PeerChannel, cloudflareTurn, createPeerChannel } from "./pc.ts";
 import { parseAppLinks } from "./applinks.ts";
+import { keySigner, moduleSigner, type Signer } from "./auth-module.ts";
 import { type AppKeyholes, createAppKeyholes, createEntries } from "./keyholes.ts";
 
 const env = process.env;
@@ -31,6 +33,10 @@ const billing: BillingMode = env.BILLING === "store" ? "store" : "off";
 
 const db = openDb(join(dataDir, "approval-box.db"));
 const events = new EventHub(db);
+// 認証モジュール（unix ソケット）。AUTH_MODULE_SOCKET があり、鍵ごとの項目名（AUTH_ITEM_*、空なら使わない）があれば、その鍵はモジュールが署名し、サーバーは持たない。
+// どちらも無ければ今まで通り環境の鍵で署名する。
+const authSocket = (env.AUTH_MODULE_SOCKET ?? "").trim();
+const moduleItem = (name: string, fallback: string) => (authSocket ? (env[name] ?? fallback).trim() : "");
 // 鍵は *_FILE のファイルか、直接の値。
 const secretValue = (name: string) => {
   const file = env[`${name}_FILE`];
@@ -93,19 +99,23 @@ if (webLogin.apple_services_id && !appleAudiences.includes(webLogin.apple_servic
 const apnsKey = env.APNS_KEY_FILE ? (existsSync(env.APNS_KEY_FILE) ? readFileSync(env.APNS_KEY_FILE, "utf8") : "") : (env.APNS_KEY ?? "").replace(/\\n/g, "\n");
 if (env.APNS_KEY_FILE && !apnsKey) console.error(`approval-box-server: APNS_KEY_FILE（${env.APNS_KEY_FILE}）が読めません。iPhoneへの通知は送りません。`);
 let apnsSend: Apns["send"] | undefined;
-if (apnsKey && env.APNS_KEY_ID && env.APNS_TEAM_ID) {
-  const apns = new Apns({ keyPem: apnsKey, keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, topic: env.APNS_TOPIC ?? "dev.kitepon.approvalbox" });
-  console.log(`approval-box-server: iPhoneへの通知を送ります（key ${env.APNS_KEY_ID}）`);
+const apnsItem = moduleItem("AUTH_ITEM_APNS", "apns");
+const apnsSigner: Signer | undefined = !(env.APNS_KEY_ID && env.APNS_TEAM_ID) ? undefined : apnsItem ? moduleSigner(authSocket, apnsItem) : apnsKey ? keySigner(createPrivateKey(apnsKey), "ES256") : undefined; // 環境の鍵が読めなければ、今まで通りここで止まる
+if (apnsSigner && env.APNS_KEY_ID && env.APNS_TEAM_ID) {
+  const apns = new Apns({ sign: apnsSigner, keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, topic: env.APNS_TOPIC ?? "dev.kitepon.approvalbox" });
+  console.log(`approval-box-server: iPhoneへの通知を送ります（key ${env.APNS_KEY_ID}${apnsItem ? "、署名は認証モジュール" : ""}）`);
   apnsSend = apns.send;
 }
 // App Storeの購入の照合。商品IDが無ければ受け付けない。本番の購入にはアプリのApple ID（数字）が要る。
 const appStoreProducts = (env.APPSTORE_PRODUCT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 // 契約の状態をAppleのサーバーから読む鍵（App Store Connectの In-App Purchase のキー）。3つ揃わなければ従来どおり、署名付きの取引の値で決める。
 const appStoreApi = { issuerId: (env.APPSTORE_ISSUER_ID ?? "").trim(), keyId: (env.APPSTORE_KEY_ID ?? "").trim(), privateKey: secretValue("APPSTORE_PRIVATE_KEY").replace(/\\n/g, "\n") };
-const appStoreApiOn = !!appStoreApi.issuerId && !!appStoreApi.keyId && !!appStoreApi.privateKey;
+const appStoreItem = moduleItem("AUTH_ITEM_APPSTORE", "appstore");
+const appStoreSigner: Signer | undefined = appStoreItem ? moduleSigner(authSocket, appStoreItem) : appStoreApi.privateKey ? keySigner(appStoreApi.privateKey, "ES256") : undefined;
+const appStoreApiOn = !!appStoreApi.issuerId && !!appStoreApi.keyId && !!appStoreSigner;
 if (appStoreProducts.length) console.log(appStoreApiOn ? `approval-box-server: App Storeの契約の状態をAppleから読みます（key ${appStoreApi.keyId}）` : "approval-box-server: App Store Server APIの鍵（APPSTORE_ISSUER_ID・APPSTORE_KEY_ID・APPSTORE_PRIVATE_KEY）が揃っていません。App Storeの契約は署名付きの取引の値だけで決めます。");
 const appStore = appStoreProducts.length ? new AppStore(db, accounts, {
-  ...(appStoreApiOn ? { api: appStoreApi } : {}),
+  ...(appStoreApiOn ? { api: { issuerId: appStoreApi.issuerId, keyId: appStoreApi.keyId, sign: appStoreSigner! } } : {}),
   bundleId: env.APPSTORE_BUNDLE_ID || "dev.kitepon.approvalbox", // compose は未設定を空文字で渡す
   ...(env.APPSTORE_APP_APPLE_ID ? { appAppleId: Number(env.APPSTORE_APP_APPLE_ID) } : {}),
   productIds: appStoreProducts,
@@ -116,16 +126,19 @@ const playProducts = (env.PLAY_PRODUCT_IDS ?? "").split(",").map((s) => s.trim()
 // 鍵は保管庫の項目の2つの欄（client_email・private_key）から別々に受ける。PEMの改行が \n の文字で届いても読めるようにする。
 const playClientEmail = (env.PLAY_CLIENT_EMAIL ?? "").trim();
 const playPrivateKey = secretValue("PLAY_PRIVATE_KEY").replace(/\\n/g, "\n");
-const playServiceAccount = playClientEmail && playPrivateKey ? { client_email: playClientEmail, private_key: playPrivateKey } : undefined;
+const playServiceAccount = playClientEmail && playPrivateKey ? { client_email: playClientEmail, private_key: playPrivateKey } : undefined; // ライブラリ（0.22.4）へ渡す生の鍵の形
+const playItem = moduleItem("AUTH_ITEM_PLAY", "play");
+const playSigner: Signer | undefined = playItem ? moduleSigner(authSocket, playItem) : playPrivateKey ? keySigner(playPrivateKey, "RS256") : undefined;
+const playSigning = playClientEmail && playSigner ? { client_email: playClientEmail, sign: playSigner } : undefined;
 const playPushAudience = (env.PLAY_PUSH_AUDIENCE ?? "").trim();
 const playPushServiceAccount = (env.PLAY_PUSH_SERVICE_ACCOUNT ?? "").trim();
-const play = billing === "store" && playProducts.length && playServiceAccount && playPushAudience && playPushServiceAccount
-  ? new Play(db, accounts, { packageName: env.PLAY_PACKAGE_NAME?.trim() || "dev.kitepon.approvalbox", productIds: playProducts, serviceAccount: playServiceAccount, pushAudience: playPushAudience, pushServiceAccount: playPushServiceAccount })
+const play = billing === "store" && playProducts.length && playSigning && playPushAudience && playPushServiceAccount
+  ? new Play(db, accounts, { packageName: env.PLAY_PACKAGE_NAME?.trim() || "dev.kitepon.approvalbox", productIds: playProducts, serviceAccount: playSigning, pushAudience: playPushAudience, pushServiceAccount: playPushServiceAccount })
   : undefined;
 if (play) console.log("approval-box-server: Google Playでの契約を受け付けます");
 // Androidへの通知（FCM）。Firebaseのプロジェクトと、Google Playと同じサービスアカウントの鍵が揃った時だけ送る。
 const fcmProject = (env.FCM_PROJECT_ID ?? "").trim();
-const fcm = fcmProject && playServiceAccount ? new Fcm({ projectId: fcmProject, serviceAccount: playServiceAccount }) : undefined;
+const fcm = fcmProject && playSigning ? new Fcm({ projectId: fcmProject, serviceAccount: playSigning }) : undefined;
 if (fcm) console.log(`approval-box-server: Androidへの通知を送ります（project ${fcmProject}）`);
 if (apnsSend || fcm) new Notifier(db, events, { ...(apnsSend ? { apns: apnsSend } : {}), ...(fcm ? { fcm: fcm.send } : {}) });
 // 答えを call-bridge の通話で届ける接続（GrokBotなど）。ヘッダーのファイル（Authorization など）が読めなければ使わない。
@@ -179,9 +192,11 @@ if (lbMissing.length === 3) {
         const apple = env.LB_WEB_APPLE_SERVICES_ID && env.LB_WEB_APPLE_TEAM_ID && env.LB_WEB_APPLE_KEY_ID && appleKey ? { servicesId: env.LB_WEB_APPLE_SERVICES_ID.trim(), teamId: env.LB_WEB_APPLE_TEAM_ID.trim(), keyId: env.LB_WEB_APPLE_KEY_ID.trim(), privateKey: appleKey } : undefined;
         return google || apple ? { webSignIn: { ...(google ? { google } : {}), ...(apple ? { apple } : {}) } } : {};
       })(),
-      ...(appStoreApiOn ? { apple: { bundleId: env.APPSTORE_BUNDLE_ID || "dev.kitepon.approvalbox", issuerId: appStoreApi.issuerId, keyId: appStoreApi.keyId, privateKey: appStoreApi.privateKey } } : {}),
+      ...(appStoreApiOn && appStoreApi.privateKey ? { apple: { bundleId: env.APPSTORE_BUNDLE_ID || "dev.kitepon.approvalbox", issuerId: appStoreApi.issuerId, keyId: appStoreApi.keyId, privateKey: appStoreApi.privateKey } } : {}),
       ...(playServiceAccount ? { google: { packageName: env.PLAY_PACKAGE_NAME?.trim() || "dev.kitepon.approvalbox", serviceAccount: playServiceAccount } } : {}),
     });
+    // 鍵が認証モジュールだけにある時、ライブラリ（0.22.4）には生の鍵が無いので、ライブラリ自身のストア照会は置かない（s01b で形ごと外す）。
+    if ((appStoreApiOn && !appStoreApi.privateKey) || (playSigning && !playServiceAccount)) console.log("approval-box-server: ストアの鍵は認証モジュールだけにあるので、ライブラリのストア照会は使いません");
   } catch (error) {
     console.error(`approval-box-server: ライブラリのログインは使いません（設定が正しくありません: ${error instanceof Error ? error.message : "不明"}）`); // ライブラリの文は設定の名前だけで、値を含まない
   }
@@ -231,9 +246,12 @@ if (library && env.PC_OFFER?.trim() !== "off") {
 const appLinks = parseAppLinks(env.AB_ANDROID_APP_LINKS, env.AB_APPLE_APP_IDS);
 for (const problem of appLinks.problems) console.error(`approval-box-server: アプリのリンクの設定の形が違うので外しました（${problem}）`);
 const diagnosticsAdminToken = env.DIAGNOSTICS_ADMIN_KEY_FILE ? readFileSync(env.DIAGNOSTICS_ADMIN_KEY_FILE,"utf8").trim() : env.DIAGNOSTICS_ADMIN_KEY;
+// 管理の鍵の SHA-256（16進）。鍵そのものをサーバーに置かずに照合する。
+const diagnosticsAdminTokenSha256 = (env.DIAGNOSTICS_ADMIN_KEY_SHA256 ?? "").trim().toLowerCase() || undefined;
+if (diagnosticsAdminTokenSha256 && !/^[0-9a-f]{64}$/.test(diagnosticsAdminTokenSha256)) console.error("approval-box-server: DIAGNOSTICS_ADMIN_KEY_SHA256 は16進64文字ではないので、管理の鍵の照合には使いません");
 // 停止の合図。開いたままの更新の知らせ（SSE）を正しく閉じてから終える。
 const shutdown = new AbortController();
-const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) }, ...(library ? { library } : {}), ...(peerChannel ? { peerChannel: peerChannel.part } : {}), appLinks: appLinks.links, ...(keyholes ? { keyholes } : {}) }, { staticHandler });
+const app = createApp({ shutdown: shutdown.signal, diagnosticsAdminToken, ...(diagnosticsAdminTokenSha256 ? { diagnosticsAdminTokenSha256 } : {}), db, accounts, decisions, events, publicUrl, attachments, appleAudiences, googleAudiences, webLogin, ...(appStore ? { appStore } : {}), ...(play ? { play } : {}), remoteMcp: { attachments, ...(callBridgeConnections ? { callBridgeConnections } : {}) }, ...(library ? { library } : {}), ...(peerChannel ? { peerChannel: peerChannel.part } : {}), appLinks: appLinks.links, ...(keyholes ? { keyholes } : {}) }, { staticHandler });
 
 setInterval(() => {
   new Diagnostics(db).prune();
