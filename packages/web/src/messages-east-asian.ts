@@ -210,7 +210,7 @@ export const ko: Record<MessageKey, string> = {
   "同じアカウントの iPhone の決裁箱でこの QR を読んでください": "같은 계정의 iPhone Approval Box 앱에서 이 QR 코드를 읽어 주세요",
   "Google か Apple でログインすると QR が出ます。同じアカウントの iPhone の決裁箱でその QR を読むと、このブラウザが使えるようになります。": "Google 또는 Apple로 로그인하면 QR 코드가 표시됩니다. 같은 계정의 iPhone Approval Box 앱에서 그 QR 코드를 읽으면 이 브라우저를 사용할 수 있습니다.",
   "Googleでログイン": "Google로 로그인",
-  "この接続は、同じアカウントの iPhone の決裁箱で承認してください。ブラウザでは承認できません。": "이 연결은 같은 계정의 iPhone Approval Box 앱에서 승인해 주세요. 브라우저에서는 승인할 수 없습니다.",
+  "この接続は、同じアカウントの iPhone・iPad・Mac・Android の決裁箱アプリで承認してください。ブラウザでは承認できません。": "이 연결은 같은 계정의 iPhone, iPad, Mac 또는 Android Approval Box 앱에서 승인해 주세요. 브라우저에서는 승인할 수 없습니다.",
   "この申請の中身はサーバーから消えました。この端末の履歴にもありません。": "이 요청의 내용은 서버에서 삭제되었습니다. 이 기기의 기록에도 없습니다.",
 };
 export const zhHans: Record<MessageKey, string> = {
@@ -424,7 +424,7 @@ export const zhHans: Record<MessageKey, string> = {
   "同じアカウントの iPhone の決裁箱でこの QR を読んでください": "请用同一账户的 iPhone 上的 Approval Box 扫描此二维码",
   "Google か Apple でログインすると QR が出ます。同じアカウントの iPhone の決裁箱でその QR を読むと、このブラウザが使えるようになります。": "使用 Google 或 Apple 登录后会显示二维码。用同一账户的 iPhone 上的 Approval Box 扫描该二维码后，即可使用此浏览器。",
   "Googleでログイン": "使用 Google 登录",
-  "この接続は、同じアカウントの iPhone の決裁箱で承認してください。ブラウザでは承認できません。": "请在同一账户的 iPhone 上的 Approval Box 中批准此连接。无法在浏览器中批准。",
+  "この接続は、同じアカウントの iPhone・iPad・Mac・Android の決裁箱アプリで承認してください。ブラウザでは承認できません。": "请在同一账户的 iPhone、iPad、Mac 或 Android 上的 Approval Box 应用中批准此连接。无法在浏览器中批准。",
   "この申請の中身はサーバーから消えました。この端末の履歴にもありません。": "此请求的内容已从服务器删除，此设备的记录中也没有。",
 };
 export const zhHant: Record<MessageKey, string> = {
@@ -638,6 +638,6 @@ export const zhHant: Record<MessageKey, string> = {
   "同じアカウントの iPhone の決裁箱でこの QR を読んでください": "請用同一帳號的 iPhone 上的 Approval Box 掃描此 QR 碼",
   "Google か Apple でログインすると QR が出ます。同じアカウントの iPhone の決裁箱でその QR を読むと、このブラウザが使えるようになります。": "使用 Google 或 Apple 登入後會顯示 QR 碼。用同一帳號的 iPhone 上的 Approval Box 掃描該 QR 碼後，即可使用此瀏覽器。",
   "Googleでログイン": "使用 Google 登入",
-  "この接続は、同じアカウントの iPhone の決裁箱で承認してください。ブラウザでは承認できません。": "請在同一帳號的 iPhone 上的 Approval Box 中核准此連線。無法在瀏覽器中核准。",
+  "この接続は、同じアカウントの iPhone・iPad・Mac・Android の決裁箱アプリで承認してください。ブラウザでは承認できません。": "請在同一帳號的 iPhone、iPad、Mac 或 Android 上的 Approval Box 應用程式中核准此連線。無法在瀏覽器中核准。",
   "この申請の中身はサーバーから消えました。この端末の履歴にもありません。": "此請求的內容已從伺服器刪除，此裝置的紀錄中也沒有。",
 };

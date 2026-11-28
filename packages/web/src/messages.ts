@@ -124,7 +124,7 @@ export const en = {
   "同じアカウントの iPhone の決裁箱でこの QR を読んでください": "Scan this QR code with Approval Box on the iPhone of the same account",
   "Google か Apple でログインすると QR が出ます。同じアカウントの iPhone の決裁箱でその QR を読むと、このブラウザが使えるようになります。": "Sign in with Google or Apple to get a QR code. Scan it with Approval Box on the iPhone of the same account, and this browser is ready to use.",
   "Googleでログイン": "Sign in with Google",
-  "この接続は、同じアカウントの iPhone の決裁箱で承認してください。ブラウザでは承認できません。": "Approve this connection in Approval Box on the iPhone of the same account. It can't be approved in a browser.",
+  "この接続は、同じアカウントの iPhone・iPad・Mac・Android の決裁箱アプリで承認してください。ブラウザでは承認できません。": "Approve this connection in the Approval Box app on an iPhone, iPad, Mac or Android device of the same account. It can't be approved in a browser.",
   "この申請の中身はサーバーから消えました。この端末の履歴にもありません。": "The content of this request has been removed from the server, and this device's history has no copy of it.",
 } as const;
 export type MessageKey = keyof typeof en;

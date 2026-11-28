@@ -141,7 +141,7 @@ export function Connections() {
 }
 
 /** Only a parent device approves an AI or app connection (Owner 11/24; the server answers a child 403 parent_required). This browser is a child, so it says where to approve instead. */
-const PARENT_ONLY = () => t("この接続は、同じアカウントの iPhone の決裁箱で承認してください。ブラウザでは承認できません。");
+const PARENT_ONLY = () => t("この接続は、同じアカウントの iPhone・iPad・Mac・Android の決裁箱アプリで承認してください。ブラウザでは承認できません。");
 
 export function Pair({ code }: { code: string }) {
   const child = account()?.role !== "parent";

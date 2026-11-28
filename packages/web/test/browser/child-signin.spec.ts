@@ -76,7 +76,7 @@ test("/pair as a child: says plainly to approve on the iPhone app, offers no All
   const s = await stubServer(page);
   await signIn(page, s, "/pair?c=ABCD2345");
   await expect(page.getByRole("heading", { name: "Allow an app to connect" })).toBeVisible();
-  await expect(page.getByText("Approve this connection in Approval Box on the iPhone of the same account. It can't be approved in a browser.")).toBeVisible();
+  await expect(page.getByText("Approve this connection in the Approval Box app on an iPhone, iPad, Mac or Android device of the same account. It can't be approved in a browser.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Allow", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Don't allow" }).click();
   await expect.poll(() => s.calls.some((c) => c.path === "/v1/pairing/p1/reject")).toBe(true);
