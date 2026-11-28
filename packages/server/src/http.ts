@@ -227,7 +227,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   if (keyholes) {
     const allow = rateLimiter(30, 60_000);
     app.all("/v1/keys/:route{start|accept|admit|others|leave|me}", async (c) => {
-      if (!allow(clientKey(c))) throw new ApiError("rate_limited", "回数が多すぎます。少し待ってから試してください。");
+      if (!allow(clientKey(c))) throw new ApiError("rate_limited", "回数が多すぎます。少し待ってから試してください。", {}, 60);
       return keyholes.handle(keyholeRequest(c, await takeBody(c, KEYS_BODY_MAX, "本文は16KBまでです。")));
     });
   }
@@ -328,7 +328,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     // The new form: a request signed with the device's library key -> the entry is the account. No paid gate: the paid check is on each device.
     // Calls per source and the body cap come before the signature check, so strangers cannot fill the used-number records.
     if (keyholes && c.req.header(SIGNED_HEADER) !== undefined) {
-      if (!allowSigned(clientKey(c))) throw new ApiError("rate_limited", "回数が多すぎます。少し待ってから試してください。");
+      if (!allowSigned(clientKey(c))) throw new ApiError("rate_limited", "回数が多すぎます。少し待ってから試してください。", {}, 60);
       const upload = c.req.method === "POST" && SIGNED_UPLOAD.test(c.req.path);
       const request = keyholeRequest(c, await takeBody(c, upload ? MAX_FILE_BYTES : KEYS_BODY_MAX, upload ? "1つのファイルは20MBまでです。" : "本文は16KBまでです。"));
       let who: { entry: string; key: string; role: "parent" | "child" };

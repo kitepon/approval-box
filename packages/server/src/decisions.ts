@@ -292,8 +292,8 @@ export class Decisions {
       id, now(), kind, by, note ?? null, fields ? JSON.stringify(fields) : null);
   }
 
-  private changed(row: Pick<Stored, "id" | "user_id" | "version">, change?: string) {
-    this.events.publish(row.user_id, "decision.updated", { decision_id: row.id, version: row.version, ...(change ? { change } : {}) });
+  private changed(row: Pick<Stored, "id" | "user_id" | "version">, change?: string, extra: Record<string, string> = {}) {
+    this.events.publish(row.user_id, "decision.updated", { decision_id: row.id, version: row.version, ...(change ? { change } : {}), ...extra });
   }
 
   // ---- 利用者（アプリ・Web版）----
@@ -426,7 +426,9 @@ export class Decisions {
         run(this.db, "delete from decision_stored where decision_id = ?", id);
         // A saved answer of a write on this request replays its content: it goes too.
         run(this.db, "delete from idempotency where user_id = ? and instr(route, ?) > 0", user_id, `/decisions/${id}/`);
-        this.changed(this.row(id)!, "content_removed");
+        // d01: the delivery state (metadata, no content) rides along, so a device that missed a delivery change does not keep showing "waiting".
+        const tomb = this.row(id)!;
+        this.changed(tomb, "content_removed", tomb.delivery ? { delivery: tomb.delivery } : {});
         purged++;
       });
     }
