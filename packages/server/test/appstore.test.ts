@@ -11,6 +11,7 @@ import { openDb, run } from "../src/db.ts";
 import { Decisions } from "../src/decisions.ts";
 import { EventHub } from "../src/events.ts";
 import { createApp } from "../src/http.ts";
+import { keySigner } from "../src/auth-module.ts";
 
 /** Appleと同じ形の証明書の鎖（ルート → 中間 → 署名）を作る。中間と署名にはAppleの印（OID）を付ける。 */
 function appleLikeChain() {
@@ -53,7 +54,7 @@ function fakeAppleApi(sign: (payload: Record<string, unknown>) => string) {
       ...(answer.renewal ? { signedRenewalInfo: sign({ environment: "Sandbox", signedDate: Date.now(), ...answer.renewal }) } : {}) };
     return Response.json({ environment: "Sandbox", bundleId: BUNDLE, appAppleId: 6818175213, data: [{ subscriptionGroupIdentifier: "g1", lastTransactions: [item] }] });
   }) as unknown as typeof globalThis.fetch;
-  return { calls, answer, publicKey, api: { issuerId: "issuer-1", keyId: "KEY1", privateKey: privateKey.export({ type: "pkcs8", format: "pem" }).toString(), fetch } };
+  return { calls, answer, publicKey, api: { issuerId: "issuer-1", keyId: "KEY1", sign: keySigner(privateKey.export({ type: "pkcs8", format: "pem" }).toString(), "ES256"), fetch } };
 }
 
 function setup(withApi = false) {

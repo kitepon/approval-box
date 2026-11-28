@@ -1,10 +1,12 @@
 // 答えに付ける添付（画像・書類）。api.md「添付（v0.23）」。
 // 利用者は1ファイルずつ上げ（下書き）、answer の attachment_ids で答えに結ぶ。結ばれた添付は決裁と一緒に消える。
 // 中身はデータの置き場の attachments/<id> に置き、表 attachments が持ち主・決裁・形式を持つ。表に行の無いファイルは gc で消す。
+// The file and the name are sealed (seal.ts, contexts "<id>|file" and "<id>|name") under the row's sealed_set; the file on disk is the lbd1 record.
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Db, all, get, run, tx } from "./db.ts";
+import { vaultOf } from "./seal.ts";
 import { ApiError } from "./errors.ts";
 import { now } from "./ids.ts";
 
@@ -18,7 +20,13 @@ const PART_TTL_MS = 3600_000;
 export type Kind = "image" | "document";
 export type Attachment = { id: string; name: string; content_type: string; kind: Kind; size: number; sha256: string; created_at: string };
 
-type Row = Attachment & { purpose: string; user_id: string; decision_id: string; idem_key: string | null; position: number | null };
+type Row = Omit<Attachment, "name"> & { name: string | Uint8Array; purpose: string; user_id: string; decision_id: string; idem_key: string | null; position: number | null; sealed_set: string | null };
+
+/** The API form of a row (its name opened). */
+export async function attachmentMeta(db: Db, row: Pick<Row, "id" | "name" | "content_type" | "kind" | "size" | "sha256" | "created_at" | "sealed_set"> & { user_id: string }): Promise<Attachment> {
+  const name = (await vaultOf(db).open(row.sealed_set ?? row.user_id, `${row.id}|name`, row.name)) ?? "";
+  return { id: row.id, name, content_type: row.content_type, kind: row.kind, size: row.size, sha256: row.sha256, created_at: row.created_at };
+}
 
 const OOXML = "application/vnd.openxmlformats-officedocument.";
 /** 許す形式と、中身の先頭がその形式かどうかの確かめ。 */
@@ -96,8 +104,15 @@ export class Attachments {
     mkdirSync(dir, { recursive: true });
   }
 
-  static toApi(row: Row): Attachment {
-    return { id: row.id, name: row.name, content_type: row.content_type, kind: row.kind, size: row.size, sha256: row.sha256, created_at: row.created_at };
+  private meta(row: Row) { return attachmentMeta(this.db, row); }
+
+  /** Seals the file and its name, then writes the record to <id>.part (renamed by the caller once the row is in). */
+  private async sealFile(set: string, id: string, name: string, data: Buffer) {
+    const vault = vaultOf(this.db);
+    const [record, sealedName] = await Promise.all([vault.sealBytes(set, `${id}|file`, data), vault.seal(set, `${id}|name`, name)]);
+    const part = join(this.dir, `${id}.part`);
+    writeFileSync(part, record, { mode: 0o600 });
+    return { part, sealedName };
   }
 
   userFileIds(userId: string): string[] {
@@ -117,20 +132,20 @@ export class Attachments {
   }
 
   private open(userId: string, decisionId: string) {
-    const decision = get<{ user_id: string; status: string }>(this.db, "select user_id, status from decisions where id = ?", decisionId);
+    const decision = get<{ user_id: string; status: string; sealed_set: string | null }>(this.db, "select user_id, status, sealed_set from decisions where id = ?", decisionId);
     if (!decision || decision.user_id !== userId) throw new ApiError("not_found", "その申請は見つかりません。");
     return decision;
   }
 
   /** 下書きを1つ上げる。同じ冪等キーで同じ中身なら、前の結果を返す。 */
-  upload(userId: string, decisionId: string, input: { name: string; contentType: string; idempotencyKey: string; data: Buffer }): Attachment {
+  async upload(userId: string, decisionId: string, input: { name: string; contentType: string; idempotencyKey: string; data: Buffer }): Promise<Attachment> {
     if (input.data.length > MAX_FILE_BYTES) throw new ApiError("too_large", "1つのファイルは20MBまでです。");
     const decision = this.open(userId, decisionId);
     const sha256 = createHash("sha256").update(input.data).digest("hex");
     const previous = get<Row>(this.db, "select * from attachments where user_id = ? and idem_key = ?", userId, input.idempotencyKey);
     if (previous) {
       if (previous.decision_id !== decisionId || previous.sha256 !== sha256) throw new ApiError("validation_failed", "同じIdempotency-Keyが別のファイルに使われています。");
-      return Attachments.toApi(previous);
+      return this.meta(previous);
     }
     if (decision.status !== "pending" && decision.status !== "held") throw new ApiError("conflict", decision.status === "answered" ? "この申請にはすでに答えが出ています。" : "この申請はAIが取り下げました。");
     const type = TYPES[input.contentType];
@@ -138,21 +153,21 @@ export class Attachments {
     if (!input.data.length) throw new ApiError("validation_failed", "ファイルが空です。");
     if (!type.sniff(input.data)) throw new ApiError("unsupported_type", "ファイルの中身が形式と合いません。");
     const id = `att_${randomBytes(16).toString("base64url")}`;
-    const part = join(this.dir, `${id}.part`);
-    writeFileSync(part, input.data, { mode: 0o600 });
+    const set = decision.sealed_set ?? userId;
+    const { part, sealedName } = await this.sealFile(set, id, cleanName(input.name), input.data);
     try {
       const row = tx(this.db, () => {
         const staged = get<{ n: number }>(this.db, "select count(*) n from attachments where decision_id = ? and position is null", decisionId)!.n;
         if (staged >= MAX_PER_ANSWER) throw new ApiError("too_large", `1つの答えに付けられるのは${MAX_PER_ANSWER}ファイルまでです。`);
         const used = get<{ n: number | null }>(this.db, "select (select coalesce(sum(size),0) from attachments where user_id = ?) + (select coalesce(sum(size),0) from request_uploads where user_id = ?) n", userId, userId)!.n ?? 0;
         if (used + input.data.length > MAX_ACCOUNT_BYTES) throw new ApiError("too_large", "添付の保存がアカウントの上限（1GB）に達しました。設定の「履歴を削除」で古い履歴を消すと空きます。");
-        run(this.db, `insert into attachments (id, user_id, decision_id, name, content_type, kind, size, sha256, idem_key, position, created_at)
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?)`,
-          id, userId, decisionId, cleanName(input.name), input.contentType, type.kind, input.data.length, sha256, input.idempotencyKey, now());
+        run(this.db, `insert into attachments (id, user_id, decision_id, name, content_type, kind, size, sha256, idem_key, position, created_at, sealed_set)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?)`,
+          id, userId, decisionId, sealedName, input.contentType, type.kind, input.data.length, sha256, input.idempotencyKey, now(), set);
         return get<Row>(this.db, "select * from attachments where id = ?", id)!;
       });
       renameSync(part, join(this.dir, id));
-      return Attachments.toApi(row);
+      return await this.meta(row);
     } catch (error) {
       try { unlinkSync(part); } catch { /* 無ければよい */ }
       throw error;
@@ -161,27 +176,30 @@ export class Attachments {
 
 
   /** 申請前の画像。通知/申請は作らず接続にだけ紐付ける。原本を先に確定する。 */
-  uploadRequest(conn: { id: string; user_id: string }, input: { name: string; contentType: string; data: Buffer }): Attachment {
+  async uploadRequest(conn: { id: string; user_id: string }, input: { name: string; contentType: string; data: Buffer }): Promise<Attachment> {
     const type = TYPES[input.contentType];
     if (!type || type.kind !== "image" || !type.sniff(input.data)) throw new ApiError("unsupported_type", "申請に付けられるのはJPEG・PNG・HEIC・GIF・WebP画像です。中身と形式を確かめてください。");
     if (!input.data.length) throw new ApiError("validation_failed", "画像が空です。");
     if (input.data.length > MAX_FILE_BYTES) throw new ApiError("too_large", "1つの画像は20MBまでです。");
     const sha = createHash("sha256").update(input.data).digest("hex");
     const name = cleanName(input.name);
-    const prior = get<Attachment>(this.db, "select * from request_uploads where connection_id = ? and sha256 = ? and name = ?", conn.id, sha, name);
-    if (prior) return Attachments.toApi(prior as Row);
+    // The same image under the same name is reused; names are sealed, so they are compared opened.
+    for (const prior of all<Row>(this.db, "select *, '' decision_id from request_uploads where connection_id = ? and sha256 = ?", conn.id, sha)) {
+      const meta = await this.meta(prior);
+      if (meta.name === name) return meta;
+    }
     const id = `att_${randomBytes(16).toString("base64url")}`;
-    const part = join(this.dir, `${id}.part`);
-    writeFileSync(part, input.data, { mode: 0o600 });
+    const { part, sealedName } = await this.sealFile(conn.user_id, id, name, input.data);
     try {
-      return tx(this.db, () => {
+      const row = tx(this.db, () => {
         const used = get<{ n: number }>(this.db, "select (select coalesce(sum(size),0) from attachments where user_id=?) + (select coalesce(sum(size),0) from request_uploads where user_id=?) n", conn.user_id, conn.user_id)!.n;
         if (used + input.data.length > MAX_ACCOUNT_BYTES) throw new ApiError("too_large", "添付の保存がアカウントの上限（1GB）に達しました。");
         // DB公開前に原本を確定する。失敗時の孤立原本はGC対象。
         renameSync(part, join(this.dir, id));
-        run(this.db, "insert into request_uploads (id,user_id,connection_id,name,content_type,kind,size,sha256,created_at) values (?,?,?,?,?,'image',?,?,?)", id,conn.user_id,conn.id,name,input.contentType,input.data.length,sha,now());
-        return Attachments.toApi(get<Row>(this.db, "select * from request_uploads where id=?", id)!);
+        run(this.db, "insert into request_uploads (id,user_id,connection_id,name,content_type,kind,size,sha256,created_at,sealed_set) values (?,?,?,?,?,'image',?,?,?,?)", id,conn.user_id,conn.id,sealedName,input.contentType,input.data.length,sha,now(),conn.user_id);
+        return get<Row>(this.db, "select *, '' decision_id from request_uploads where id=?", id)!;
       });
+      return await this.meta(row);
     } catch (error) {
       try { unlinkSync(part); } catch {}
       try { unlinkSync(join(this.dir, id)); } catch {}
@@ -189,9 +207,9 @@ export class Attachments {
     }
   }
 
-  staged(userId: string, decisionId: string) {
+  async staged(userId: string, decisionId: string) {
     this.open(userId, decisionId);
-    return { items: all<Row>(this.db, "select * from attachments where decision_id = ? and position is null order by created_at, id", decisionId).map(Attachments.toApi) };
+    return { items: await Promise.all(all<Row>(this.db, "select * from attachments where decision_id = ? and position is null order by created_at, id", decisionId).map((r) => this.meta(r))) };
   }
 
   removeStaged(userId: string, decisionId: string, id: string) {
@@ -215,10 +233,13 @@ export class Attachments {
     return this.read(get<Row>(this.db, "select * from attachments where id = ? and decision_id = ? and position is not null", id, decisionId));
   }
 
-  private read(row: Row | undefined) {
+  private async read(row: Row | undefined) {
     const file = row ? join(this.dir, row.id) : "";
     if (!row || !existsSync(file)) throw new ApiError("not_found", "その添付は見つかりません。");
-    return { meta: Attachments.toApi(row), data: readFileSync(file) };
+    const stored = readFileSync(file);
+    // A row from before the migration (sealed_set null) still has its plain file until sealExisting has run.
+    const data = row.sealed_set === null ? stored : Buffer.from(await vaultOf(this.db).openBytes(row.sealed_set, `${row.id}|file`, stored));
+    return { meta: await this.meta(row), data };
   }
 
   /** 結ばれないまま24時間たった下書きを消し、表に行の無いファイルを消す。 */

@@ -230,7 +230,7 @@ test("call-bridge一時切断の再試行期限は回答時刻から10分、再�
   const id = (await tool(client, "request_decision", { ...args, check_token: first.structuredContent!.check_token })).structuredContent!.decision_id as string;
   const version = (await ctx.call("GET", `/v1/decisions/${id}`, { token: ctx.session })).json.version;
   await ctx.call("POST", `/v1/decisions/${id}/answer`, { token: ctx.session, body: { option_id: "biz", version } });
-  ctx.db.prepare("update decisions set answer=json_set(answer,'$.answered_at','2000-01-01T00:00:00.000Z') where id=?").run(id);
+  ctx.db.prepare("update decisions set decided_at='2000-01-01T00:00:00.000Z' where id=?").run(id); // the answer is sealed; its time is decided_at
   let attempts = 0;
   const send = async (): Promise<SendResult> => { attempts++; return { state: "retry", retry_after_seconds: 30 }; };
   await new CallBridgeDeliverer(ctx.db, ctx.decisions, ctx.events, send, ctx.callBridgeConnections).sync();

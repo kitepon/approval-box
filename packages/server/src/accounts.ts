@@ -1,6 +1,7 @@
 import type { Locale } from "./locales.ts";
 import { createHash } from "node:crypto";
-import { type Db, all, get, run, tx } from "./db.ts";
+import { type Db, afterCommit, all, get, run, tx } from "./db.ts";
+import { SEALED_COLUMNS, vaultOf } from "./seal.ts";
 import { ApiError } from "./errors.ts";
 import type { EventHub } from "./events.ts";
 import { hash, normalizePairingCode, now, pairingCode, secret, uuid } from "./ids.ts";
@@ -168,7 +169,10 @@ export class Accounts {
   }
 
   deleteUser(userId: string) {
+    // The account's data keys go with it (after the commit): its own set and any set its rows were sealed under (rows moved from other entries).
+    const sets = [userId, ...Object.keys(SEALED_COLUMNS).flatMap((table) => all<{ s: string }>(this.db, `select distinct sealed_set s from ${table} where user_id = ? and sealed_set is not null`, userId).map((r) => r.s))];
     run(this.db, "delete from users where id = ?", userId);
+    afterCommit(this.db, () => { void vaultOf(this.db).forget(sets).catch(() => console.error("approval-box-server: forget_data_set_failed")); });
   }
 
   /** entitlements は共有ライブラリの通行証で来た時だけ（契約はそこから決める）。local: a signed request (new form): no plan, store or expiry, no payment check. */

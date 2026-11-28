@@ -111,7 +111,7 @@ test("lb_kv: 期限切れは読まず、掃除で消え、同じ鍵は上書き�
     assert.equal(await storage.get("slot:b"), "y");
     await storage.delete("slot:b");
     assert.equal(await storage.get("slot:b"), undefined);
-    assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 18);
+    assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 19);
     // take: 1回目だけ値が返り、行は消える。期限切れは返さない（行は消す）
     await storage.put("once:c", "z", 1000);
     assert.deepEqual(await Promise.all([storage.take("once:c"), storage.take("once:c")]), ["z", undefined]);
@@ -340,12 +340,12 @@ test("onNone: 契約が無いと分かったら、待っている申請（セッ
   insertDecision(x.db, k, "K-DONE", { status: "answered" });
   insertDecision(x.db, k, "K-TEST", { test: 1 });
   await x.call("GET", "/v1/me", { token: pass });
-  const status = (id: string) => get<{ status: string; cancel_reason: string | null; version: number }>(x.db, "select status, cancel_reason, version from decisions where id = ?", id)!;
-  for (const id of ["K-PEND", "K-HELD"]) assert.deepEqual({ ...status(id) }, { status: "cancelled", cancel_reason: "subscription_expired", version: 2 });
-  assert.equal(status("K-DONE").status, "answered");
-  assert.equal(status("K-TEST").status, "pending");
+  await x.decisions.endForNoContract(k); // onNone starts the cancels without waiting (they seal the reason); this pass waits and finds nothing left
+  const status = async (id: string) => { const d = await x.decisions.view(x.decisions.forUser(k, id)); return { status: d.status, cancel_reason: d.cancel_reason ?? null, version: d.version, notes: d.history.filter((h) => h.kind === "cancelled").map((h) => h.note) }; };
+  for (const id of ["K-PEND", "K-HELD"]) assert.deepEqual(await status(id), { status: "cancelled", cancel_reason: "subscription_expired", version: 2, notes: ["subscription_expired"] });
+  assert.equal((await status("K-DONE")).status, "answered");
+  assert.equal((await status("K-TEST")).status, "pending");
   assert.equal(get<{ n: number }>(x.db, "select count(*) n from events where user_id = ? and type = 'decision.updated' and data like '%cancelled%'", k)?.n, 2);
-  assert.equal(get<{ n: number }>(x.db, "select count(*) n from history where kind = 'cancelled' and note = 'subscription_expired'")?.n, 2);
 });
 
 const LEGACY = [

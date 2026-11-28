@@ -117,10 +117,10 @@ function tools(callBridge: boolean) {
 const VIEWABLE_IMAGES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const TEXT_TYPES = ["text/plain", "text/markdown", "text/csv", "application/json"];
 
-function describe(items: ReturnType<Decisions["listMine"]>): string {
+function describe(items: Awaited<ReturnType<Decisions["listMine"]>>): string {
   if (!items.length) return "この接続から出した申請はありません。";
   return items.map((d) => {
-    return `- ${d.decision_id}「${d.title}」 status=${d.status} version=${d.version}${d.requester ? ` 申請者=${d.requester}` : ""} 作業=${d.session_label}${d.has_answer ? " 答えあり（get_decisionで確認）" : ""}`;
+    return `- ${d.decision_id}「${d.content_removed ? "（中身は削除済み）" : d.title}」 status=${d.status} version=${d.version}${d.requester ? ` 申請者=${d.requester}` : ""} 作業=${d.session_label}${d.has_answer ? " 答えあり（get_decisionで確認）" : ""}`;
   }).join("\n");
 }
 
@@ -141,7 +141,7 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
     try {
       if (name === "list_my_decisions") {
-        const items = decisions.listMine(conn);
+        const items = await decisions.listMine(conn);
         return result(`${describe(items)}\n\n${JSON.stringify({ items })}`, { items });
       }
       if (name === "request_decision") {
@@ -158,7 +158,7 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
         const input = createSchema.parse({ ...rest, ...(requester ? { requester } : {}), client: "other", ...(route ? { route } : {}) });
         accounts.assertCanUse(conn.user_id);
         try {
-          const row = decisions.create(conn, input, { via: "remote" });
+          const row = await decisions.create(conn, input, { via: "remote" });
           const decision = decisions.toAi(row);
           const tail = callBridge
             ? "答えは、利用者が答えた時にApproval Boxからの通話であなたへ届きます。待って呼び直さず、他の作業を続けてください。"
@@ -169,7 +169,7 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
             return result(`${error.message}\n\ncheck_token: ${String(error.extra.check_token)}`, { error: error.code, ...error.extra }, true);
           }
           if (error instanceof ApiError && error.code === "duplicate_suspected") {
-            const existing = (error.extra.existing ?? []) as ReturnType<Decisions["listMine"]>;
+            const existing = (error.extra.existing ?? []) as Awaited<ReturnType<Decisions["listMine"]>>;
             return result(`${error.message}\n既存の申請:\n${describe(existing)}`, { error: error.code, existing }, true);
           }
           throw error;
@@ -177,20 +177,20 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
       }
       if (name === "amend_decision") {
         const body = amendSchema.parse({ version: args.version, note: args.note, changes: args.changes });
-        const decision = decisions.amend(conn, String(args.decision_id), body);
+        const decision = await decisions.amend(conn, String(args.decision_id), body);
         attachments?.gc();
         return result(`直しました: 「${decision.title}」（申請のID: ${decision.decision_id}） version=${decision.version}\n\n${JSON.stringify(decision)}`, decision);
       }
       if (name === "cancel_decision") {
         const reason = z.string().trim().min(1).max(500).parse(args.reason);
-        const decision = decisions.cancel(conn, String(args.decision_id), reason);
+        const decision = await decisions.cancel(conn, String(args.decision_id), reason);
         return result(`取り下げました: 「${decision.title}」（申請のID: ${decision.decision_id}）\n\n${JSON.stringify(decision)}`, decision);
       }
       if (name === "get_decision") {
         const row = decisions.forConnection(conn, String(args.decision_id));
         // 答えを取ったら、自動の配送はもう要らない（二重に届けない）。
         if (row.status === "answered" && row.delivery === "waiting") decisions.markFetched(row);
-        const decision = decisions.aiView(conn, row.id);
+        const decision = await decisions.aiRead(conn, row.id);
         const head = decision.answer_text ? String(decision.answer_text) : `${decision.decision_id}「${decision.title}」 status=${decision.status}（まだ答えはありません）`;
         return result(`${head}\n\n${JSON.stringify(decision)}`, decision);
       }
@@ -201,13 +201,13 @@ function buildServer(conn: Connection, accounts: Accounts, decisions: Decisions,
         const data = Buffer.from(input.data_base64, "base64");
         if (data.toString("base64") !== input.data_base64) throw new ApiError("validation_failed", "画像のbase64が正しくありません。");
         accounts.assertCanUse(conn.user_id);
-        const attachment = attachments.uploadRequest(conn,{name:input.name,contentType:input.content_type,data});
+        const attachment = await attachments.uploadRequest(conn,{name:input.name,contentType:input.content_type,data});
         return result(`画像を下書きに保存しました。request_attachment_idsへ ${attachment.id} を渡してください。申請はまだ作っていません。`,{attachment});
       }
       if (name === "get_attachment") {
         const row = decisions.forConnection(conn, String(args.decision_id));
         if (!attachments) throw new ApiError("not_found", "このサーバーでは添付を使えません。");
-        const { meta, data } = attachments.readForAi(row.id, String(args.attachment_id));
+        const { meta, data } = await attachments.readForAi(row.id, String(args.attachment_id));
         const head = { type: "text" as const, text: `${row.id} の添付: ${meta.name}（${meta.content_type}、${formatBytes(meta.size)}） attachment_id=${meta.id} sha256=${meta.sha256}` };
         const uri = `approval-box://decisions/${row.id}/attachments/${meta.id}`;
         const body = VIEWABLE_IMAGES.includes(meta.content_type)

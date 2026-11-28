@@ -37,7 +37,7 @@ test("DELETE /me removes owned auxiliary data and rejects late writes without ch
   const x = fixture(t), at = new Date().toISOString();
   for (const who of [x.a, x.b]) {
     x.events.publish(who.user, "decision.created", { title: who.user });
-    run(x.db, "insert into idempotency values (?,?,?,?,?,?)", who.user, "key", "POST /v1/decisions", 200, JSON.stringify({ private: who.user }), at);
+    run(x.db, "insert into idempotency (user_id,key,route,status,body,created_at) values (?,?,?,?,?,?)", who.user, "key", "POST /v1/decisions", 200, JSON.stringify({ private: who.user }), at);
     run(x.db, "insert into pairings (id,code,poll_secret_hash,device_name,clients,status,user_id,connection_id,token,created_at,expires_at) values (?,?,?,?,?,'claimed',?,?,?,?,?)", who.user, who.user, "h", "device", "[]", who.user, who.conn.id, "secret", at, at);
     run(x.db, "insert into request_checks values (?,?,?,?,null)", who.user, who.conn.id, at, at);
     run(x.db, "insert into auth_flows (state,provider,nonce,code_challenge,created_at,expires_at,link_user_id) values (?,'apple','nonce','pkce',?,?,?)", who.user, at, at, who.user);
@@ -59,7 +59,7 @@ test("DELETE /me removes owned auxiliary data and rejects late writes without ch
   assert.equal((await x.call("GET", "/v1/me")).status, 401);
   assert.equal((await x.call("GET", "/connector/v1/connection", x.a.conn.token)).status, 401);
   assert.throws(() => x.events.publish(x.a.user, "late", { private: "late" }), /FOREIGN KEY/);
-  assert.throws(() => run(x.db, "insert into idempotency values (?,?,?,?,?,?)", x.a.user, "late", "POST /late", 200, "private", at), /FOREIGN KEY/);
+  assert.throws(() => run(x.db, "insert into idempotency (user_id,key,route,status,body,created_at) values (?,?,?,?,?,?)", x.a.user, "late", "POST /late", 200, "private", at), /FOREIGN KEY/);
 });
 
 test("diagnostics carry no account: no user column or email is stored, and DELETE /me leaves diagnostics unchanged", async t => {
@@ -77,8 +77,8 @@ test("diagnostics carry no account: no user column or email is stored, and DELET
 
 test("DELETE /me file removal failure rolls back account deletion and permits a retry", async t => {
   const x = fixture(t);
-  const a = x.attachments.uploadRequest({ id: x.a.conn.id, user_id: x.a.user }, { name: "a.png", contentType: "image/png", data: PNG });
-  const b = x.attachments.uploadRequest({ id: x.b.conn.id, user_id: x.b.user }, { name: "b.png", contentType: "image/png", data: PNG });
+  const a = await x.attachments.uploadRequest({ id: x.a.conn.id, user_id: x.a.user }, { name: "a.png", contentType: "image/png", data: PNG });
+  const b = await x.attachments.uploadRequest({ id: x.b.conn.id, user_id: x.b.user }, { name: "b.png", contentType: "image/png", data: PNG });
   writeFileSync(join(x.dir, `${a.id}.part`), PNG);
   const mutable = x.attachments as Attachments & { eraseFiles?: (ids: string[]) => void };
   const erase = mutable.eraseFiles;
@@ -105,10 +105,10 @@ test("schema6 migration removes orphan replies and preserves diagnostic groups o
   for (const name of ["events", "idempotency", "pairings", "request_checks", "auth_flows"]) {
     db.exec(`create table legacy_${name} as select * from ${name}; drop table ${name}; alter table legacy_${name} rename to ${name};`);
   }
-  run(db, "insert into idempotency values ('gone','orphan','POST /v1/answer',200,'personal','2000-01-01')");
+  run(db, "insert into idempotency (user_id,key,route,status,body,created_at) values ('gone','orphan','POST /v1/answer',200,'personal','2000-01-01')");
   db.exec("pragma user_version=6"); db.close();
   db = openDb(file);
-  assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 18);
+  assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 19);
   assert.equal(get(db, "select * from idempotency where user_id='gone'"), undefined);
   assert.deepEqual(all(db, "select * from diagnostic_groups"), before);
   db.close(); db = openDb(file);
@@ -163,7 +163,7 @@ test("schema13 migration erases stored emails and user IDs in diagnostics, keepi
   db.exec("pragma user_version=12"); db.close();
   db = openDb(file);
   const cols = (name: string) => all<{ name: string }>(db, `select name from pragma_table_info('${name}')`).map(c => c.name);
-  assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 18);
+  assert.equal(get<{ user_version: number }>(db, "pragma user_version")?.user_version, 19);
   assert.equal(cols("identities").includes("email"), false);
   assert.equal(cols("diagnostics").includes("user_id"), false);
   assert.equal(cols("diagnostic_receipts").includes("user_id"), false);
