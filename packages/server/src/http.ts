@@ -220,13 +220,13 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
     for (const path of LEGACY_ROUTES) app.post(path, () => { throw new ApiError("gone", "この入口はもう使えません。アプリを新しい版にしてください。"); });
   }
 
-  // The library's keyholes (local-form.md): start, accept, others, leave. Mounted ahead of the /v1 device check, since a key in no entry must reach start and accept.
+  // The library's keyholes (local-form.md): start, accept, admit (a parent admits a browser as a child), others, leave, me. Mounted ahead of the /v1 device check, since a key in no entry must reach start and accept.
   const keyholes = services.keyholes;
   // Signed /v1 requests per source (a device's normal traffic; the cheaper checks before the signature).
   const allowSigned = rateLimiter(240, 60_000);
   if (keyholes) {
     const allow = rateLimiter(30, 60_000);
-    app.all("/v1/keys/:route{start|accept|others|leave}", async (c) => {
+    app.all("/v1/keys/:route{start|accept|admit|others|leave|me}", async (c) => {
       if (!allow(clientKey(c))) throw new ApiError("rate_limited", "回数が多すぎます。少し待ってから試してください。");
       return keyholes.handle(keyholeRequest(c, await takeBody(c, KEYS_BODY_MAX, "本文は16KBまでです。")));
     });

@@ -1,6 +1,7 @@
 import { systemMessage, t } from "../i18n.ts";
 import { useEffect, useState } from "preact/hooks";
-import { api } from "../api";
+import { api, ApiError } from "../api";
+import { account } from "../device.ts";
 import { CopyLine } from "../copyline";
 import { showAlert } from "../dialog";
 import { INSTALL } from "../login";
@@ -139,7 +140,11 @@ export function Connections() {
   );
 }
 
+/** Only a parent device approves an AI or app connection (Owner 11/24; the server answers a child 403 parent_required). This browser is a child, so it says where to approve instead. */
+const PARENT_ONLY = () => t("この接続は、同じアカウントの iPhone の決裁箱で承認してください。ブラウザでは承認できません。");
+
 export function Pair({ code }: { code: string }) {
+  const child = account()?.role !== "parent";
   const [info, setInfo] = useState<{ pairing_id: string; device_name: string; os?: string; clients: string[]; client?: string; client_name?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -157,7 +162,7 @@ export function Pair({ code }: { code: string }) {
         ? (claim ? t("許可しました。{name}の画面で接続が続きます。", { name }) : t("許可しませんでした。{name}は接続されません。", { name }))
         : (claim ? t("追加しました。PCの画面でセットアップが続きます。") : t("断りました。この端末は追加されません。")));
       bump();
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) { setError(e instanceof ApiError && e.body.code === "parent_required" ? PARENT_ONLY() : (e as Error).message); }
   }
 
   return (
@@ -170,8 +175,9 @@ export function Pair({ code }: { code: string }) {
           <p>{t("{name}があなたの決裁箱の申請を読み、あなたが押した答えを送ることを許可しますか？", { name: info.client_name ?? "" })}</p>
           <dl class="pairing"><dt>{t("接続元")}</dt><dd>{info.device_name}</dd></dl>
           <p class="muted">{t("{name}は、あなたの申請をすべて読めます。自分で{name}の接続を始めた覚えがなければ「許可しない」を押してください。", { name: info.client_name ?? "" })}</p>
+          {child && <p class="notice" role="status">{PARENT_ONLY()}</p>}
           <div class="row">
-            <button class="primary" onClick={() => decide(true)}>{t("許可する")}</button>
+            {!child && <button class="primary" onClick={() => decide(true)}>{t("許可する")}</button>}
             <button class="ghost danger" onClick={() => decide(false)}>{t("許可しない")}</button>
           </div>
         </div>
@@ -185,8 +191,9 @@ export function Pair({ code }: { code: string }) {
             <dt>{t("使うAI")}</dt><dd>{info.clients.map(clientLabel).join("・") || "—"}</dd>
           </dl>
           <p class="muted">{t("自分で approval-box の setup を実行した覚えがなければ「心当たりがない」を押してください。")}</p>
+          {child && <p class="notice" role="status">{PARENT_ONLY()}</p>}
           <div class="row">
-            <button class="primary" onClick={() => decide(true)}>{t("つなぐ")}</button>
+            {!child && <button class="primary" onClick={() => decide(true)}>{t("つなぐ")}</button>}
             <button class="ghost danger" onClick={() => decide(false)}>{t("心当たりがない")}</button>
           </div>
         </div>

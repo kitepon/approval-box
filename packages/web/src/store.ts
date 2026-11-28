@@ -1,5 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { api, isNoContract } from "./api";
+import { account } from "./device.ts";
+import { createHistory, IndexedDbHistoryStore } from "./history.ts";
 import type { Decision, Me } from "./types";
 
 type Listener = () => void;
@@ -34,5 +36,7 @@ export function useResource<T>(load: () => Promise<T>, deps: unknown[] = []) {
 }
 
 export const loadOpen = () => api<{ items: Decision[] }>("GET", "/decisions?status=pending,held&limit=200").then((r) => r.items);
-export const loadClosed = () => api<{ items: Decision[] }>("GET", "/decisions?status=answered,cancelled&limit=200").then((r) => r.items);
+/** This browser's history (history.ts): decided requests stay here after the server deletes their content. */
+export const localHistory = createHistory({ store: new IndexedDbHistoryStore(), call: (method, path) => api(method, path), entry: () => account()?.entry });
+export const loadClosed = () => localHistory.list();
 export const loadMe = () => api<Me>("GET", "/me");

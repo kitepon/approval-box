@@ -27,7 +27,7 @@ sequenceDiagram
 
 Poll results (`status`): `waiting` (poll again), `claimed` (carries `session` and `expires_at`, once), `delivered` (already taken), `rejected` (the user declined = `access_denied`), `expired` (15 minutes passed = `expired_token`). The poll is a long poll, so no `slow_down`/interval is needed: call again right after any `waiting`. Every state leaves by the next poll or by starting a new request.
 
-The consent step is required: claiming a client pairing without `confirm_client` equal to the pairing's client answers 409 `conflict`. So only a screen that shows the user who is being allowed (today the Web `/pair` page; native apps after they show it) can approve. Old screens cannot approve one by accident.
+The consent step is required: claiming a client pairing without `confirm_client` equal to the pairing's client answers 409 `conflict`. So only a screen that shows the user who is being allowed can approve, and only on a parent device (Owner 2026-11-24): a signed request from a child key gets 403 `parent_required`. Since 2026-11-28 the Web is a child device of the account (login-billing 0.28.1 browser part), so the Web `/pair` page shows who asks and says plainly to approve it in the iPhone app; it offers only `許可しない`. Old screens cannot approve one by accident.
 
 ## The scoped session
 
@@ -57,7 +57,7 @@ Not allowed: attachment upload/stage/delete, `DELETE /decisions`, `/connections`
 | Function | Owner of state | Input → output | Failure / exit |
 | --- | --- | --- | --- |
 | Start | `pairings` (`client`, 15 min) | public POST → code, poll secret | expires; start again |
-| Consent | Web `/pair` page, `claim`/`reject` | signed-in user + `confirm_client` → session issued, stored in the pairing row until polled | 409 without confirm; expiry |
+| Consent | a parent device (the phone app) `claim`; the Web `/pair` page (a child) shows the request and can only `reject` | signed-in user + `confirm_client` → session issued, stored in the pairing row until polled | 409 without confirm; expiry |
 | Hand-over | `pairings.token` | poll with the secret → session once, then cleared | `delivered`/`expired` |
 | Scoped access | `sessions.client`, `CLIENT_ROUTES` | bearer → user + client; allowlist. In library mode ([login-pass.md](architecture/login-pass.md)) every allowed route except `GET /me` also answers 402 `subscription_expired` while the library remembers the account as having no contract (G2) | 401 expired/removed; 403 outside the list; 402 no contract |
 | Revoke | `connections()` / `revokeConnection` | user's DELETE → session deleted | 404 if already gone |

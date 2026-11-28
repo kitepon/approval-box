@@ -1,16 +1,11 @@
-import { systemMessage, t, locale, useLocale } from "./i18n.ts";
-// 「Googleでログイン」「Appleでサインイン」のボタン。サーバーの /auth/config に値がある時だけ出す。
-// Bearer付き（ログイン済み）で呼べば、IDの無い既存アカウントにそのIDを結ぶ（最初の1回だけ）。
-import { useEffect, useRef, useState } from "preact/hooks";
-import { api, ApiError } from "./api";
+import { locale } from "./i18n.ts";
 
-type Config = { google_client_id?: string; apple_services_id?: string; library_login?: boolean };
-type Result = { session: string };
+/** The public client ids of /v1/auth/config (not secret). The browser signs in with them itself; no id token reaches the server. */
+export type Config = { google_client_id?: string; apple_services_id?: string };
 
 declare global {
   interface Window {
-    google?: { accounts: { id: { initialize(o: Record<string, unknown>): void; renderButton(el: HTMLElement, o: Record<string, unknown>): void } } };
-    AppleID?: { auth: { init(o: Record<string, unknown>): void; signIn(): Promise<{ authorization: { id_token: string } }> } };
+    AppleID?: { auth: { init(o: Record<string, unknown>): void; signIn(): Promise<{ authorization: { id_token: string; state?: string } }> } };
   }
 }
 
@@ -18,55 +13,14 @@ const scripts = new Map<string, Promise<void>>();
 function loadScript(src: string): Promise<void> {
   if (!scripts.has(src)) scripts.set(src, new Promise((resolve, reject) => {
     const el = document.createElement("script");
-    el.src = src; el.async = true; el.onload = () => resolve(); el.onerror = () => reject(new Error(t("読み込めませんでした")));
+    el.src = src; el.async = true; el.onload = () => resolve(); el.onerror = () => reject(new Error("script"));
     document.head.appendChild(el);
   }));
   return scripts.get(src)!;
 }
+/** Sign in with Apple JS: the page loads it itself (the library's signInApple uses window.AppleID). Loaded before the button is pressed, so its popup opens within the click. */
+export const loadAppleScript = () => loadScript(`https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/${({ ja: "ja_JP", en: "en_US", ko: "ko_KR", "zh-Hans": "zh_CN", "zh-Hant": "zh_TW" })[locale()]}/appleid.auth.js`);
 
 let configPromise: Promise<Config> | null = null;
-export const loginConfig = (): Promise<Config> => (configPromise ??= api<Config>("GET", "/auth/config").catch((): Config => ({})));
-
-export function IdLogin({ onDone, skip = [] }: { onDone: (r: Result) => void; skip?: string[] }) {
-  const language = useLocale();
-  const [config, setConfig] = useState<Config | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const googleRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { loginConfig().then(setConfig); }, []);
-
-  const send = (path: string, body: Record<string, string>) =>
-    api<Result>("POST", path, body, { idempotent: false }).then(onDone).catch((e) => setError(e instanceof ApiError ? e.message : t("ログインできませんでした。")));
-
-  useEffect(() => {
-    if (!config?.google_client_id || skip.includes("google") || !googleRef.current) return;
-    loadScript("https://accounts.google.com/gsi/client").then(() => {
-      window.google!.accounts.id.initialize({ client_id: config.google_client_id, callback: (r: { credential: string }) => send("/auth/google", { id_token: r.credential }) });
-      window.google!.accounts.id.renderButton(googleRef.current!, { theme: "outline", size: "large", text: "signin_with", locale: language === "zh-Hans" ? "zh-CN" : language === "zh-Hant" ? "zh-TW" : language, width: 280 });
-    }).catch(() => setError(t("Googleのログインを読み込めませんでした。")));
-  }, [config, language]);
-
-  async function apple() {
-    setError(null);
-    try {
-      await loadScript(`https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/${({ ja: "ja_JP", en: "en_US", ko: "ko_KR", "zh-Hans": "zh_CN", "zh-Hant": "zh_TW" })[locale()]}/appleid.auth.js`);
-      window.AppleID!.auth.init({ clientId: config!.apple_services_id, scope: "", redirectURI: `${location.origin}/auth/apple/callback`, usePopup: true });
-      const r = await window.AppleID!.auth.signIn();
-      await send("/auth/apple", { identity_token: r.authorization.id_token });
-    } catch (e) {
-      if ((e as { error?: string }).error === "popup_closed_by_user") return;
-      setError(t("Appleのログインができませんでした。"));
-    }
-  }
-
-  if (!config) return null;
-  const google = !!config.google_client_id && !skip.includes("google");
-  const appleOn = !!config.apple_services_id && !skip.includes("apple");
-  if (!google && !appleOn) return null;
-  return (
-    <div class="idlogin">
-      {google && <div ref={googleRef} class="google-button" />}
-      {appleOn && <button class="apple-button" onClick={apple}>{t("Appleでサインイン")}</button>}
-      {error && <p class="error">{systemMessage(error)}</p>}
-    </div>
-  );
-}
+/** Unsigned (it is public and the sign-in page has no key yet). */
+export const loginConfig = (): Promise<Config> => (configPromise ??= fetch("/v1/auth/config").then((r) => r.json() as Promise<Config>).catch((): Config => ({})));

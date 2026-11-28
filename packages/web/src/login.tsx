@@ -1,39 +1,102 @@
+import { signInApple, signInGoogle, type Provider, type Role } from "@kitepon/login-billing/web";
 import { useEffect, useState } from "preact/hooks";
-import { setSession } from "./api";
 import { CopyLine } from "./copyline";
-import { t } from "./i18n.ts";
-import { IdLogin, loginConfig } from "./idlogin";
+import { browserDevice } from "./device.ts";
+import { locale, t } from "./i18n.ts";
+import { type Config, loadAppleScript, loginConfig } from "./idlogin";
 import { LanguagePicker } from "./language";
-import { LibraryLogin } from "./librarylogin";
 
 export const INSTALL = "npx -y approval-box@latest setup";
+/** The QR's life: the browser's consent in it lasts 10 minutes (login-billing 1.59). */
+const QR_MS = 600_000;
+const POLL_MS = 3000; // keys/me is limited to 30 calls a minute per source with the other keys routes
 
-/** S1b: the reason for an automatic sign-out. The library tells stopped (pass_refused) from expired (pass_expired); anything else gets the generic text. */
+const untilText = (ms: number) => new Intl.DateTimeFormat(locale(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(ms));
+
+/** S1b: why a signed-in browser is back here. A clock that is off has its own text; anything else (key removed from the phone, key gone) the generic one. */
 function Reason({ code }: { code: string }) {
-  return <p class="notice" role="status">{code === "pass_refused" ? t("この端末のログインは、承認したスマホから止められました。もう一度ログインしてください。") : code === "pass_expired" ? t("しばらく使われなかったため、ログインが切れました。もう一度ログインしてください。") : t("ログインが切れました。もう一度ログインしてください。")}</p>;
+  return <p class="notice" role="status">{code === "time_off" ? t("この端末の時計がずれています。時計を合わせてから、もう一度試してください。") : t("ログインが切れました。もう一度ログインしてください。")}</p>;
 }
 
-/** S1 (and S2 in library mode). Both modes share one structure: title, purpose, sign-in, 「はじめての方へ」, links, language. */
-export function Login({ library, reason, onLogin }: { library: boolean; reason: string | null; onLogin: () => void }) {
-  const [waiting, setWaiting] = useState(false);
-  const [hasLogin, setHasLogin] = useState<boolean | null>(null);
-  useEffect(() => { loginConfig().then((c) => setHasLogin(!!(c.google_client_id || c.apple_services_id))); }, []);
-  if (library && waiting) return <section class="login"><h1>Approval Box</h1><LibraryLogin onDone={onLogin} onCancel={() => setWaiting(false)} /></section>;
+/**
+ * S1 and S2. The browser signs in with Google or Apple itself (the id token goes only into the QR), shows the QR, and waits until a phone of the
+ * same account reads it and admits this browser as a child (keys/me answers its entry). Then it is one device of the account like the phone apps.
+ */
+export function Login({ reason, onLogin }: { reason: string | null; onLogin: (who: { entry: string; role: Role }) => void }) {
+  const [config, setConfig] = useState<Config | null>(null);
+  const [qr, setQr] = useState<{ svg: string; until: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { loginConfig().then(setConfig); }, []);
+  useEffect(() => { if (config?.apple_services_id) loadAppleScript().catch(() => {}); }, [config]);
+
+  useEffect(() => {
+    if (!qr) return;
+    let alive = true;
+    (async () => {
+      while (alive) {
+        if (Date.now() > qr.until) { setQr(null); setError(t("QRの期限が切れました。もう一度ログインしてください。")); return; }
+        try {
+          const who = await browserDevice().me();
+          if (who && alive) {
+            void navigator.storage?.persist?.().catch(() => false); // keeps the key from eviction; a refusal changes nothing
+            return onLogin(who);
+          }
+        } catch { /* offline for a moment: keep waiting */ }
+        await new Promise((r) => setTimeout(r, POLL_MS));
+      }
+    })();
+    return () => { alive = false; };
+  }, [qr]);
+
+  async function start(provider: Provider) {
+    setError(null);
+    setBusy(true);
+    try {
+      const signIn = provider === "google"
+        ? (nonce: string) => signInGoogle({ clientId: config!.google_client_id!, redirectUri: `${location.origin}/auth/google/callback` }, nonce)
+        : (nonce: string) => signInApple({ clientId: config!.apple_services_id!, redirectUri: `${location.origin}/auth/apple/callback` }, nonce);
+      const request = await browserDevice().makeRequest({ provider, signIn });
+      setQr({ svg: request.svg, until: Date.now() + QR_MS });
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code !== "popup_closed") setError(code === "popup_blocked" ? t("ポップアップが止められました。このページのポップアップを許可してから、もう一度押してください。") : t("ログインできませんでした。"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (qr) return (
+    <section class="login">
+      <h1>Approval Box</h1>
+      <div class="library-login">
+        <h2>{t("スマホの承認を待っています")}</h2>
+        <p>{t("同じアカウントの iPhone の決裁箱でこの QR を読んでください")}</p>
+        <div class="browser-qr" role="img" aria-label={t("QRコード")} dangerouslySetInnerHTML={{ __html: qr.svg }} />
+        <p class="muted">{t("{time}まで有効", { time: untilText(qr.until) })}</p>
+        <button class="ghost" onClick={() => setQr(null)}>{t("やめる")}</button>
+      </div>
+    </section>
+  );
+
+  const google = !!config?.google_client_id, apple = !!config?.apple_services_id;
   return (
     <section class="login">
       <h1>Approval Box</h1>
       <p>{t("AIの相談に、スマホやPCから答えます。")}</p>
       {reason !== null && <Reason code={reason} />}
-      {!library && <IdLogin onDone={(r) => { setSession(r.session); onLogin(); }} />}
-      {library && <button class="primary wide" onClick={() => setWaiting(true)}>{t("スマホの承認でログイン")}</button>}
-      {!library && hasLogin && <p class="muted">{t("GoogleとAppleは別のアカウントになります。いつも同じ方でログインしてください。")}</p>}
-      {!library && hasLogin === false && <p class="muted">{t("このサーバーにはログインの設定がありません。管理者は、AppleかGoogleのログインを設定してください（READMEの「自分でサーバーを立てる」）。")}</p>}
+      {(google || apple) && <p>{t("Google か Apple でログインすると QR が出ます。同じアカウントの iPhone の決裁箱でその QR を読むと、このブラウザが使えるようになります。")}</p>}
+      <div class="idlogin">
+        {google && <button class="primary wide" disabled={busy} onClick={() => start("google")}>{t("Googleでログイン")}</button>}
+        {apple && <button class="apple-button" disabled={busy} onClick={() => start("apple")}>{t("Appleでサインイン")}</button>}
+      </div>
+      {error && <p class="error" role="alert">{error}</p>}
+      {config && !google && !apple && <p class="muted">{t("このサーバーにはログインの設定がありません。管理者は、AppleかGoogleのログインを設定してください（READMEの「自分でサーバーを立てる」）。")}</p>}
       <details class="first-time">
         <summary>{t("はじめての方へ")}</summary>
         <ol>
           <li>{t("iPhone・iPad・Mac または Android の決裁箱で、Apple または Google でログインし、設定 → 契約 から契約します。")}</li>
           <li>{t("PCでコマンドを実行して、AIとつなぎます。")}<CopyLine text={INSTALL} /></li>
-          {library && <li>{t("ほかの端末（Linux・ブラウザ・もう一方のスマホ）は、この画面の「スマホの承認でログイン」を押し、契約したスマホの 設定 → ほかの端末をログインさせる で承認します。")}</li>}
         </ol>
       </details>
       <p class="links">

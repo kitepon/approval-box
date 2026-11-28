@@ -1,4 +1,6 @@
-# Approval Box API（アプリ・Web版向け） v0.51
+# Approval Box API（アプリ・Web版向け） v0.52
+
+2026-11-28 v0.52（追加のみ。w01、旦那の裁定 19:28 JST「Web版は普通の子の端末」）: 端末の鍵の経路（下の「端末の鍵（keys）」）に `POST /keys/admit`（親がブラウザを子として入れる）と `POST /keys/me`（自分の鍵の entry と role）を足した。サーバーの鍵穴は login-billing 0.28.1 で動く（0.22.4 と同じ署名・文・使用済みの記録なので、今の鍵と端末はそのまま使える。データの移しは無い）。Web版はサーバーと同じoriginから配るので、CORS は足していない。Web版は子の端末として全ての `/v1` を `Login-Billing-Key` で署名し、決まった申請をブラウザのIndexedDBに保存してから `POST /decisions/{id}/stored` を送る。子の端末なので `POST /pairing/{id}/claim` は403 `parent_required`（今まで通り）、署名つきの `DELETE /me` は409（今まで通り）。
 
 2026-11-28 v0.51（追加と意味の変更。e02、[保存図](architecture/storage-lifecycle.md#sealed-content-and-decided-requests-e02-2026-11-28)）: サーバーは申請の中身（件名・背景・選択肢・答え・注記・添付）を封をして保存する。決まった申請（answered・cancelled）の中身は、AIが答えを受け取り、アカウントの全端末（鍵穴）が `POST /decisions/{id}/stored` で「履歴に保存した」と知らせたら消す。遅くとも決まってから7日で消す。消した後の `GET /decisions/{id}` は印（`content_removed: true`、件名・背景・選択肢・答え・履歴は空）を返し、印は30日で消える（その後は404）。一覧には印を出さない。消した時の知らせは `decision.updated`（`change: "content_removed"`、通知は送らない）。未決・保留の申請は、決まるか取り下げられるまで（封をしたまま）今までどおり残る。中身を封にする鍵が使えないサーバーは、新しい申請・答え・添付を 503 `store_unavailable` で断る。アプリは決まった申請を自分の履歴に保存してから stored を送り、一覧は「端末の履歴＋サーバーの未決・保留」にする。
 
@@ -97,6 +99,13 @@ v0.10: 製品名を Approval Box に決定（契約の中身は v0.9 と同じ�
     - 一つの `state` は、始めた提供元のcallbackでだけ使える。AppleのflowをGoogleのcallbackへ（またはその逆に）送っても、flowは消費されず、`unauthorized` で戻る。
 - 運用確認用の `admin session <既存user_id>` は、通常の新規登録・ログインの代わりに使わない。`admin create-user` は廃止済み。
 - 401 `unauthorized` を受けたらsessionを捨ててログインへ戻す。
+- **端末の鍵（keys）**（login-billing の鍵穴。ライブラリの wire をそのまま置く。本文は16KBまで、接続元ごとに1分30回まで、超えたら413・429）。全て `POST`、署名つきの要求（`Login-Billing-Key: v1 k=… t=… n=… s=…`）:
+  - `/keys/start` `{ role: "parent" }` → `{ entry, role }`（最初の端末が親として始める）
+  - `/keys/accept` `{ add }` → `{ entry, role }`（親が署名した add で入る）
+  - `/keys/admit` `{ add: { key, role: "child", issued, signer, s }, consent: { id, exp, s } }` → `{ entry, role: "child" }`（v0.52。呼ぶのは親。`key` はブラウザの鍵、`consent` はブラウザ自身の同意で10分有効、一度だけ。断りは `signer_not_parent`・`add_not_yours`・`add_invalid`・`consent_invalid`（403）、`add_used`（409）、`time_off`（401））
+  - `/keys/me` `{}` → `{ entry, role }`（v0.52。まだ入っていない鍵は401 `not_signed_in`）
+  - `/keys/others` `{}`（親が自分以外の端末を外す）、`/keys/leave` `{}`（この端末が抜ける。最後の端末ならアカウントの中身も消える）
+  - 誤りは `{ error: "<code>" }`（ライブラリの形）。
 - `POST /auth/logout`（Bearer必須）→ `{ ok: true }`。そのsessionを失効させる。端末の通知を止めるなら、先に `DELETE /devices/{id}`。
 
 ## 決裁
@@ -386,6 +395,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
+- v0.52 2026-11-28 `POST /keys/admit`・`POST /keys/me` を置いた（サーバーの鍵穴は login-billing 0.28.1、データの移しなし）。Web版は子の端末（署名つきの要求、ブラウザの履歴と stored）。CORS は無し（同じorigin）。
 - v0.51 2026-11-28 封をした中身と、決まった申請の中身の削除（e02）: `POST /decisions/{id}/stored`、印（`content_removed`）、`change: "content_removed"`、503 `store_unavailable`。AI側（`/connector/v1`・MCP）の決まって消えた申請は `content_removed: true` と `message` を返し、`answer`・`answer_text` は無い。保存した冪等キーの応答は1日で消える。
 
 - v0.47 2026-11-20 `GET /auth/config` に `library_login`（ライブラリのログインを使うサーバーだけ `true`）を追加。Web版がライブラリのQRログインへ切り替える目印。他は変わらない。

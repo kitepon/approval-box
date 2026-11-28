@@ -1,4 +1,3 @@
-import { libraryLogin } from "../api";
 import { logout } from "../account";
 import { t } from "../i18n.ts";
 import { loadMe, useResource } from "../store";
@@ -13,7 +12,7 @@ export function Plan() {
   return (
     <section class="plan">
       <h1>{t("契約")}</h1>
-      {me && (
+      {(me?.plan || me?.billing === "off") && (
         <div class="panel">
           <p class="plan-status"><strong>{planStatus(me)}</strong></p>
           {active && me.expires_at && me.billing !== "off" && <p>{t("期限: {date}", { date: dateOnly(me.expires_at) })}</p>}
@@ -22,7 +21,6 @@ export function Plan() {
       {me?.billing !== "off" && (
         <div class="panel">
           <p>{t("この端末では契約できません。契約は、iPhone・iPad・Mac または Android の決裁箱で、設定 → 契約 から行います。")}</p>
-          {active && libraryLogin() && <p>{t("この端末は、契約しているスマホの承認でログインしています。")}</p>}
         </div>
       )}
       {me?.billing !== "off" && <p class="muted">{t("1か月ごとの自動更新。解約は、契約したストアの管理画面から行えます。")}</p>}

@@ -1,7 +1,7 @@
 # Approval Box screens: the one state machine every app implements
 
 Status: **approved by the Owner on 2026-11-21** (Approval Box K-5V9T4F: go ahead, and the production switch waits for the redesign). Until each app implements it, the app keeps its current screens, which the per-app maps describe:
-- Web: `docs/screen-transitions-web.md` (this repo). The Web client was closed on 2026-11-21 except the `/pair` consent page; the Web notes in this file are historical.
+- Web: `docs/screen-transitions-web.md` (this repo). The Web client was closed on 2026-11-21 and reopened on 2026-11-28 as a child device of the account (Owner ruling 19:28 JST): it signs in with Google or Apple itself, shows a QR, and a phone of the same account admits it. Where this file says Web sign-in is `スマホの承認でログイン`, the Web map's S1/S2 describe what it does now.
 - Apple: `docs/screen-transitions-apple.md` (approval-box-apps)
 - Android and Linux: `docs/screen-transitions-android.md` and `docs/screen-transitions-linux.md` (approval-box-apps, PR #48)
 

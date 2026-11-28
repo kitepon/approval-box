@@ -1,8 +1,9 @@
-// login-billing 0.21.1 keyholes (contract 1.48 section 11), used through the public API only; the library is never edited.
+// login-billing keyholes (contract 1.48 section 11; 0.28.1 adds keys/admit and keys/me, 1.57/1.59), used through the public API only; the library is never edited.
+// Runs on 0.28.1 (alias login-billing-028) since w01: the same KeyholeStore, header and lbk1 texts and useOnce keys as 0.22.4, so the rows 0.22.4 wrote stay valid.
 // Shape: docs/architecture/local-form.md (target) and docs/architecture/login-pass.md (what runs). The server knows a device only as
 // { entry, key, role }; the entry is the account (users.id). Nothing here logs an entry, a key or a body. The server never keeps K beside an
 // entry (contract 11.3) and never writes the keyholes table outside the library's store calls.
-import { createKeyholes, KeyholeError, type Keyhole, type KeyholeEvent, type KeyholeOps, type KeyholeRequest, type KeyholeRole, type KeyholeStore } from "@kitepon/login-billing/server";
+import { createKeyholes, KeyholeError, type Keyhole, type KeyholeEvent, type KeyholeOps, type KeyholeRequest, type KeyholeRole, type KeyholeStore } from "login-billing-028/server";
 import type { Accounts } from "./accounts.ts";
 import type { Attachments } from "./attachments.ts";
 import { type Db, all, get, run, tx } from "./db.ts";
