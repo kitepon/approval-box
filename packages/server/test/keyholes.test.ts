@@ -10,7 +10,8 @@ import { all, get, openDb, run } from "../src/db.ts";
 import { Decisions } from "../src/decisions.ts";
 import { EventHub } from "../src/events.ts";
 import { createApp } from "../src/http.ts";
-import { SqliteKeyholeStore, createAppKeyholes, createEntries } from "../src/keyholes.ts";
+import { createKeyholes as createKeyholes0224 } from "@kitepon/login-billing/server";
+import { APP_ID, SqliteKeyholeStore, createAppKeyholes, createEntries } from "../src/keyholes.ts";
 import { authenticate } from "../src/pc.ts";
 import { joinAs, keysCall, makeDevice, parentAdd, signed, startParent } from "./keyhole-signer.ts";
 
@@ -376,4 +377,62 @@ test("pairing claim: a child's signed request is refused parent_required (scan w
   const passed = await claim(parent);
   assert.equal(passed.status, 404); // past the gate: the pairing itself is unknown
   assert.equal(((await passed.json()) as { error: { code: string } }).error.code, "not_found");
+});
+
+test("w01: rows 0.22.4's keyholes wrote (keyholes, keyhole_used, entries_seen) still verify on 0.28.1, with no migration", async () => {
+  const x = setup();
+  // The handler the server ran before w01, on the same SQLite store.
+  const before = createKeyholes0224({ appId: APP_ID, origin: ORIGIN, store: new SqliteKeyholeStore(x.db), onEvent: x.entries.onEvent });
+  const call = async (device: Awaited<ReturnType<typeof makeDevice>>, route: string, body: unknown) => {
+    const path = `/v1/keys/${route}`, text = JSON.stringify(body);
+    return before.handle({ method: "POST", path, headers: await signed(device, "POST", path, text), body: new TextEncoder().encode(text) });
+  };
+  const parent = await makeDevice({ origin: ORIGIN });
+  const started = await call(parent, "start", { role: "parent" });
+  assert.equal(started.status, 200);
+  const { entry } = await started.json() as { entry: string };
+  const child = await makeDevice({ origin: ORIGIN });
+  assert.equal((await call(child, "accept", { add: await parentAdd(parent, child.publicKey, "child") })).status, 200);
+  const usedBefore = await signed(parent, "GET", "/v1/me");
+  await before.verify({ method: "GET", path: "/v1/me", headers: usedBefore, body: new Uint8Array() });
+  assert.ok(get(x.db, "select 1 from entries_seen where entry = ?", entry));
+  assert.equal(all(x.db, "select key from keyholes where entry = ?", entry).length, 2);
+
+  // The app (createAppKeyholes, 0.28.1) on the rows as they are.
+  for (const device of [parent, child]) {
+    const res = await x.app.request("/v1/me", { headers: await signed(device, "GET", "/v1/me") });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json() as { user_id: string }).user_id, entry);
+  }
+  // The used number 0.22.4 recorded is still spent: the same useOnce key.
+  const replay = await x.app.request("/v1/me", { headers: usedBefore });
+  assert.equal(replay.status, 401);
+  assert.equal((await replay.json() as { error: string }).error, "key_replayed");
+  assert.deepEqual(await keysCall(x.app, child, "me"), { status: 200, json: { entry, role: "child" } });
+  assert.deepEqual(await keysCall(x.app, parent, "me"), { status: 200, json: { entry, role: "parent" } });
+});
+
+test("w01: keys/admit and keys/me are routed: a parent admits a browser key with the browser's consent, once; me answers entry and role", async () => {
+  const x = setup();
+  const { device: parent, entry } = await startParent(x.app, ORIGIN);
+  const browser = await makeDevice({ origin: ORIGIN });
+  assert.deepEqual(await keysCall(x.app, browser, "me"), { status: 401, json: { error: "not_signed_in" } });
+  const id = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("base64url");
+  const exp = Date.now() + 600_000;
+  const consent = { id, exp, s: await browser.signText(["lbk1/admit-consent", APP_ID, browser.publicKey, id, String(exp)].join("/")) };
+  // Only a parent admits.
+  const stranger = await makeDevice({ origin: ORIGIN });
+  assert.equal((await keysCall(x.app, stranger, "admit", { add: await parentAdd(stranger, browser.publicKey, "child"), consent })).status, 403);
+  assert.deepEqual(await keysCall(x.app, parent, "admit", { add: await parentAdd(parent, browser.publicKey, "child"), consent }), { status: 200, json: { entry, role: "child" } });
+  assert.ok(get(x.db, "select 1 from keyhole_used where id like 'c:%'"), "admit spends the consent in keyhole_used");
+  assert.deepEqual(await keysCall(x.app, browser, "me"), { status: 200, json: { entry, role: "child" } });
+  // The browser runs /v1 as a child of the entry.
+  const me = await x.app.request("/v1/me", { headers: await signed(browser, "GET", "/v1/me") });
+  assert.equal((await me.json() as { user_id: string }).user_id, entry);
+  // The same consent is spent.
+  const again = await keysCall(x.app, parent, "admit", { add: await parentAdd(parent, browser.publicKey, "child", Date.now() - 1000), consent });
+  assert.deepEqual(again, { status: 403, json: { error: "consent_invalid" } });
+  // keys/leave ends it; me is not_signed_in again.
+  assert.equal((await keysCall(x.app, browser, "leave")).status, 200);
+  assert.deepEqual(await keysCall(x.app, browser, "me"), { status: 401, json: { error: "not_signed_in" } });
 });

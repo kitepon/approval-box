@@ -67,7 +67,7 @@ export const signed = async (device: Device, method: string, path: string, body 
 type App = { request(path: string, init: RequestInit): Response | Promise<Response> };
 
 /** POSTs a signed JSON body to one of the app's /v1/keys/* routes. */
-export async function keysCall(app: App, device: Device, route: "start" | "accept" | "others" | "leave", body: unknown = {}) {
+export async function keysCall(app: App, device: Device, route: "start" | "accept" | "admit" | "others" | "leave" | "me", body: unknown = {}) {
   const path = `/v1/keys/${route}`, text = JSON.stringify(body);
   const res = await app.request(path, { method: "POST", body: text, headers: { ...(await signed(device, "POST", path, text)), "content-type": "application/json" } });
   return { status: res.status, json: await res.json() as Record<string, unknown> };

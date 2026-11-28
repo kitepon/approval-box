@@ -118,8 +118,13 @@ export const en = {
   "AIごとの登録手順": "Setup guides by AI",
   "登録手順をコピー": "Copy setup steps",
   "相談": "Request",
-  "ブラウザ版は終わりました": "The browser version has ended",
-  "決裁箱は、iPhone・iPad・Mac・Android・Linux のアプリでお使いください。相談の中身を、サーバーから配るブラウザの画面には出さないためです。": "Please use Approval Box in the apps for iPhone, iPad, Mac, Android and Linux. Your requests are not shown in a browser screen served from the server.",
-  "サポート（アプリの入手）": "Support (get the app)",
+  "この端末の時計がずれています。時計を合わせてから、もう一度試してください。": "This device's clock is off. Set the clock correctly, then try again.",
+  "QRの期限が切れました。もう一度ログインしてください。": "The QR code has expired. Please sign in again.",
+  "ポップアップが止められました。このページのポップアップを許可してから、もう一度押してください。": "The pop-up was blocked. Allow pop-ups for this page, then press the button again.",
+  "同じアカウントの iPhone の決裁箱でこの QR を読んでください": "Scan this QR code with Approval Box on the iPhone of the same account",
+  "Google か Apple でログインすると QR が出ます。同じアカウントの iPhone の決裁箱でその QR を読むと、このブラウザが使えるようになります。": "Sign in with Google or Apple to get a QR code. Scan it with Approval Box on the iPhone of the same account, and this browser is ready to use.",
+  "Googleでログイン": "Sign in with Google",
+  "この接続は、同じアカウントの iPhone・iPad・Mac・Android の決裁箱アプリで承認してください。ブラウザでは承認できません。": "Approve this connection in the Approval Box app on an iPhone, iPad, Mac or Android device of the same account. It can't be approved in a browser.",
+  "この申請の中身はサーバーから消えました。この端末の履歴にもありません。": "The content of this request has been removed from the server, and this device's history has no copy of it.",
 } as const;
 export type MessageKey = keyof typeof en;

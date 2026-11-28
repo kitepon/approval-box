@@ -128,11 +128,16 @@ test("decided content goes once the AI fetched it and every device stored it; th
   assert.equal(JSON.parse(get<{ value: string }>(x.db, "select value from data_sets where key = ?", `dset:${user}`)!.value).dk.items.length, 1);
   assert.equal((await x.call("GET", `/v1/decisions/${held}`, { device })).json.title, "保留のまま");
   assert.equal((await x.call("GET", `/v1/decisions/${id}`, { device })).json.answer.option_id, "a");
+  const seen: { type: string; data: Record<string, unknown> }[] = [];
+  x.events.subscribe(user, (event) => { seen.push(event as never); });
   assert.equal(await x.decisions.sweepContent(), 1);
 
   const tombstone = (await x.call("GET", `/v1/decisions/${id}`, { device })).json;
   assert.equal(tombstone.content_removed, true);
   assert.equal(tombstone.status, "answered");
+  // d01: the tombstone and the content_removed event keep the delivery state (metadata only).
+  assert.equal(tombstone.delivery, "fetched");
+  assert.deepEqual(seen.filter((e) => e.data.change === "content_removed").map((e) => [e.type, e.data.decision_id, e.data.delivery]), [["decision.updated", id, "fetched"]]);
   assert.equal(tombstone.title, "");
   assert.equal(tombstone.answer, undefined);
   const forAi = (await x.call("GET", `/connector/v1/decisions/${id}`, { token })).json;
@@ -164,8 +169,12 @@ test("the 7-day cap purges a decided request no device stored; an open request s
   const open = await ask(x, user, "待つもの");
   await answer(x, device, decided.id);
   assert.equal(await x.decisions.sweepContent(Date.now() + 6 * DAY), 0);
+  const seen: { data: Record<string, unknown> }[] = [];
+  x.events.subscribe(user, (event) => { seen.push(event as never); });
   assert.equal(await x.decisions.sweepContent(Date.now() + 7 * DAY + 60_000), 1);
-  assert.equal((await x.call("GET", `/v1/decisions/${decided.id}`, { device })).json.content_removed, true);
+  const tomb = (await x.call("GET", `/v1/decisions/${decided.id}`, { device })).json;
+  assert.deepEqual([tomb.content_removed, tomb.delivery], [true, "waiting"]); // never delivered: the tombstone says so
+  assert.equal(seen.find((e) => e.data.change === "content_removed")?.data.delivery, "waiting");
   assert.equal((await x.call("GET", `/v1/decisions/${open.id}`, { device })).json.status, "pending");
   await x.decisions.sweepContent(Date.now() + 400 * DAY);
   const still = (await x.call("GET", `/v1/decisions/${open.id}`, { device })).json;

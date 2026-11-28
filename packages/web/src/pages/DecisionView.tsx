@@ -2,7 +2,7 @@ import { systemMessage, t } from "../i18n.ts";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api, ApiError, isNoContract } from "../api";
 import { listPath, navigate } from "../router";
-import { bump, useBump } from "../store";
+import { bump, localHistory, useBump } from "../store";
 import { ago, dateTime, deadlineText, DELIVERY_LABEL, FIELD_LABEL, URGENCY_LABEL } from "../format";
 import type { Decision } from "../types";
 import { Plan } from "./Plan";
@@ -45,7 +45,7 @@ export function DecisionView({ id }: { id: string }) {
 
   useEffect(() => {
     let alive = true;
-    api<Decision>("GET", `/decisions/${encodeURIComponent(id)}`).then((d) => {
+    localHistory.view(id).then((d) => {
       if (!alive) return;
       const before = shown.current;
       if (before && before.version !== d.version && before.status !== "answered") {
@@ -75,6 +75,7 @@ export function DecisionView({ id }: { id: string }) {
       shown.current = updated;
       setDecision(updated);
       setNotice(null);
+      void localHistory.keep(updated); // an answer goes into this browser's history at once
       bump();
       if (path === "answer") { setSelected(null); setText(""); } // 答えた相談にとどまる（一覧へは飛ばない）
     } catch (e) {
@@ -147,6 +148,7 @@ export function DecisionView({ id }: { id: string }) {
       }}>
       <button class="back" onClick={() => history.length > 1 ? history.back() : navigate(listPath())}>{t("戻る")}</button>
       {notice && <p class="notice">{systemMessage(notice)}</p>}
+      {d.content_removed && <p class="notice">{t("この申請の中身はサーバーから消えました。この端末の履歴にもありません。")}</p>}
       <h1>{t("相談")}</h1>
       <div class="card-meta">
         <Source source={d.source} />

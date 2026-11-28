@@ -1,6 +1,7 @@
 import { systemMessage, t, type UiMessage } from "../i18n.ts";
 import { useEffect, useState } from "preact/hooks";
-import { api, fetchAttachment, uploadAttachment } from "../api";
+import { api, uploadAttachment } from "../api";
+import { attachmentBlob } from "../store";
 import type { Attachment } from "../types";
 
 // api.md「添付（v0.23）」の上限。サーバーも同じ値で断る。
@@ -100,7 +101,7 @@ function AttachmentItem({ decisionId, item, onRemove }: { decisionId: string; it
     if (!viewable) return;
     let alive = true;
     let made: string | null = null;
-    fetchAttachment(decisionId, item.id).then((blob) => {
+    attachmentBlob(decisionId, item.id).then((blob) => {
       if (!alive) return;
       made = URL.createObjectURL(blob);
       setUrl(made);
@@ -110,7 +111,7 @@ function AttachmentItem({ decisionId, item, onRemove }: { decisionId: string; it
 
   async function save() {
     try {
-      const blob = await fetchAttachment(decisionId, item.id);
+      const blob = await attachmentBlob(decisionId, item.id);
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = item.name;
@@ -146,7 +147,7 @@ function RequestImage({decisionId,item}:{decisionId:string;item:Attachment}) {
   useEffect(()=>{
     let alive=true;let made:string|null=null;
     setUrl(null);setError(null);
-    fetchAttachment(decisionId,item.id).then(async blob=>{
+    attachmentBlob(decisionId,item.id).then(async blob=>{
       if(blob.size!==item.size) throw new Error(t("画像の大きさが一致しません。"));
       const digest=await crypto.subtle.digest("SHA-256",await blob.arrayBuffer());
       const hex=[...new Uint8Array(digest)].map(n=>n.toString(16).padStart(2,"0")).join("");

@@ -145,8 +145,9 @@ input, textarea, select {
 .login { padding-top: 10vh; }
 .copyable { word-break: break-all; display: inline-block; max-width: 100%; }
 .library-login { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0; text-align: center; }
-.library-qr svg { width: 14rem; height: 14rem; background: #fff; }
-.library-code { font-family: ui-monospace, monospace; font-size: 1.6rem; letter-spacing: .1em; margin: 0; }
+/* The browser's QR carries a long token: the library asks for 700 px or more. Wider than a phone, so it scrolls there. */
+.browser-qr { max-width: 100%; overflow-x: auto; }
+.browser-qr svg { display: block; width: 700px; height: 700px; margin: 0 auto; background: #fff; }
 .idlogin { display: flex; flex-direction: column; align-items: center; gap: 12px; margin: 16px 0; }
 .apple-button { width: 280px; height: 40px; border-radius: 4px; background: #000; color: #fff; border: 1px solid #000; font-weight: 600; }
 @media (prefers-color-scheme: dark) { .apple-button { background: #fff; color: #000; border-color: #fff; } }
@@ -181,7 +182,6 @@ button.link { background: none; border: none; color: inherit; text-decoration: u
 .first-time ol { padding-left: 1.3rem; }
 .first-time li { margin-bottom: 10px; }
 .links { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0; }
-.library-check { font-size: 1.6rem; font-weight: 700; margin: 0; }
 .filters { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; }
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
 button.filter { min-height: 36px; padding: 4px 14px; border-radius: 999px; font-weight: 600; }
