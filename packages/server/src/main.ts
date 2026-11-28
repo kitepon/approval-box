@@ -99,7 +99,7 @@ if (webLogin.apple_services_id && !appleAudiences.includes(webLogin.apple_servic
 const apnsKey = env.APNS_KEY_FILE ? (existsSync(env.APNS_KEY_FILE) ? readFileSync(env.APNS_KEY_FILE, "utf8") : "") : (env.APNS_KEY ?? "").replace(/\\n/g, "\n");
 if (env.APNS_KEY_FILE && !apnsKey) console.error(`approval-box-server: APNS_KEY_FILE（${env.APNS_KEY_FILE}）が読めません。iPhoneへの通知は送りません。`);
 let apnsSend: Apns["send"] | undefined;
-const apnsItem = moduleItem("AUTH_ITEM_APNS", "apns");
+const apnsItem = moduleItem("AUTH_ITEM_APNS", "approvalbox-apns");
 const apnsSigner: Signer | undefined = !(env.APNS_KEY_ID && env.APNS_TEAM_ID) ? undefined : apnsItem ? moduleSigner(authSocket, apnsItem) : apnsKey ? keySigner(createPrivateKey(apnsKey), "ES256") : undefined; // 環境の鍵が読めなければ、今まで通りここで止まる
 if (apnsSigner && env.APNS_KEY_ID && env.APNS_TEAM_ID) {
   const apns = new Apns({ sign: apnsSigner, keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, topic: env.APNS_TOPIC ?? "dev.kitepon.approvalbox" });
@@ -110,7 +110,7 @@ if (apnsSigner && env.APNS_KEY_ID && env.APNS_TEAM_ID) {
 const appStoreProducts = (env.APPSTORE_PRODUCT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 // 契約の状態をAppleのサーバーから読む鍵（App Store Connectの In-App Purchase のキー）。3つ揃わなければ従来どおり、署名付きの取引の値で決める。
 const appStoreApi = { issuerId: (env.APPSTORE_ISSUER_ID ?? "").trim(), keyId: (env.APPSTORE_KEY_ID ?? "").trim(), privateKey: secretValue("APPSTORE_PRIVATE_KEY").replace(/\\n/g, "\n") };
-const appStoreItem = moduleItem("AUTH_ITEM_APPSTORE", "appstore");
+const appStoreItem = moduleItem("AUTH_ITEM_APPSTORE", "approvalbox-appstore");
 const appStoreSigner: Signer | undefined = appStoreItem ? moduleSigner(authSocket, appStoreItem) : appStoreApi.privateKey ? keySigner(appStoreApi.privateKey, "ES256") : undefined;
 const appStoreApiOn = !!appStoreApi.issuerId && !!appStoreApi.keyId && !!appStoreSigner;
 if (appStoreProducts.length) console.log(appStoreApiOn ? `approval-box-server: App Storeの契約の状態をAppleから読みます（key ${appStoreApi.keyId}）` : "approval-box-server: App Store Server APIの鍵（APPSTORE_ISSUER_ID・APPSTORE_KEY_ID・APPSTORE_PRIVATE_KEY）が揃っていません。App Storeの契約は署名付きの取引の値だけで決めます。");
@@ -127,7 +127,7 @@ const playProducts = (env.PLAY_PRODUCT_IDS ?? "").split(",").map((s) => s.trim()
 const playClientEmail = (env.PLAY_CLIENT_EMAIL ?? "").trim();
 const playPrivateKey = secretValue("PLAY_PRIVATE_KEY").replace(/\\n/g, "\n");
 const playServiceAccount = playClientEmail && playPrivateKey ? { client_email: playClientEmail, private_key: playPrivateKey } : undefined; // ライブラリ（0.22.4）へ渡す生の鍵の形
-const playItem = moduleItem("AUTH_ITEM_PLAY", "play");
+const playItem = moduleItem("AUTH_ITEM_PLAY", "approvalbox-play");
 const playSigner: Signer | undefined = playItem ? moduleSigner(authSocket, playItem) : playPrivateKey ? keySigner(playPrivateKey, "RS256") : undefined;
 const playSigning = playClientEmail && playSigner ? { client_email: playClientEmail, sign: playSigner } : undefined;
 const playPushAudience = (env.PLAY_PUSH_AUDIENCE ?? "").trim();

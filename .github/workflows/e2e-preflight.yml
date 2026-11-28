@@ -35,6 +35,9 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    env:
+      # the server refuses to store content without a data-set key (e02); tests use this fixed key
+      ABX_DATA_KEY: YXBwcm92YWwtYm94LXRlc3QtZGF0YS1rZXktMzJieXQ=
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
