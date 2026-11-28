@@ -25,9 +25,8 @@ Design: `/srv/bellteam/bots/bot-4366a50b/docs/approval-box/encrypted-store-20261
 | device ack | http.ts POST /v1/decisions/{id}/stored -> Decisions.stored | signed request (keyhole = device id), decided request -> decision_stored row | idempotent; open request 409; not signed (pass, BellTeam session) 403 forbidden |
 | AI has the result | Decisions.markFetched/reportDelivery/aiRead/cancel/assertOpen | delivered, fetched, AI read of a decided request, AI cancel -> decisions.ai_seen_at | - |
 | purge sweep (every minute) | Decisions.sweepContent, then Attachments.gc | (a) ai_seen_at and every keyhole of the account acked, or (b) purge_by (decided + 7 days) -> content columns emptied, notes nulled, attachments rows and files, acks and the request's idempotency answers deleted; tombstone kept | a failure leaves the rest to the next minute |
-| expiry | Decisions.sweepContent | pending/held older than 14 days -> cancelled, cancel_reason `expired` (needs the window) | next minute |
 | tombstone | Decisions.sweepContent | purged_at + 30 days -> row deleted, `decision.deleted` | - |
-| key sweep (hourly) | Vault.sweep | DK older than 30 days -> rotated; an old DK no record uses (DB headers and attachment files) -> retired; sets with no account and no row -> deleted | resumable |
+| key sweep (hourly) | Vault.sweep | DK older than 30 days -> rotated; records still under an older DK (DB headers and attachment files) -> resealed under the current one (a row changed meanwhile is left: its write resealed it); an old DK no record uses -> retired; sets with no account and no row -> deleted | resumable |
 | account deletion | Accounts.deleteUser | after commit: the account's set and the sets its rows were sealed under, when no row references them -> deleteSet | the hourly sweep catches the rest |
 | migration | seal.ts sealExisting at start (main.ts, before serving; retried every minute on failure) | content_state plain rows, plain attachment files and names, idempotency answers -> sealed in place, batches of 50, one transaction each; then vacuum and WAL truncate | a row is replaced only while unchanged, so it is plain or sealed, never neither; a sealed file under a plain row is recognized by opening it |
 
@@ -41,7 +40,7 @@ AI -> connector or remote MCP -> Decisions.create (seal) -> SQLite (blobs) -> pu
 decisions: content_state, sealed_set, decided_at, purge_by, ai_seen_at, purged_at (norm_title is always empty; the duplicate check compares opened titles). attachments, request_uploads, idempotency: sealed_set. New tables data_sets (the library's DataSetStore) and decision_stored (decision_id, device, at). A row keeps its sealed_set when it moves between entries, so it stays readable.
 
 ### What stays in plaintext
-Metadata the server routes and lists by: ids, status, urgency, deadline, timestamps, session_label, requester, requester_bot_id, client, route, delivery state and its detail, setup check codes. The decided content leaves the server; open content stays sealed until decided or expired.
+Metadata the server routes and lists by: ids, status, urgency, deadline, timestamps, session_label, requester, requester_bot_id, client, route, delivery state and its detail, setup check codes. The decided content leaves the server; open and held content stays sealed until decided or cancelled (no expiry).
 
 ## 生成・保存・複製と回収
 

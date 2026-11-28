@@ -1,6 +1,6 @@
 # Approval Box API（アプリ・Web版向け） v0.51
 
-2026-11-28 v0.51（追加と意味の変更。e02、[保存図](architecture/storage-lifecycle.md#sealed-content-and-decided-requests-e02-2026-11-28)）: サーバーは申請の中身（件名・背景・選択肢・答え・注記・添付）を封をして保存する。決まった申請（answered・cancelled）の中身は、AIが答えを受け取り、アカウントの全端末（鍵穴）が `POST /decisions/{id}/stored` で「履歴に保存した」と知らせたら消す。遅くとも決まってから7日で消す。消した後の `GET /decisions/{id}` は印（`content_removed: true`、件名・背景・選択肢・答え・履歴は空）を返し、印は30日で消える（その後は404）。一覧には印を出さない。消した時の知らせは `decision.updated`（`change: "content_removed"`、通知は送らない）。答えの出ないまま14日たった申請は取り下げになる（`cancel_reason: "expired"`）。中身を封にする鍵が使えないサーバーは、新しい申請・答え・添付を 503 `store_unavailable` で断る。アプリは決まった申請を自分の履歴に保存してから stored を送り、一覧は「端末の履歴＋サーバーの未決・保留」にする。
+2026-11-28 v0.51（追加と意味の変更。e02、[保存図](architecture/storage-lifecycle.md#sealed-content-and-decided-requests-e02-2026-11-28)）: サーバーは申請の中身（件名・背景・選択肢・答え・注記・添付）を封をして保存する。決まった申請（answered・cancelled）の中身は、AIが答えを受け取り、アカウントの全端末（鍵穴）が `POST /decisions/{id}/stored` で「履歴に保存した」と知らせたら消す。遅くとも決まってから7日で消す。消した後の `GET /decisions/{id}` は印（`content_removed: true`、件名・背景・選択肢・答え・履歴は空）を返し、印は30日で消える（その後は404）。一覧には印を出さない。消した時の知らせは `decision.updated`（`change: "content_removed"`、通知は送らない）。未決・保留の申請は、決まるか取り下げられるまで（封をしたまま）今までどおり残る。中身を封にする鍵が使えないサーバーは、新しい申請・答え・添付を 503 `store_unavailable` で断る。アプリは決まった申請を自分の履歴に保存してから stored を送り、一覧は「端末の履歴＋サーバーの未決・保留」にする。
 
 2026-11-27 v0.50（意味の変更・形は変わらない）: 新しい形の入口（entry、端末ごとに購入を確かめる。[local-form.md](architecture/local-form.md)）を、session や接続トークン（BellTeam）で読んだ `GET /me` は、`plan: active` で `store`・`expires_at` を出さない（課金の対象外のアカウントと同じ形）。サーバーは entry を支払いで断らない（`assertCanUse`）ので、`/me` もそれに合わせた。それまでは users の行の既定値のまま `expired` を返し、BellTeam が旦那の答えを席へ渡すのを止めていた。署名つきの要求の `/me` は今までどおり `plan` を出さない。
 
@@ -126,7 +126,7 @@ Decision {
   created_at: time,
   updated_at: time,
   version: int,                  // 更新のたびに増える（AIの修正でも増える）
-  cancel_reason?: string,        // AIが取り下げた理由（status=cancelled の時）。サーバーが取り下げた時は subscription_expired・expired（14日たった）
+  cancel_reason?: string,        // AIが取り下げた理由（status=cancelled の時）。サーバーが取り下げた時は subscription_expired
   content_removed?: true,        // 決まった申請の中身をサーバーから消した印（v0.51）。title・context は ""、options・request_attachments・history は []、answer は無い
   distinct_reason?: string,      // 似た申請があるのにAIが別件として出した理由
   history: [{
@@ -386,7 +386,7 @@ message は利用者にそのまま見せてよい日本語の文。
 
 ## 変更履歴
 
-- v0.51 2026-11-28 封をした中身と、決まった申請の中身の削除（e02）: `POST /decisions/{id}/stored`、印（`content_removed`）、`change: "content_removed"`、14日の期限（`cancel_reason: expired`）、503 `store_unavailable`。AI側（`/connector/v1`・MCP）の決まって消えた申請は `content_removed: true` と `message` を返し、`answer`・`answer_text` は無い。保存した冪等キーの応答は1日で消える。
+- v0.51 2026-11-28 封をした中身と、決まった申請の中身の削除（e02）: `POST /decisions/{id}/stored`、印（`content_removed`）、`change: "content_removed"`、503 `store_unavailable`。AI側（`/connector/v1`・MCP）の決まって消えた申請は `content_removed: true` と `message` を返し、`answer`・`answer_text` は無い。保存した冪等キーの応答は1日で消える。
 
 - v0.47 2026-11-20 `GET /auth/config` に `library_login`（ライブラリのログインを使うサーバーだけ `true`）を追加。Web版がライブラリのQRログインへ切り替える目印。他は変わらない。
 - v0.46 2026-11-20 共有の login & billing ライブラリの導入（段階A、互換）: `/auth/v1`（ライブラリのwire v1）、`/v1` の通行証（Bearer・cookie）と応答ヘッダー `Login-Billing-Pass`、通行証での契約の関門（402 `subscription_expired`）、`/me` の `purchase_mark`、`GET /me/export`、契約がなくなった時の取り下げ（`cancel_reason: subscription_expired`）。旧いsessionと `/v1/auth/*` は今までどおり使える。ライブラリの鍵が無いサーバーは何も変わらない。

@@ -16,8 +16,6 @@ const AMEND_LIMIT = 20;
 const DAY_MS = 86400_000;
 /** A tombstone (id and state, no content) stays this long after its content went. */
 export const TOMBSTONE_MS = 30 * DAY_MS;
-/** An undecided or held request expires (cancelled, reason "expired") this long after it was made. */
-export const OPEN_EXPIRY_MS = 14 * DAY_MS;
 /** The content columns of decisions, each sealed with context "<id>|<column>". */
 const CONTENT = ["title", "context", "options", "recommendation", "answer", "delivery_text", "cancel_reason", "distinct_reason"] as const;
 type Content = Record<(typeof CONTENT)[number], string | null>;
@@ -405,17 +403,13 @@ export class Decisions {
   }
 
   /**
-   * Every minute (storage-lifecycle.md "Sealed content"): open requests past OPEN_EXPIRY_MS expire; decided content goes once the AI has the
+   * Every minute (storage-lifecycle.md "Sealed content"): decided content goes once the AI has the
    * result and every keyhole (device) of the account acked storing it, or at purge_by (7 days) regardless; tombstones go TOMBSTONE_MS after;
    * replayable idempotency answers go after a day. Returns how many were purged (their attachment files go with the next Attachments.gc).
    * A failure leaves the rest for the next minute.
    */
   async sweepContent(at = Date.now()) {
     const iso = (ms: number) => new Date(ms).toISOString();
-    // Expiry reseals the reason, so it waits for a window; the purge below only deletes and runs without one.
-    if (this.vault.ready) for (const { id, user_id } of all<{ id: string; user_id: string }>(this.db, "select id, user_id from decisions where status in ('pending','held') and created_at < ?", iso(at - OPEN_EXPIRY_MS))) {
-      await this.cancelByServer(() => this.forUser(user_id, id), "expired", iso(at)).catch((error: unknown) => console.error(`approval-box-server: expire_failed ${error instanceof ApiError ? error.code : "error"}`));
-    }
     const due = all<{ id: string; user_id: string }>(this.db, `select id, user_id from decisions d where content_state <> 'purged' and status in ('answered','cancelled') and (
         purge_by <= ?
         or (ai_seen_at is not null and exists (select 1 from keyholes k where k.entry = d.user_id)
@@ -658,14 +652,15 @@ export class Decisions {
     return this.toAi(cancelled);
   }
 
-  /** The server ends an open request (no contract, expiry). The AI learns it when it next reads the request. */
-  private async cancelByServer(load: () => Stored, reason: string, at = now()) {
+  /** The server ends an open request (no contract). The AI learns it when it next reads the request. */
+  private async cancelByServer(load: () => Stored, reason: string) {
     await this.change(load, async (row) => {
       if (!OPEN.includes(row.status)) return null;
       const set = row.sealed_set ?? row.user_id;
       return { set, sealed: await this.sealContent(set, row.id, { ...this.content(row), cancel_reason: reason }), note: await this.sealNote(set, row.id, reason) };
     }, (row, p) => {
       if (!p || !OPEN.includes(row.status)) return;
+      const at = now();
       run(this.db, "update decisions set status = 'cancelled', decided_at = ?, purge_by = ?, updated_at = ?, version = version + 1 where id = ?", at, capFrom(at), at, row.id);
       this.writeContent(row.id, p.set, p.sealed);
       run(this.db, "delete from attachments where decision_id = ? and position is null", row.id);

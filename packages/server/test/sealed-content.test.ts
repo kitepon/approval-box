@@ -117,12 +117,18 @@ test("decided content goes once the AI fetched it and every device stored it; th
   for (let i = 0; i < 2; i++) assert.deepEqual((await x.call("POST", `/v1/decisions/${id}/stored`, { device })).json, { decision_id: id, stored: true });
   assert.equal(await x.decisions.sweepContent(), 0); // the child has not
   assert.equal((await x.call("POST", `/v1/decisions/${id}/stored`, { device: child })).status, 200);
-  // The data key is past 30 days: the hourly sweep rotates it, and keeps the old one while records are sealed under it.
+  // The data key is past 30 days: the hourly sweep rotates it, reseals what was under the old one (still readable), and retires it.
   const vault = vaultOf(x.db), dir = join(x.dir, "attachments");
+  const { id: held } = await ask(x, user, "保留のまま");
+  assert.equal((await x.call("POST", `/v1/decisions/${held}/hold`, { device, headers: { "idempotency-key": "h1" } })).status, 200);
   run(x.db, "update data_sets set value = json_set(value, '$.dk.items[0].created', 0) where key = ?", `dset:${user}`);
-  assert.deepEqual(await vault.sweep(dir), { rotated: 1, retired: 0, forgotten: 0 });
+  const swept = await vault.sweep(dir);
+  assert.deepEqual([swept.rotated, swept.retired, swept.forgotten], [1, 1, 0]);
+  assert.ok(swept.resealed > 0);
+  assert.equal(JSON.parse(get<{ value: string }>(x.db, "select value from data_sets where key = ?", `dset:${user}`)!.value).dk.items.length, 1);
+  assert.equal((await x.call("GET", `/v1/decisions/${held}`, { device })).json.title, "保留のまま");
+  assert.equal((await x.call("GET", `/v1/decisions/${id}`, { device })).json.answer.option_id, "a");
   assert.equal(await x.decisions.sweepContent(), 1);
-  assert.deepEqual(await vault.sweep(dir), { rotated: 0, retired: 1, forgotten: 0 }); // nothing left under the old key
 
   const tombstone = (await x.call("GET", `/v1/decisions/${id}`, { device })).json;
   assert.equal(tombstone.content_removed, true);
@@ -136,7 +142,8 @@ test("decided content goes once the AI fetched it and every device stored it; th
   assert.deepEqual((await x.call("GET", "/v1/decisions?status=answered,cancelled", { device })).json.items, []);
   const row = get<Record<string, unknown>>(x.db, "select title, context, answer, delivery_text, content_state from decisions where id = ?", id)!;
   assert.deepEqual({ ...row }, { title: "", context: "", answer: null, delivery_text: null, content_state: "purged" });
-  assert.equal(get<{ n: number }>(x.db, "select count(*) n from idempotency")!.n, 0);
+  assert.equal(get<{ n: number }>(x.db, "select count(*) n from idempotency where instr(route, ?) > 0", id)!.n, 0);
+  assert.equal(get<{ n: number }>(x.db, "select count(*) n from idempotency")!.n, 1); // the held request's hold stays
   assert.equal(get<{ n: number }>(x.db, "select count(*) n from history where decision_id = ? and note is not null", id)!.n, 0);
 
   assert.equal(await x.decisions.sweepContent(Date.now() + 29 * DAY), 0);
@@ -150,7 +157,7 @@ test("decided content goes once the AI fetched it and every device stored it; th
   assert.equal(get(x.db, "select 1 from data_sets where key = ?", `dset:${user}`), undefined);
 });
 
-test("the 7-day cap purges a decided request no device stored; an open request expires after 14 days", async () => {
+test("the 7-day cap purges a decided request no device stored; an open request stays sealed however old", async () => {
   const x = setup();
   const { device, entry: user } = await entry(x);
   const decided = await ask(x, user, "答えるもの");
@@ -160,9 +167,9 @@ test("the 7-day cap purges a decided request no device stored; an open request e
   assert.equal(await x.decisions.sweepContent(Date.now() + 7 * DAY + 60_000), 1);
   assert.equal((await x.call("GET", `/v1/decisions/${decided.id}`, { device })).json.content_removed, true);
   assert.equal((await x.call("GET", `/v1/decisions/${open.id}`, { device })).json.status, "pending");
-  await x.decisions.sweepContent(Date.now() + 15 * DAY);
-  const expired = (await x.call("GET", `/v1/decisions/${open.id}`, { device })).json;
-  assert.deepEqual([expired.status, expired.cancel_reason], ["cancelled", "expired"]);
+  await x.decisions.sweepContent(Date.now() + 400 * DAY);
+  const still = (await x.call("GET", `/v1/decisions/${open.id}`, { device })).json;
+  assert.deepEqual([still.status, still.title, still.content_removed], ["pending", "待つもの", undefined]);
 });
 
 test("migration seals plaintext rows in place, resumably, leaving no plaintext on disk; a decided row is kept until 7 days after the migration", async () => {
@@ -174,7 +181,6 @@ test("migration seals plaintext rows in place, resumably, leaving no plaintext o
     values (?, ?, ?, ?, ?, 'old context', '[{"id":"a","label":"A"},{"id":"b","label":"B"}]', 'normal', 'codex', 's', 'connector', ?, ?, ?, ?, 'r', ?, ?, 2)`,
     id, user, c.id, `old ${id}`, `old${id}`, status, answerText ? JSON.stringify({ option_id: "a", text: answerText, answered_at: at }) : null, answerText ? "delivered" : null, answerText ? `text ${answerText}` : null, at, at);
   insert("K-OPEN01", "pending", null);
-  run(x.db, "update decisions set created_at = ? where id = 'K-OPEN01'", new Date().toISOString()); // still open after the 7 days below
   insert("K-DONE01", "answered", "old answer");
   run(x.db, "insert into history (decision_id, at, kind, by, note) values ('K-OPEN01', ?, 'amended', 'ai', 'old note')", at);
   const dir = join(x.dir, "attachments");

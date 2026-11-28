@@ -123,26 +123,61 @@ export class Vault {
   }
 
   /**
-   * Hourly: rotates data keys past 30 days, retires an old key once no record is sealed under it, and forgets sets of deleted accounts.
-   * Records are resealed lazily: every write reseals the whole row under the current key, and no content outlives 14 days (open requests
-   * expire, decided ones go within 7), so an old key empties by itself.
+   * Hourly: rotates data keys past 30 days, reseals what is still under an older key (an open or held request can stay for long; every write
+   * also reseals its whole row), retires an old key once nothing uses it, and forgets sets of deleted accounts.
    */
   async sweep(attachmentsDir?: string) {
-    if (!this.sets) return { rotated: 0, retired: 0, forgotten: 0 };
+    if (!this.sets) return { rotated: 0, resealed: 0, retired: 0, forgotten: 0 };
     const { rotated } = await this.sets.sweep().catch(mapped);
-    let retired = 0;
+    let resealed = 0, retired = 0;
     const records = new SqliteDataSetStore(this.db).records(PREFIX) as [string, SetRecord][];
     for (const [, record] of records) {
       for (const item of record.dk.items) {
-        if (item.n === record.dk.current || usesKey(this.db, record.set, item.n, attachmentsDir)) continue;
+        if (item.n === record.dk.current) continue;
+        resealed += await this.resealUnder(record.set, item.n, attachmentsDir);
+        if (usesKey(this.db, record.set, item.n, attachmentsDir)) continue; // a write raced the reseal: next hour
         await this.sets.retire(record.set, item.n).catch(mapped);
         retired++;
       }
     }
     const forgotten = await this.forget(records.map(([, r]) => r.set));
-    return { rotated, retired, forgotten };
+    return { rotated, resealed, retired, forgotten };
+  }
+
+  /** Reseals the set's records still under key n with the current key. A row changed meanwhile is left (its write resealed it). */
+  private async resealUnder(set: string, n: number, attachmentsDir?: string) {
+    const sets = this.assertReady();
+    const header = keyHeader(n);
+    const sources: { table: string; column: string; context: string; owner: string }[] = [
+      ...SEALED_COLUMNS.decisions!.map((column) => ({ table: "decisions", column, context: `id || '|${column}'`, owner: "sealed_set" })),
+      ...["attachments", "request_uploads"].map((table) => ({ table, column: "name", context: "id || '|name'", owner: "sealed_set" })),
+      { table: "idempotency", column: "body", context: "'idempotency|' || key", owner: "sealed_set" },
+      { table: "history", column: "note", context: "decision_id || '|note'", owner: "(select sealed_set from decisions where decisions.id = history.decision_id)" },
+    ];
+    let count = 0;
+    for (const { table, column, context, owner } of sources) {
+      const rows = all<{ rid: number; ctx: string; value: Uint8Array }>(this.db,
+        `select rowid rid, ${context} ctx, ${column} value from ${table} where ${owner} = ? and typeof(${column}) = 'blob' and hex(substr(${column}, 5, 4)) = ?`, set, header);
+      for (const row of rows) {
+        const fresh = await sets.reseal(set, row.ctx, row.value).catch(mapped);
+        count += Number(run(this.db, `update ${table} set ${column} = ? where rowid = ? and ${column} = ?`, fresh, row.rid, row.value).changes);
+      }
+    }
+    if (attachmentsDir) {
+      for (const { id } of all<{ id: string }>(this.db, "select id from attachments where sealed_set = ? union select id from request_uploads where sealed_set = ?", set, set)) {
+        const file = join(attachmentsDir, id);
+        const head = readHead(file);
+        if (!head || !looksSealed(head) || Buffer.from(head.subarray(4, 8)).toString("hex").toUpperCase() !== header) continue;
+        writeFileSync(`${file}.part`, await sets.reseal(set, `${id}|file`, readFileSync(file)).catch(mapped), { mode: 0o600 });
+        renameSync(`${file}.part`, file);
+        count++;
+      }
+    }
+    return count;
   }
 }
+
+const keyHeader = (n: number) => n.toString(16).toUpperCase().padStart(8, "0");
 
 /** Whether any row is sealed under the set, or the set is an account (users.id). */
 function referenced(db: Db, set: string) {
@@ -152,7 +187,7 @@ function referenced(db: Db, set: string) {
 
 /** Whether a record of the set is still sealed under data key n (the lbd1 header carries n, big-endian, after the magic). */
 function usesKey(db: Db, set: string, n: number, attachmentsDir?: string) {
-  const header = n.toString(16).toUpperCase().padStart(8, "0");
+  const header = keyHeader(n);
   for (const [table, columns] of Object.entries(SEALED_COLUMNS)) {
     const where = columns.map((c) => `(typeof(${c}) = 'blob' and hex(substr(${c}, 5, 4)) = ?)`).join(" or ");
     if (get(db, `select 1 from ${table} where sealed_set = ? and (${where}) limit 1`, set, ...columns.map(() => header))) return true;
