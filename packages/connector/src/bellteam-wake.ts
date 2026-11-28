@@ -59,7 +59,15 @@ const NOT_RECEIVED = new Set(["ECONNREFUSED", "ENOTFOUND", "EHOSTUNREACH", "EADD
 
 type McpReply = { error?: { message?: string }; result?: { isError?: boolean; content?: { type?: string; text?: string }[] } };
 
+/** BellTeam's two-step sendmessage (Tronie 11/28): the first call to a target answers SENDMESSAGE_OWNER_CHECK_REQUIRED and is not sent; the same call once more is delivered. One retry only. */
+export const OWNER_CHECK = "SENDMESSAGE_OWNER_CHECK_REQUIRED";
+
 export async function sendWake(botId: string, message: string, fetchImpl: typeof fetch = fetch): Promise<WakeOutcome> {
+  const first = await sendOnce(botId, message, fetchImpl);
+  return first.outcome === "refused" && first.detail.includes(OWNER_CHECK) ? sendOnce(botId, message, fetchImpl) : first;
+}
+
+async function sendOnce(botId: string, message: string, fetchImpl: typeof fetch): Promise<WakeOutcome> {
   let res: Response;
   try {
     res = await fetchImpl(BELLTEAM_MCP_URL, {
