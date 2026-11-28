@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BELLTEAM_MCP_URL, bellteamBotId, queueWake, rememberRequester, requesterOf, sendWake, wakeMessage, type Wakes } from "../src/bellteam-wake.ts";
+import { OWNER_CHECK, BELLTEAM_MCP_URL, bellteamBotId, queueWake, rememberRequester, requesterOf, sendWake, wakeMessage, type Wakes } from "../src/bellteam-wake.ts";
 
 const bt = (seat?: string) => ({ BELLTEAM_ROOT: "/srv/bellteam", AITERM_SESSION_ID: seat }) as NodeJS.ProcessEnv;
 
@@ -73,4 +73,22 @@ test("BellTeamへの送信: SSE形式の返事も読む", async () => {
   const body = `event: message\ndata: ${JSON.stringify(reply(ok))}\n\n`;
   const result = await sendWake("bot-a1", "m", async () => new Response(body, { headers: { "content-type": "text/event-stream" } }));
   assert.equal(result.outcome, "accepted");
+});
+
+test("sendmessage の2段階: OWNER_CHECK の拒否だけ同じ呼び出しを一度だけ送り直す。ほかの拒否は送り直さない", async () => {
+  const reply = (text: string, isError: boolean) => new Response(JSON.stringify({ jsonrpc: "2.0", id: "1", result: { isError, content: [{ type: "text", text }] } }), { headers: { "content-type": "application/json" } });
+  const bodies: string[] = [];
+  let n = 0;
+  const gated = (async (_u: unknown, init?: RequestInit) => { bodies.push(String(init?.body)); return ++n === 1 ? reply(`${OWNER_CHECK}: judge the target first`, true) : reply(JSON.stringify({ delivery: "queued", delivery_id: "d1" }), false); }) as typeof fetch;
+  assert.deepEqual(await sendWake("bot-x", "hi", gated), { outcome: "accepted", detail: "queued d1" });
+  assert.equal(bodies.length, 2);
+  assert.equal(JSON.parse(bodies[0]!).params.arguments.target, JSON.parse(bodies[1]!).params.arguments.target);
+  let m = 0;
+  const always = (async () => { m++; return reply(`${OWNER_CHECK}: again`, true); }) as typeof fetch;
+  assert.equal((await sendWake("bot-x", "hi", always)).outcome, "refused");
+  assert.equal(m, 2, "one retry only");
+  let k = 0;
+  const other = (async () => { k++; return reply("target_not_found", true); }) as typeof fetch;
+  assert.equal((await sendWake("bot-x", "hi", other)).outcome, "refused");
+  assert.equal(k, 1, "other refusals are not retried");
 });
