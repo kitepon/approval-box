@@ -57,10 +57,15 @@ const isSealed = (value: unknown): value is Uint8Array => value instanceof Uint8
 const MAGIC = [0x6c, 0x62, 0x64, 0x31]; // "lbd1"
 export const looksSealed = (bytes: Uint8Array) => bytes.length >= 36 && MAGIC.every((b, i) => bytes[i] === b);
 
+let lastUnavailableLog = 0;
 /** The window failed (module down, key missing): 503. Anything else from the library is a broken record: logged as its code only, 500. */
 function mapped(error: unknown): never {
   if (error instanceof TeamError) {
-    if (error.code === "window_unavailable" || error.code === "window_denied" || error.code === "token_unavailable") throw new ApiError("store_unavailable", UNAVAILABLE);
+    if (error.code === "window_unavailable" || error.code === "window_denied" || error.code === "token_unavailable") {
+      // one line per 10 s at most, so a 503 always leaves its reason (b02: a 503 window left no trace)
+      if (Date.now() - lastUnavailableLog > 10_000) { lastUnavailableLog = Date.now(); console.error(`approval-box-server: sealed_content_unavailable ${error.code}`); }
+      throw new ApiError("store_unavailable", UNAVAILABLE);
+    }
     console.error(`approval-box-server: sealed_content_failed ${error.code}`);
     throw new ApiError("internal", "サーバーで問題が起きました。時間を置いて試してください。");
   }
@@ -87,8 +92,20 @@ export class Vault {
     return this.sets;
   }
 
+  /** One key load per set at a time: the library loads the data key once per call on a cold cache, so N parallel opens of one set made N module unwraps (b02: ~90 a second in production). Later calls wait for the first and then hit the 60 s cache. */
+  private readonly loading = new Map<string, Promise<void>>();
+  private async warm(sets: DataSets, set: string) {
+    let p = this.loading.get(set);
+    if (!p) {
+      p = sets.withDataKey(set, async () => {}).then(() => {}, () => {}).finally(() => this.loading.delete(set)); // a failure (unknown set, window down) surfaces on the real call
+      this.loading.set(set, p);
+    }
+    await p;
+  }
+
   async sealBytes(set: string, context: string, plain: Uint8Array): Promise<Uint8Array> {
     const sets = this.assertReady();
+    await this.warm(sets, set);
     return sets.seal(set, context, plain).catch(mapped);
   }
 
@@ -100,6 +117,7 @@ export class Vault {
 
   async openBytes(set: string, context: string, record: Uint8Array): Promise<Uint8Array> {
     const sets = this.assertReady();
+    await this.warm(sets, set);
     return sets.open(set, context, record).catch(mapped);
   }
 
