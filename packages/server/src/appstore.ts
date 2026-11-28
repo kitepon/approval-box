@@ -1,7 +1,7 @@
 // App Storeの購入（StoreKit 2）の照合。形は api.md の「契約」。
 // 署名付きの取引（JWS）は、Appleのルート証明書までの署名を確かめてから使う。アプリが申告した値は使わない。
 import { Environment, SignedDataVerifier, type JWSRenewalInfoDecodedPayload, type JWSTransactionDecodedPayload } from "@apple/app-store-server-library";
-import { sign } from "node:crypto";
+import type { Signer } from "./auth-module.ts";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Accounts } from "./accounts.ts";
@@ -19,7 +19,7 @@ export type AppStoreConfig = {
   /** 証明書の失効をAppleへ問い合わせる（OCSP）。試験の証明書では切る。 */
   onlineChecks?: boolean;
   /** App Store Server API（契約の状態をAppleから読む鍵）。無ければ、署名付きの取引の値で決める（従来どおり）。 */
-  api?: { issuerId: string; keyId: string; privateKey: string; fetch?: typeof fetch };
+  api?: { issuerId: string; keyId: string; sign: Signer; fetch?: typeof fetch };
 };
 
 /** 期限切れを見て読み直す間隔の下限（同じ購入につき）。 */
@@ -118,7 +118,11 @@ export class AppStore {
     const header = Buffer.from(JSON.stringify({ alg: "ES256", kid: api.keyId, typ: "JWT" })).toString("base64url");
     const iat = Math.floor(Date.now() / 1000);
     const claims = Buffer.from(JSON.stringify({ iss: api.issuerId, iat, exp: iat + 300, aud: "appstoreconnect-v1", bid: this.config.bundleId })).toString("base64url");
-    const signature = sign("sha256", Buffer.from(`${header}.${claims}`), { key: api.privateKey, dsaEncoding: "ieee-p1363" }).toString("base64url");
+    let signature: string;
+    try { signature = (await api.sign(Buffer.from(`${header}.${claims}`))).toString("base64url"); } catch (error) {
+      console.error(`approval-box-server: App Store Server API sign -> ${(error as Error).message}`);
+      throw new ApiError("internal", "Appleから契約の状態を読めませんでした。");
+    }
     const host = env === Environment.PRODUCTION ? "https://api.storekit.itunes.apple.com" : "https://api.storekit-sandbox.itunes.apple.com";
     let res: Response;
     try {

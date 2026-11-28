@@ -1,7 +1,7 @@
 // コンテナの入口（tools/deploy/start-with-secrets.sh）。鍵を環境変数で受け取り、tmpfs のファイルへ移してからサーバーを起こす。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { createPrivateKey, generateKeyPairSync } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readHeaderFile } from "../src/callbridge.ts";
 import { Apns } from "../src/push.ts";
+import { keySigner } from "../src/auth-module.ts";
 
 const entrypoint = fileURLToPath(new URL("../../../tools/deploy/start-with-secrets.sh", import.meta.url));
 const posix = { skip: process.platform === "win32" ? "入口は Linux のコンテナの中だけで動く" : false };
@@ -45,7 +46,7 @@ test("SECRETS_DIR を指定すると、鍵3個を 600 のファイルへ移し�
   const all = Object.values(seen).join("\n");
   for (const value of [pem.split("\n")[1]!, adminKey, "test-token"]) assert.equal(all.includes(value), false);
   // サーバーの読み方（main.ts と同じ）で読める。
-  new Apns({ keyPem: readFileSync(seen.APNS_KEY_FILE!, "utf8"), keyId: "K", teamId: "T", topic: "t" });
+  new Apns({ sign: keySigner(createPrivateKey(readFileSync(seen.APNS_KEY_FILE!, "utf8")), "ES256"), keyId: "K", teamId: "T", topic: "t" });
   assert.equal(readFileSync(seen.DIAGNOSTICS_ADMIN_KEY_FILE!, "utf8").trim(), adminKey);
   assert.deepEqual(readHeaderFile(seen.CALL_BRIDGE_HEADERS_FILE!), { Authorization: "Bearer test-token:with=colon and space" });
 }));

@@ -163,7 +163,18 @@ export function privateAddress(address: string) {
   if (isIP(a) === 4) { const [x,y] = a.split(".").map(Number); return x === 10 || (x === 172 && y! >=16 && y! <=31) || (x ===192 && y ===168) || x ===127; }
   return a === "::1" || (isIP(a) === 6 && /^(fc|fd)/i.test(a));
 }
-export function diagnosticsAdmin(diagnostics: Diagnostics, token?: string) {
+/** Authorization ヘッダーが管理の鍵に合うか。token は生の値、sha256 は鍵の SHA-256（16進）で、どちらかが合えば通す。鍵そのものをサーバーに置かない形が後者。 */
+export function adminAuthorized(auth: string, token?: string, sha256?: string) {
+  if (token) {
+    const expected = Buffer.from(`Bearer ${token}`), supplied = Buffer.from(auth);
+    if (supplied.length === expected.length && timingSafeEqual(supplied, expected)) return true;
+  }
+  if (sha256 && /^[0-9a-f]{64}$/i.test(sha256) && auth.startsWith("Bearer ")) {
+    return timingSafeEqual(createHash("sha256").update(auth.slice(7)).digest(), Buffer.from(sha256, "hex"));
+  }
+  return false;
+}
+export function diagnosticsAdmin(diagnostics: Diagnostics, token?: string, tokenSha256?: string) {
   const app = new Hono();
   app.use("*",async(c,next)=>{
     c.header("Cache-Control","no-store");
@@ -172,8 +183,7 @@ export function diagnosticsAdmin(diagnostics: Diagnostics, token?: string) {
     const host = new URL(c.req.url).hostname.replace(/^\[|\]$/g,"");
     if (!privateAddress(remote) || !privateAddress(host) || ["cf-ray","cf-connecting-ip","forwarded","x-forwarded-for","x-forwarded-host"].some(h=>c.req.header(h)!==undefined)) return c.json({error:"LAN only"},403);
     const auth = c.req.header("authorization") ?? "";
-    const expected = Buffer.from(`Bearer ${token ?? ""}`), supplied = Buffer.from(auth);
-    if (!token || supplied.length !== expected.length || !timingSafeEqual(supplied,expected)) return c.json({error:"unauthorized"},401);
+    if (!adminAuthorized(auth, token, tokenSha256)) return c.json({error:"unauthorized"},401);
     await next();
   });
   app.get("/logs",c=>{

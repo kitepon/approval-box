@@ -24,7 +24,7 @@ import { type AppKeyholes, KeyholeError, SIGNED_HEADER } from "./keyholes.ts";
 import { exportAccount } from "./export.ts";
 import { type AppLinks, appleAppSiteAssociation, assetLinks } from "./applinks.ts";
 
-export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal; library?: Library; peerChannel?: { forgetAccount(k: string): void; connectionRemoved(k: string, connectionId: string): void }; appLinks?: AppLinks; keyholes?: AppKeyholes };
+export type Services = { db: Db; accounts: Accounts; decisions: Decisions; events: EventHub; publicUrl: string; diagnosticsAdminToken?: string; diagnosticsAdminTokenSha256?: string; attachments?: Attachments; appStore?: AppStore; play?: Play; appleAudiences?: string[]; googleAudiences?: string[]; idKeys?: KeySource; webLogin?: { google_client_id?: string; apple_services_id?: string }; remoteMcp?: RemoteMcpOptions; shutdown?: AbortSignal; library?: Library; peerChannel?: { forgetAccount(k: string): void; connectionRemoved(k: string, connectionId: string): void }; appLinks?: AppLinks; keyholes?: AppKeyholes };
 
 const PARENT_REQUIRED = "AIとの接続は、スマホ（iPhone・iPad・Android）のアプリでQRコードを読み取って承認してください。";
 
@@ -210,7 +210,7 @@ export function createApp(services: Services, options: { staticHandler?: (c: Con
   }
 
   const diagnostics = new Diagnostics(services.db);
-  app.route("/api/admin",diagnosticsAdmin(diagnostics,services.diagnosticsAdminToken));
+  app.route("/api/admin",diagnosticsAdmin(diagnostics,services.diagnosticsAdminToken,services.diagnosticsAdminTokenSha256));
 
   app.get("/healthz", (c) => c.json({ ok: true }));
 

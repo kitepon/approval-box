@@ -1,7 +1,8 @@
 // Googleのサービスアカウントで、APIのアクセストークンを得る（Google Play・FCMで共用）。依存を足さず node:crypto で署名する。
-import { sign } from "node:crypto";
+import type { Signer } from "./auth-module.ts";
 
-export type ServiceAccount = { client_email: string; private_key: string };
+/** 鍵は渡さない。sign が RS256 の署名（PKCS#1 v1.5 + SHA-256）を返す。 */
+export type ServiceAccount = { client_email: string; sign: Signer };
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 export class GoogleToken {
@@ -25,9 +26,9 @@ export class GoogleToken {
     const input = `${enc({ alg: "RS256", typ: "JWT" })}.${enc({ iss: this.account.client_email, scope: this.scope, aud: TOKEN_URL, iat, exp: iat + 3600 })}`;
     let assertion: string;
     try {
-      assertion = `${input}.${sign("RSA-SHA256", Buffer.from(input), this.account.private_key).toString("base64url")}`;
-    } catch {
-      throw new Error("sign failed");
+      assertion = `${input}.${(await this.account.sign(Buffer.from(input))).toString("base64url")}`;
+    } catch (error) {
+      throw new Error(`sign failed: ${(error as Error).message}`); // 文は item と結果、または鍵を読めない理由だけ
     }
     let res: Response;
     try {

@@ -2,13 +2,13 @@ import type { Locale } from "./locales.ts";
 // アプリへのプッシュ通知（iPhone・Mac＝APNs、Android＝FCM）。形は api.md の「更新の知らせ」。
 // 申請が来た・直された時だけ鳴らし、取り下げ・回答・配送は音なしでバッジと一覧だけを更新する。
 import { connect, type ClientHttp2Session } from "node:http2";
-import { createPrivateKey, sign, type KeyObject } from "node:crypto";
+import type { Signer } from "./auth-module.ts";
 import { type Db, all, get, run } from "./db.ts";
 import { displayLabel } from "./decisions.ts";
 import type { EventHub, UserEvent } from "./events.ts";
 import { GoogleToken, type ServiceAccount } from "./google-auth.ts";
 
-export type ApnsConfig = { keyPem: string; keyId: string; teamId: string; topic: string };
+export type ApnsConfig = { sign: Signer; keyId: string; teamId: string; topic: string };
 type Send = (env: "sandbox" | "production", token: string, headers: Record<string, string>, payload: unknown) => Promise<{ status: number; reason?: string }>;
 export type FcmConfig = { projectId: string; serviceAccount: ServiceAccount; fetch?: typeof fetch };
 type FcmSend = (token: string, data: Record<string, string>, priority: "high" | "normal") => Promise<{ status: number; reason?: string }>;
@@ -18,22 +18,24 @@ const TOKEN_TTL_MS = 50 * 60_000; // Appleは20〜60分で作り直すよう求�
 
 export class Apns {
   private readonly config: ApnsConfig;
-  private readonly key: KeyObject;
   private jwt: { value: string; at: number } | null = null;
+  private pending: Promise<string> | null = null; // 同時の送信で署名を何度も頼まない
   private readonly sessions = new Map<string, ClientHttp2Session>();
 
   constructor(config: ApnsConfig) {
     this.config = config;
-    this.key = createPrivateKey(config.keyPem);
   }
 
-  private token(): string {
+  private async token(): Promise<string> {
     if (this.jwt && Date.now() - this.jwt.at < TOKEN_TTL_MS) return this.jwt.value;
-    const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
-    const head = `${enc({ alg: "ES256", kid: this.config.keyId })}.${enc({ iss: this.config.teamId, iat: Math.floor(Date.now() / 1000) })}`;
-    const signature = sign("sha256", Buffer.from(head), { key: this.key, dsaEncoding: "ieee-p1363" }).toString("base64url");
-    this.jwt = { value: `${head}.${signature}`, at: Date.now() };
-    return this.jwt.value;
+    this.pending ??= (async () => {
+      const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
+      const head = `${enc({ alg: "ES256", kid: this.config.keyId })}.${enc({ iss: this.config.teamId, iat: Math.floor(Date.now() / 1000) })}`;
+      const signature = (await this.config.sign(Buffer.from(head))).toString("base64url");
+      this.jwt = { value: `${head}.${signature}`, at: Date.now() };
+      return this.jwt.value;
+    })().finally(() => { this.pending = null; });
+    return this.pending;
   }
 
   private session(env: "sandbox" | "production"): ClientHttp2Session {
@@ -47,10 +49,13 @@ export class Apns {
     return session;
   }
 
-  readonly send: Send = (env, deviceToken, headers, payload) => new Promise((resolve) => {
+  readonly send: Send = async (env, deviceToken, headers, payload) => {
+    let jwt: string;
+    try { jwt = await this.token(); } catch (error) { return { status: 0, reason: `sign ${(error as Error).message}` }; } // 署名できない時は、送れなかった送信として返す
+    return new Promise((resolve) => {
     const request = this.session(env).request({
       ":method": "POST", ":path": `/3/device/${deviceToken}`,
-      authorization: `bearer ${this.token()}`, "apns-topic": this.config.topic, ...headers,
+      authorization: `bearer ${jwt}`, "apns-topic": this.config.topic, ...headers,
     });
     let status = 0;
     let body = "";
@@ -64,7 +69,8 @@ export class Apns {
     });
     request.on("error", (error) => resolve({ status: 0, reason: error.message }));
     request.end(JSON.stringify(payload));
-  });
+    });
+  };
 }
 
 /** Android へ FCM HTTP v1 でデータメッセージを送る。認証はサーバーのサービスアカウント。 */

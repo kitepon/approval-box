@@ -6,6 +6,7 @@ import { EventHub } from "../src/events.ts";
 import { Accounts } from "../src/accounts.ts";
 import { Decisions } from "../src/decisions.ts";
 import { Apns, Fcm, Notifier } from "../src/push.ts";
+import { keySigner } from "../src/auth-module.ts";
 
 test("申請が来たら件名で鳴らし、取り下げは音なし。無効なtokenの端末は消す", async () => {
   const db = openDb(":memory:");
@@ -56,10 +57,10 @@ test("申請が来たら件名で鳴らし、取り下げは音なし。無効�
   assert.equal(sent[0]!.payload.change, "cancelled");
 });
 
-test("APNsの認証tokenはES256でチームとkidを持つ", () => {
+test("APNsの認証tokenはES256でチームとkidを持つ", async () => {
   const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
-  const apns = new Apns({ keyPem: privateKey.export({ format: "pem", type: "pkcs8" }).toString(), keyId: "KID123", teamId: "TPWX489GV4", topic: "dev.kitepon.approvalbox" });
-  const jwt = (apns as unknown as { token(): string }).token();
+  const apns = new Apns({ sign: keySigner(privateKey, "ES256"), keyId: "KID123", teamId: "TPWX489GV4", topic: "dev.kitepon.approvalbox" });
+  const jwt = await (apns as unknown as { token(): Promise<string> }).token();
   const [h, c, s] = jwt.split(".");
   assert.deepEqual(JSON.parse(Buffer.from(h!, "base64url").toString()), { alg: "ES256", kid: "KID123" });
   assert.equal(JSON.parse(Buffer.from(c!, "base64url").toString()).iss, "TPWX489GV4");
@@ -108,7 +109,7 @@ test("FCMはサービスアカウントのtokenでv1 APIへ送り、Googleの er
     if (url === "https://oauth2.googleapis.com/token") return new Response(JSON.stringify({ access_token: "ya29.fcm", expires_in: 3600 }));
     return new Response(JSON.stringify({ error: { status: "NOT_FOUND", details: [{ errorCode: "UNREGISTERED" }] } }), { status: 404 });
   }) as unknown as typeof fetch;
-  const fcm = new Fcm({ projectId: "approval-box", serviceAccount: { client_email: "s@x.iam.gserviceaccount.com", private_key: privateKey.export({ format: "pem", type: "pkcs8" }).toString() }, fetch: fake });
+  const fcm = new Fcm({ projectId: "approval-box", serviceAccount: { client_email: "s@x.iam.gserviceaccount.com", sign: keySigner(privateKey, "RS256") }, fetch: fake });
   assert.deepEqual(await fcm.send("tok", { type: "decision.created" }, "high"), { status: 404, reason: "UNREGISTERED" });
   const claims = JSON.parse(Buffer.from(String(new URLSearchParams(String(calls[0]!.init.body)).get("assertion")).split(".")[1]!, "base64url").toString());
   assert.equal(claims.scope, "https://www.googleapis.com/auth/firebase.messaging");
