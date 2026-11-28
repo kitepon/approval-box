@@ -25,6 +25,8 @@ Connector 0.1.22 uses `aiterm-steer-delivery` 0.4.4. The waiter now stays alive 
 
 `setup` additionally registers a `SessionStart` hook (`asyncRewake`). A resumed conversation is woken by answers that arrived while it was stopped, before it runs a turn. Without re-running `setup` the existing registration keeps working: the resumed conversation receives such answers at the end of its first turn.
 
+In a non-interactive Claude parent (`CLAUDE_CODE_ENTRYPOINT` sdk-cli / sdk-ts / sdk-py: `claude -p`, the Agent SDK, Aiterm/BellTeam stream-json seats) these hooks never wait (aiterm-steer-delivery 0.5.5): each `PostToolUse` / `Stop` / `SessionStart` hands over the answers already pending and returns at once, so a hook never holds a turn or an interrupt. An answer that arrives while such a seat is idle reaches it at its next hook. Interactive Claude keeps the long wait.
+
 Still not delivered: after `/clear` the conversation has a new `session_id` (use `list_my_decisions` / `resume_decision`). When two processes hold the same conversation, only one waiter exists and the first one receives the answer.
 
 Scope: Claude Code on macOS, Linux and Windows. Codex (Aiterm delivery), Cursor and Grok do not use this binding.

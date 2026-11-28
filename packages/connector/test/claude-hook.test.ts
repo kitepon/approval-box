@@ -11,6 +11,9 @@ import { PROFILE } from "../src/profile.ts";
 import { registered } from "../src/harness.ts";
 import { writeJsonFile } from "../src/config.ts";
 
+// These tests drive the interactive waiter; a seat that runs them under claude -p (sdk-cli) must not switch it to the one-shot path.
+process.env.CLAUDE_CODE_ENTRYPOINT = "cli";
+
 const script = fileURLToPath(new URL("../src/hooks/claude.ts", import.meta.url));
 const entries = steer.claudeParentHookEntries(PROFILE, { command: process.execPath, script });
 const command = entries.Stop![0]!.hooks[0]!.command as string;

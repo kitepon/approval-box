@@ -9,6 +9,9 @@ import { claudeChannelIsCurrent } from "../src/claude-channel.ts";
 import { writeJsonFile } from "../src/config.ts";
 import { PROFILE } from "../src/profile.ts";
 
+// These tests drive the interactive waiter; a seat that runs them under claude -p (sdk-cli) must not switch it to the one-shot path.
+process.env.CLAUDE_CODE_ENTRYPOINT = "cli";
+
 function setup(t: { after(fn: () => void): void }) {
   const root = mkdtempSync(join(tmpdir(), "ab-claude-channel-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
