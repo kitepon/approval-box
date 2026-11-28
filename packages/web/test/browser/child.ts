@@ -10,7 +10,7 @@ export const decision = (id: string, o: Decision = {}): Decision => ({
 });
 
 export type Server = {
-  admitted: boolean; open: Decision[]; closed: Decision[]; views: Map<string, Decision>; stored: string[]; leaves: number;
+  admitted: boolean; open: Decision[]; files: Map<string, Buffer>; closed: Decision[]; views: Map<string, Decision>; stored: string[]; leaves: number;
   /** Every /v1 request but /auth/config and /keys/*: its path and its two auth headers. */
   calls: { path: string; key?: string; authorization?: string }[];
   config: Record<string, unknown>; lookup: Record<string, unknown>;
@@ -20,7 +20,7 @@ const json = (route: Route, status: number, body: unknown) => route.fulfill({ st
 const b64u = (s: string) => Buffer.from(s).toString("base64url");
 
 export async function stubServer(page: Page, o: Partial<Server> = {}): Promise<Server> {
-  const s: Server = { admitted: false, open: [], closed: [], views: new Map(), stored: [], leaves: 0, calls: [], config: { google_client_id: "web.apps.googleusercontent.com" }, lookup: { pairing_id: "p1", device_name: "BellTeam on box", clients: [], client: "bellteam", client_name: "BellTeam" }, ...o };
+  const s: Server = { admitted: false, open: [], files: new Map(), closed: [], views: new Map(), stored: [], leaves: 0, calls: [], config: { google_client_id: "web.apps.googleusercontent.com" }, lookup: { pairing_id: "p1", device_name: "BellTeam on box", clients: [], client: "bellteam", client_name: "BellTeam" }, ...o };
   const context = page.context();
   // Google's pop-up: answers at once with an id token for the nonce it was asked (the phone checks a real token; the browser only reads it).
   await context.route("https://accounts.google.com/**", (route) => {
@@ -40,6 +40,8 @@ export async function stubServer(page: Page, o: Partial<Server> = {}): Promise<S
     if (path === "/v1/events") return route.fulfill({ status: 200, contentType: "text/event-stream", body: "" });
     if (path === "/v1/decisions" && req.method() === "GET") return json(route, 200, { items: url.searchParams.get("status")?.includes("answered") ? s.closed : s.open });
     if (path === "/v1/decisions" && req.method() === "DELETE") { const n = s.closed.length; s.closed = []; return json(route, 200, { deleted: n }); }
+    const file = /^\/v1\/decisions\/[^/]+\/attachments\/([^/]+)$/.exec(path);
+    if (file) { const bytes = s.files.get(file[1]!); return bytes ? route.fulfill({ status: 200, contentType: "image/png", body: bytes }) : json(route, 404, { error: { code: "not_found", message: "その添付は見つかりません。" } }); }
     const stored = /^\/v1\/decisions\/([^/]+)\/stored$/.exec(path);
     if (stored) { s.stored.push(stored[1]!); return json(route, 200, { decision_id: stored[1], stored: true }); }
     const one = /^\/v1\/decisions\/([^/]+)$/.exec(path);

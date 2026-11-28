@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { createHash } from "node:crypto";
 import { decision, signIn, stubServer } from "./child.ts";
 
 test("S1: Google or Apple per /auth/config, the first-time steps, legal links and the language picker; nothing starts until pressed", async ({ page }) => {
@@ -82,18 +83,23 @@ test("/pair as a child: says plainly to approve on the iPhone app, offers no All
   await expect(page.getByText("Not allowed. BellTeam will not be connected.", { exact: false })).toBeVisible();
 });
 
-test("history: decided requests are kept in this browser and acked (stored); after the server removed the content, the copy here still shows", async ({ page }) => {
-  const answered = decision("K-9", { status: "answered", delivery: "delivered", answer: { option_id: "b", answered_at: new Date().toISOString() } });
-  const s = await stubServer(page, { closed: [answered] });
+test("history: decided requests are kept in this browser with their files and acked (stored); after the server removed the content and files, the copy here still shows, with the tombstone's delivery", async ({ page }) => {
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+  const image = { id: "img1", name: "screen.png", content_type: "image/png", kind: "image", size: png.length, sha256: createHash("sha256").update(png).digest("hex"), created_at: new Date().toISOString() };
+  const answered = decision("K-9", { status: "answered", delivery: "waiting", request_attachments: [image], answer: { option_id: "b", answered_at: new Date().toISOString() } });
+  const s = await stubServer(page, { closed: [answered], files: new Map([["img1", png]]) });
   await signIn(page, s, "/history");
   await expect(page.getByText("title K-9")).toBeVisible();
   await expect.poll(() => s.stored).toEqual(["K-9"]);
   // The server purged it: gone from its list, its view a tombstone.
   s.closed = [];
-  s.views.set("K-9", { ...answered, title: "", context: "", options: [], history: [], answer: undefined, content_removed: true });
+  s.files.clear();
+  s.views.set("K-9", { ...answered, title: "", context: "", options: [], request_attachments: [], history: [], answer: undefined, delivery: "delivered", content_removed: true, version: 2 });
   await page.reload();
   await expect(page.getByText("title K-9")).toBeVisible();
   await page.getByText("title K-9").click();
   await expect(page.getByRole("heading", { name: "title K-9" })).toBeVisible();
   await expect(page.getByText("Option B", { exact: false }).first()).toBeVisible();
+  await expect(page.getByRole("img", { name: "screen.png" })).toBeVisible(); // the file from the copy here
+  await expect(page.getByText("Delivered to AI")).toBeVisible(); // the tombstone's delivery, not the copy's old "waiting"
 });

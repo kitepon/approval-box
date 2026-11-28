@@ -8,10 +8,14 @@ const v1 = (path: string) => `${location.origin}/v1${path}`;
 export class ApiError extends Error {
   readonly status: number;
   readonly body: ApiErrorBody;
-  constructor(status: number, body: ApiErrorBody) {
+  /** From Retry-After (seconds) on a 429 or 503. */
+  readonly retryAfterMs?: number;
+  constructor(status: number, body: ApiErrorBody, retryAfter?: string | null) {
     super(body.message);
     this.status = status;
     this.body = body;
+    const seconds = Number(retryAfter ?? NaN);
+    if (retryAfter && Number.isFinite(seconds)) this.retryAfterMs = seconds * 1000;
   }
 }
 
@@ -64,14 +68,14 @@ export async function api<T>(method: string, path: string, body?: unknown, optio
     signedOut(response, err.code);
     if (err.code === "time_off") throw new ApiError(401, { code: "time_off", message: clockMessage() });
     if (response.status >= 500 && attempt === 0 && key) continue;
-    throw new ApiError(response.status, err);
+    throw new ApiError(response.status, err, response.headers.get("retry-after"));
   }
 }
 
 async function failure(response: Response): Promise<ApiError> {
   const err = errorBody(response.status, await response.json().catch(() => ({})));
   signedOut(response, err.code);
-  return new ApiError(response.status, err.code === "time_off" ? { code: "time_off", message: clockMessage() } : err);
+  return new ApiError(response.status, err.code === "time_off" ? { code: "time_off", message: clockMessage() } : err, response.headers.get("retry-after"));
 }
 
 /** 添付を1つ上げる（本文はファイルそのまま）。通信が切れたら同じ冪等キーで1回だけ送り直す。 */
