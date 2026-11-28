@@ -47,8 +47,9 @@ export function daemonStatus(): { running: boolean; pid?: number; entry?: string
 
 /** 置き場のpath（…/runtime/<版>/cli.mjs）から版を読む。ビルドしたままの dist などは null。 */
 export function versionOfEntry(entry: string): number[] | null {
-  const match = /[\\/]runtime[\\/](\d+)\.(\d+)\.(\d+)[\\/]/.exec(entry);
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+  // 4th number: the prerelease -pc.N (a release without it ranks above every prerelease of the same version).
+  const match = /[\\/]runtime[\\/](\d+)\.(\d+)\.(\d+)(?:-pc\.(\d+))?[\\/]/.exec(entry);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3]), match[4] === undefined ? Infinity : Number(match[4])] : null;
 }
 
 /**
@@ -60,7 +61,7 @@ export function shouldReplaceDaemon(runningEntry: string | undefined, myEntry: s
   const running = runningEntry ? versionOfEntry(runningEntry) : null;
   const mine = versionOfEntry(myEntry);
   if (!running || !mine) return true;
-  for (let i = 0; i < 3; i++) if (running[i] !== mine[i]) return running[i]! < mine[i]!;
+  for (let i = 0; i < 4; i++) if (running[i] !== mine[i]) return running[i]! < mine[i]!;
   return true;
 }
 
