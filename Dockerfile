@@ -59,6 +59,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl \
  && rm -rf /var/lib/apt/lists/*
 RUN npm ci --no-audit --no-fund
 RUN npm run typecheck && npm run build
-RUN node --test --test-force-exit --test-timeout=15000 packages/server/test/*.test.ts
+# the server refuses to store content without a data-set key (e02); the checks use a fixed test key, never the final image
+RUN ABX_DATA_KEY=YXBwcm92YWwtYm94LXRlc3QtZGF0YS1rZXktMzJieXQ= node --test --test-force-exit --test-timeout=15000 packages/server/test/*.test.ts
 
 FROM runtime AS final
