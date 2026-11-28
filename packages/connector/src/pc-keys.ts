@@ -14,13 +14,15 @@ type Saved = { v: 1; sig_d: string; seal_d: string; seal_pub: string };
 export async function newKeys(): Promise<{ keys: { sign: SigningKey; seal: SealKey }; saved: Saved }> {
   const sig = createECDH("prime256v1"); sig.generateKeys();
   const seal = createECDH("prime256v1"); seal.generateKeys();
-  const saved: Saved = { v: 1, sig_d: sig.getPrivateKey("hex"), seal_d: seal.getPrivateKey("hex"), seal_pub: seal.getPublicKey("hex", "uncompressed") };
+  const saved: Saved = { v: 1, sig_d: sig.getPrivateKey("hex").padStart(64, "0"), seal_d: seal.getPrivateKey("hex").padStart(64, "0"), seal_pub: seal.getPublicKey("hex", "uncompressed") };
   return { keys: await fromSaved(saved), saved };
 }
 
 export const saveKeys = (saved: Saved, file = keysFile()) => writeJsonFile(file, saved, { discardTemporaryOnError: true });
 
-const fromSaved = async (saved: Saved) => ({ sign: signingKeyFromScalar(fromHex(saved.sig_d)), seal: await sealKeyFromScalar(fromHex(saved.seal_d), fromHex(saved.seal_pub)) });
+// getPrivateKey("hex") drops leading zero bytes (1 key in 256): a scalar is always 32 bytes, so pad, also for files saved before this fix.
+const scalar = (hex: string) => fromHex(hex.padStart(64, "0"));
+const fromSaved = async (saved: Saved) => ({ sign: signingKeyFromScalar(scalar(saved.sig_d)), seal: await sealKeyFromScalar(scalar(saved.seal_d), fromHex(saved.seal_pub)) });
 
 /** 鍵を読む。無ければ作って 0600 で保存する。 */
 export async function loadOrCreateKeys(file = keysFile()): Promise<{ sign: SigningKey; seal: SealKey }> {
